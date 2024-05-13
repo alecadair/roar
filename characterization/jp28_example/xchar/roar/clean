@@ -1,0 +1,10 @@
+#
+# Author: Alec Stefan Adair
+#
+
+rm -rf *.ahdlSimDB
+rm -rf *.raw
+rm -f *.dc
+rm -f *.mt*
+rm -f *.measure
+rm -f *.log

@@ -1,0 +1,18 @@
+simulator lang=spectre
+parameters L=1.6u
+
+// View name: schematic
+
+MNU (net2 net2 0 0) nch_mac l=1u w=1u multi=1 nf=1 sd=120.0n ad=9.5e-14 \
+        as=9.5e-14 pd=2.19u ps=2.19u nrd=0.282939 nrs=0.282939 sa=95.0n \
+        sb=95.0n sa1=95.0n sa2=95.0n sa3=95.0n sa4=95.0n sb1=95.0n \
+        sb2=95.0n sb3=95.0n spa=120.0n spa1=120.0n spa2=120.0n spa3=120.0n \
+        sap=112.128n sapb=128.193n spba=175.499n spba1=229.783n dfm_flag=0 \
+        spmt=1.11111e+15 spomt=0 spomt1=1.11111e+60 spmb=1.11111e+15 \
+        spomb=0 spomb1=1.11111e+60
+MN0 (net1 net1 0 0) nch_mac l=L w=1u multi=1 nf=1 sd=100n ad=7.5e-14 \
+        as=7.5e-14 pd=2.15u ps=2.15u nrd=0.289519 nrs=0.289519 spa=100n \
+        spa1=100n dfm_flag=0
+        
+I2 (0 net2) isource dc=i_swp type=dc
+I0 (0 net1) isource dc=i_swp type=dc

@@ -1,0 +1,6 @@
+#spectremdl -batch nfet_characterization.mdl -design tb_nfet.scs
+
+
+spectremdl -format psfascii -batch nfet_characterization.mdl -design ./netlists/n_lvt_30n_27c_tt.scs
+#spectremdl -format psfascii -batch pfet_characterization.mdl -design tb_pfet.scs
+./clean

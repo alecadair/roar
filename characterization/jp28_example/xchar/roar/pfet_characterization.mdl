@@ -1,0 +1,141 @@
+// 
+// NFET Covid Characterization Script SKY130
+// Author: Alec Adair
+// 
+
+alias measurement dc_op_point {
+	run dcOp
+	export real w = abs(MN0:w)
+	export real l = abs(MN0:l)
+	export real vgs = abs(MN0:vgs)
+	export real vds = abs(MN0:vds)
+    export real vsb = abs(MN0:vsb)
+	export real vdsat = abs(MN0:vdssat)
+	export real cgs = abs(MN0:cgs)
+	export real cgg = abs(MN0:cgg)
+	export real cgd = abs(MN0:cgd)
+	export real cgb = abs(MN0:cgb)
+	export real cdb = abs(MN0:cdb)
+	export real css = abs(MN0:css)
+	export real cdd = abs(MN0:cdd)
+	export real cds = abs(MN0:cds)
+	export real vth = abs(MN0:vth)
+	export real gds = abs(MN0:gds)
+	export real rds = 1/gds
+	export real gm = abs(MN0:gm)
+    export real gmb = abs(MN0:gmbs)
+	export real ids = abs(MN0:ids)
+	export real va = abs(ids*ro)
+	export real ro = abs(MN0:rout)
+	export real kcgs = cgs/ids
+	export real kcgd = cgd/ids
+	export real kcdb = cdb/ids
+	export real kcds = cds/ids
+	export real kgm = gm/ids
+	export real ft = abs(gm/(2*pi*cgg))
+    export real type = 0.0	
+
+    export real w_u = abs(MNU:w)
+	export real l_u = abs(MNU:l)
+	export real vgs_u = abs(MNU:vgs)
+	export real vds_u = abs(MNU:vds)
+    export real vsb_u = abs(MNU:vsb)
+	export real vdsat_u = abs(MNU:vdssat)
+	export real cgs_u = abs(MNU:cgs)
+	export real cgg_u = abs(MNU:cgg)
+	export real cgd_u = abs(MNU:cgd)
+	export real cgb_u = abs(MNU:cgb)
+	export real cdb_u = abs(MNU:cdb)
+	export real cds_u = abs(MNU:cds)
+	export real css_u = abs(MNU:css)
+	export real cdd_u = abs(MNU:cdd)
+	export real vth_u = abs(MNU:vth)
+	export real gds_u = abs(MNU:gds)
+	export real rds_u = 1/gds
+	export real gm_u = abs(MNU:gm)
+    export real gmb_u = abs(MNU:gmbs)
+	export real ids_u = abs(MNU:ids)
+	export real ro_u = abs(MNU:rout)
+	export real va_u = abs(ids_u*ro_u)
+	export real kcgs_u = cgs_u/ids_u
+	export real kcgd_u = cgd_u/ids_u
+	export real kcds_u = cds_u/ids_u
+	export real kcdb_u = cdb_u/ids_u
+	export real kgm_u = gm_u/ids_u
+	export real ft_u = abs(gm_u/(2*pi*cgg_u))
+	export real kgmft_u = kgm_u*ft_u
+
+	export real subthresh_slope = 1.37
+
+}
+
+int i = 0
+int j = 0
+int k = 0
+
+real cgs_unit = 0
+real cgg_unit = 0
+real cgd_unit = 0
+real cgb_unit = 0
+real cdb_unit = 0
+real css_unit = 0
+real cdd_unit = 0
+real cds_unit = 0
+real ft_unit = 0
+real w_unit = 0
+real l_unit = 0
+
+int points_per_decade = 50
+points_per_decade = 9 
+int point = 1
+real deci = 1/points_per_decade
+real base = 1 + deci
+int start_power = -9
+int stop_power = -3
+int power = start_power
+int power_range = stop_power - power + 1
+int Wo = 0
+int Lo = 0
+
+real ids_max_current = 100u
+real ids_min_current = 1p
+real ids_steps = 1000
+real ids_step_size = ids_max_current/ids_steps
+
+real vdg = 0
+
+real cgs = 0
+real gds = 0
+real gm = 0
+real cgd = 0
+real kcgs = 0
+real ids = 0
+
+real max_kgmft_u = 0
+real kgmft_u = 0
+real kgm_u_med_inv = 0
+real ids_u_med_inv = 0
+real inv_coeff = 0
+real width = 0
+real ids_u = 0
+real length = 0
+
+v_dd = 1.8
+v_dg = 0.0
+
+run dc_op_point
+cgs = dc_op_point->cgs
+print fmt("")
+print fmt("test print: %e\n", dc_op_point->cgs)
+print fmt("") to="ids_sweep_nfet.txt"
+//include "main.mdl"
+
+int print_header = 1
+
+include "main_csv.mdl"
+
+//tt altergroup
+//altergroup tt {
+//	include "model_file.scs" section=TT
+//}
+ 

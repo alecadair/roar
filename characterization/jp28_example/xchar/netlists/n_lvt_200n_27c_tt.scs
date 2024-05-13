@@ -1,0 +1,44 @@
+// Point Netlist Generated on: Feb 27 13:35:35 2023
+// Generated for: spectre
+// Design Netlist Generated on: Feb 27 13:35:32 2023
+// Design library name: dev28_adair
+// Design cell name: tb_char_min_l
+// Design view name: schematic_lvt_lrg_l
+simulator lang=spectre
+global 0
+parameters i_swp=100p
+parameters temperature=27
+include "/research/ece/lcas/pdk/tsmc/t28muse_hpcplus_rf_1p10m_5x2y2r_1v8/models/spectre/toplevel.scs" section=top_tt
+
+MNU (net2 net2 0 0) nch_lvt_mac l=100n w=100n multi=1 nf=1 sd=120.0n \
+        ad=9.5e-15 as=9.5e-15 pd=390.0n ps=390.0n nrd=2.523521 \
+        nrs=2.523521 sa=95.0n sb=95.0n sa1=95.0n sa2=95.0n sa3=95.0n \
+        sa4=95.0n sb1=95.0n sb2=95.0n sb3=95.0n spa=120.0n spa1=120.0n \
+        spa2=120.0n spa3=120.0n sap=112.128n sapb=128.193n spba=134.907n \
+        spba1=139.642n dfm_flag=0 spmt=1.11111e+15 spomt=0 \
+        spomt1=1.11111e+60 spmb=1.11111e+15 spomb=0 spomb1=1.11111e+60
+MN0 (net1 net1 0 0) nch_lvt_mac l=200n w=200n multi=1 nf=2 sd=120.0n \
+        ad=1.2e-14 as=1.9e-14 pd=440.0n ps=780.0n nrd=1.443554 \
+        nrs=1.443554 sa=182.887n sb=182.887n sa1=124.009n sa2=176.371n \
+        sa3=304.815n sa4=155.043n sb1=124.009n sb2=176.371n sb3=304.815n \
+        spa=120.0n spa1=120.0n spa2=120.0n spa3=120.0n sap=131.818n \
+        sapb=151.71n spba=155.053n spba1=165.242n dfm_flag=0 \
+        spmt=1.11111e+15 spomt=0 spomt1=1.11111e+60 spmb=1.11111e+15 \
+        spomb=0 spomb1=1.11111e+60
+I4 (0 net2) isource dc=i_swp type=dc
+I1 (0 net1) isource dc=i_swp type=dc
+
+
+simulatorOptions options psfversion="1.4.0" reltol=1e-3 vabstol=1e-6 \
+    iabstol=1e-12 temp=temperature tnom=27 scalem=1.0 scale=1.0 gmin=1e-12 rforce=1 \
+    maxnotes=5 maxwarns=5 digits=5 cols=80 pivrel=1e-3 \
+    sensfile="../psf/sens.output" checklimitdest=psf 
+dcOp dc write="spectre.dc" maxiters=150 maxsteps=10000 annotate=status
+dcOpInfo info what=oppoint where=rawfile
+modelParameter info what=models where=rawfile
+element info what=inst where=rawfile
+outputParameter info what=output where=rawfile
+designParamVals info what=parameters where=rawfile
+primitives info what=primitives where=rawfile
+subckts info what=subckts where=rawfile
+saveOptions options save=allpub

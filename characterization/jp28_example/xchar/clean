@@ -1,0 +1,2 @@
+rm -rf *.measure *.mt* *.raw *.ahdlSimDB *.log spectre.dc
+rm -f /scratch/tmp/adair/ids_sweep_nfet.txt

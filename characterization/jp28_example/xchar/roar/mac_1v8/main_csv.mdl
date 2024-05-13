@@ -1,0 +1,353 @@
+//
+// Main script for NFET characterization
+// This script is meant to be process agnostic
+// Author: Alec S. Adair
+//
+// OS("/MP0","gm")/IS("/MP0/d")
+//
+
+//i_swp = ids_min_current
+print fmt("ids step size: %e", ids_step_size)
+print fmt("i_swp: %e", i_swp)
+print fmt("Start Power: %e\n", start_power)
+print fmt("Stop Power: %e\n", stop_power)
+print fmt("Points Per Decade: %e\n", points_per_decade)
+//print fmt("") to="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//foreach i from swp(start=0, stop=ids_steps,step=1){
+
+
+//foreach i from swp(start=start_power, stop=stop_power, step=1){
+//	foreach j from swp(start=1, stop=points_per_decade, step=1){
+//		i_swp = pow(10,i)*j
+//		print fmt("i_swp: %e\n", i_swp)
+//		print fmt("10^%e\n", i)
+//		print fmt("j%e\n", j)
+//		if(i_swp < 1.3m){
+//			//i_swp = 1e-6
+//			run dc_op_point
+//			kgmft_u = dc_op_point->kgmft_u
+//			ids_u = dc_op_point->ids_u
+//			if(max_kgmft_u <= kgmft_u) {
+//			    max_kgmft_u = kgmft_u
+//			    ids_u_med_inv = ids_u
+//			    kgm_u_med_inv = dc_op_point->kgm_u
+//			   	cgs_unit = dc_op_point->cgs_u
+//			    cgg_unit = dc_op_point->cgg_u
+//			    cgd_unit = dc_op_point->cgd_u
+//			    cgb_unit = dc_op_point->cgb_u
+//			    cdb_unit = dc_op_point->cdb_u
+//			    css_unit = dc_op_point->css_u
+//			    cdd_unit = dc_op_point->cdd_u
+//			    ft_unit =  dc_op_point->ft_u
+//			    cds_unit = dc_op_point->cds_u
+//			   	w_unit = dc_op_point->w_u
+//			    l_unit = dc_op_point->l_u
+//			    ids_u_med_inv = ids_u_med_inv/(w_unit/l_unit)
+//			}
+//			print fmt("ft_u: %e\n", dc_op_point->ft_u)
+//			//print fmt("ids_u: %e\n", ids_u)
+//			print fmt("kgmft_u: %e\n", kgmft_u)
+//			print fmt("I0: %e\n", ids_u_med_inv)
+//			print fmt("kgm_med_inv: %e\n", kgm_u_med_inv)
+//			//inv_coeff = (ids)/(ids_u_med_inv*(width/length))
+//		}
+//	}
+//	//start_power = start_power + 1
+//	//i_swp = i_swp + ids_step_size
+//}
+
+//print fmt("I0: %e\n", ids_u_med_inv)
+//print fmt("kgm_med_inv: %e\n", kgm_u_med_inv)
+
+//i_swp = ids_min_current
+//foreach i from swp(start=0, stop=ids_steps, step=1) {
+
+i_swp = pow(10,start_power)*1
+if(print_header == 1){
+  print fmt("pdk, model, L_u, W_u, ft_u, cgs_u, cgg_u, cgd_u, cgb_u, cdb_u, css_u, cdd_u, cds_u, id_u, ") to="techLUT.csv"
+  print fmt("L, W, VGS, VDS, VSB, type, ids, vth, vdsat, gm, gmb, gds, cgg, cgs, cgd, cgb, ") addto="techLUT.csv"
+  print fmt("cdb, cdd, cds, css, va, ro, rds, kcgs, kcgd, kcdb, kcds, kgm, ic, n\n") addto="techLUT.csv"
+}
+
+
+//foreach i from swp(start=start_power, stop=stop_power, step=1){
+//	foreach j from swp(start=1, stop=points_per_decade, step=1){
+//		i_swp = pow(10, i)*j
+//		if(i_swp < 1.3m){
+//			print fmt("i_swp: %e\n", i_swp)
+//			run dc_op_point
+//
+//		}
+//	}
+//}
+
+foreach i from swp(start=start_power, stop=stop_power, step=1){
+	foreach j from swp(start=1, stop=9, step=1){
+		foreach k from swp(start=1, stop=(points_per_decade - 1), step=1){
+			//print fmt("Iteration: %f", i)
+			deci = k*(1/points_per_decade) 
+			//base = j + 0.1*k
+			base = j + deci
+			i_swp = pow(10,i)*base
+			//if(i_swp < 1.3m){
+			print fmt("i_swp: %e\n", i_swp) addto="iswp.txt"
+			//i_swp = 1e-6
+			print fmt("Itest: %e:\n", i_swp)
+			run dc_op_point
+			print fmt("+++START_TABLE+++\n")
+			length = dc_op_point->l
+			width = dc_op_point->w
+			print fmt("pdk: tsmc28\n")
+			print fmt("tsmc28, ") addto="techLUT.csv"
+			print fmt("model: 1v8_mac\n")
+			print fmt("1v8_mac, ") addto="techLUT.csv"
+			print fmt("L_u:%e\n", l_unit)
+			print fmt("%e, ", l_unit) addto="techLUT.csv"
+			print fmt("W_u:%e\n", w_unit)
+			print fmt("%e, ", w_unit) addto="techLUT.csv"
+			print fmt("ft_u:%e\n", ft_unit)
+			print fmt("%e, ", ft_unit) addto="techLUT.csv"
+			print fmt("cgs_u:%e\n", cgs_unit)
+			print fmt("%e, ", cgs_unit) addto="techLUT.csv"
+			print fmt("cgg_u:%e\n", cgg_unit)
+			print fmt("%e, ", cgg_unit) addto="techLUT.csv"
+			print fmt("cgd_u:%e\n", cgd_unit)
+			print fmt("%e, ", cgd_unit) addto="techLUT.csv"
+			print fmt("cgb_u:%e\n", cgb_unit)
+			print fmt("%e, ", cgb_unit) addto="techLUT.csv"
+			print fmt("cdb_u:%e\n", cdb_unit)
+			print fmt("%e, ", cdb_unit) addto="techLUT.csv"
+			print fmt("css_u:%e\n", css_unit)
+			print fmt("%e, ", css_unit) addto="techLUT.csv"
+			print fmt("cdd_u:%e\n", cdd_unit)
+			print fmt("%e, ", cdd_unit) addto="techLUT.csv"
+			print fmt("cds_u:%e\n", cds_unit)
+			print fmt("%e, ", cds_unit) addto="techLUT.csv"
+			print fmt("id_u:%e\n", ids_u_med_inv)
+			print fmt("%e, ", ids_u_med_inv) addto="techLUT.csv"
+			print fmt("L:%e\n", dc_op_point->l)
+			print fmt("%e, ", dc_op_point->l) addto="techLUT.csv"
+			print fmt("W:%e\n", dc_op_point->w)
+			print fmt("%e, ", dc_op_point->w) addto="techLUT.csv" 
+			print fmt("VGS:%e\n", dc_op_point->vgs)
+			print fmt("%e, ", dc_op_point->vgs) addto="techLUT.csv"  
+			print fmt("VDS:%e\n", dc_op_point->vds)
+			print fmt("%e, ", dc_op_point->vds) addto="techLUT.csv"  
+			print fmt("VSB:%e\n", dc_op_point->vsb)
+			print fmt("%e, ", dc_op_point->vsb) addto="techLUT.csv"  
+			print fmt("type:%e\n", dc_op_point->type)
+			print fmt("%e, ", dc_op_point->type) addto="techLUT.csv" 
+			print fmt("ids: %e\n", dc_op_point->ids)
+			print fmt("%e, ", dc_op_point->ids) addto="techLUT.csv" 
+			print fmt("vth:%e\n", dc_op_point->vth)
+			print fmt("%e, ", dc_op_point->vth) addto="techLUT.csv" 
+		    print fmt("vdsat:%e\n", dc_op_point->vdsat)
+		    print fmt("%e, ", dc_op_point->vdsat) addto="techLUT.csv" 
+			print fmt("gm:%e\n", dc_op_point->gm)
+			print fmt("%e, ", dc_op_point->gm) addto="techLUT.csv" 
+			print fmt("gmb:%e\n", dc_op_point->gmb)
+			print fmt("%e, ", dc_op_point->gmb) addto="techLUT.csv" 
+			print fmt("gds:%e\n", dc_op_point->gds)
+			print fmt("%e, ", dc_op_point->gds) addto="techLUT.csv" 
+			print fmt("cgg:%e\n", dc_op_point->cgg)
+			print fmt("%e, ", dc_op_point->cgg) addto="techLUT.csv" 
+			print fmt("cgs:%e\n", dc_op_point->cgs)
+			print fmt("%e, ", dc_op_point->cgs) addto="techLUT.csv" 
+			print fmt("cgd:%e\n", dc_op_point->cgd)
+			print fmt("%e, ", dc_op_point->cgd) addto="techLUT.csv" 
+			print fmt("cgb:%e\n", dc_op_point->cgb)
+			print fmt("%e, ", dc_op_point->cgb) addto="techLUT.csv" 
+			print fmt("cdb:%e\n", dc_op_point->cdb)
+			print fmt("%e, ", dc_op_point->cdb) addto="techLUT.csv" 
+			print fmt("cdd:%e\n", dc_op_point->cdd)
+			print fmt("%e, ", dc_op_point->cdd) addto="techLUT.csv" 
+			print fmt("cds:%e\n", dc_op_point->cds)
+			print fmt("%e, ", dc_op_point->cds) addto="techLUT.csv" 
+			print fmt("css:%e\n", dc_op_point->css)
+			print fmt("%e, ", dc_op_point->css) addto="techLUT.csv"
+			print fmt("va:%e\n", dc_op_point->va)
+			print fmt("%e, ", dc_op_point->va) addto="techLUT.csv"
+			print fmt("ro:%e\n", dc_op_point->ro)
+			print fmt("%e, ", dc_op_point->ro) addto="techLUT.csv" 
+			print fmt("rds:%e\n", dc_op_point->rds)
+			print fmt("%e, ", dc_op_point->rds) addto="techLUT.csv" 
+			//print fmt("ids:%e\n", dc_op_point->ids)
+			//print fmt("%e, ", dc_op_point->ids) addto="techLUT.csv" 
+			print fmt("kcgs:%e\n", dc_op_point->kcgs)
+			print fmt("%e, ", dc_op_point->kcgs) addto="techLUT.csv" 
+			print fmt("kcgd:%e\n", dc_op_point->kcgd)
+			print fmt("%e, ", dc_op_point->kcgd) addto="techLUT.csv" 
+			print fmt("kcdb:%e\n", dc_op_point->kcdb)
+			print fmt("%e, ", dc_op_point->kcdb) addto="techLUT.csv" 
+			print fmt("kcds:%e\n", dc_op_point->kcds)
+			print fmt("%e, ", dc_op_point->kcds) addto="techLUT.csv" 
+			print fmt("kgm:%e\n", dc_op_point->kgm)
+			print fmt("%e, ", dc_op_point->kgm) addto="techLUT.csv" 
+			ids = dc_op_point->ids
+			//inv_coeff = (ids)/(ids_u_med_inv*(width/length))
+			inv_coeff = (ids)/(ids_u_med_inv)
+		    print fmt("ic:%e\n", inv_coeff)
+		    print fmt("%e, ", inv_coeff) addto="techLUT.csv" 
+		    print fmt("n:%e\n", dc_op_point->subthresh_slope)
+		    print fmt("%e\n", dc_op_point->subthresh_slope) addto="techLUT.csv" 
+			print fmt("---END_TABLE---\n\n")
+		//
+		//	print fmt("+++\n") addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("L:%e\n", dc_op_point->l) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("W:%e\n", dc_op_point->w) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"	
+		//	print fmt("VGS:%e\n", dc_op_point->vgs) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"	
+		//	print fmt("VDS:%e\n", dc_op_point->vds) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"	
+		//	print fmt("VSB:%e\n", dc_op_point->vsb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"	
+		//	print fmt("type:%e\n", dc_op_point->type) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("ids: %e\n", dc_op_point->ids) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("vth:%e\n", dc_op_point->vth) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("gm:%e\n", dc_op_point->gm) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("gmb:%e\n", dc_op_point->gmb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("gds:%e\n", dc_op_point->gds) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("cgg:%e\n", dc_op_point->cgg) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("cgs:%e\n", dc_op_point->cgs) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("cgd:%e\n", dc_op_point->cgd) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("cgb:%e\n", dc_op_point->cgb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("cdb:%e\n", dc_op_point->cdb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("cdd:%e\n", dc_op_point->cdd) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("css:%e\n", dc_op_point->css) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("va:%e\n", dc_op_point->va) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("ro:%e\n", dc_op_point->ro) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("rds:%e\n", dc_op_point->rds) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	//print fmt("ids:%e\n", dc_op_point->ids) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("kcgs:%e\n", dc_op_point->kcgs) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("kcgd:%e\n", dc_op_point->kcgd) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("kcdb:%e\n", dc_op_point->kcdb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("kgm:%e\n", dc_op_point->kgm) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("ic:%e\n", inv_coeff) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+		//	print fmt("---\n\n") addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+
+
+			//if(power_count < 9) {
+			//	power_count = power_count + 1
+			//} else {
+			//	power_count = 1
+		    //
+			//}
+			//linear sweep
+			//i_swp = i_swp + ids_step_size
+
+			//logarithmic sweep
+			//if(i_swp which)
+			//base = base + deci
+	}
+}
+
+
+
+////for loop for csv printing
+//foreach i from swp(start=start_power, stop=stop_power, step=1){
+//	foreach j from swp(start=1, stop=points_per_decade, step=1){
+//		//print fmt("Iteration: %f", i)
+//		i_swp = pow(10,i)*j
+//		if(i_swp < 1.3m){
+//
+//			print fmt("i_swp: %e\n", i_swp)
+//
+//			//i_swp = 1e-6
+//			print fmt("Itest: %e:\n", i_swp)
+//			run dc_op_point
+//			//print fmt("+++START_TABLE+++\n")
+//			length = dc_op_point->l
+//			width = dc_op_point->w
+//
+//			print fmt("L_u:%e, ", l_unit)
+//			print fmt("W_u:%e, ", w_unit)
+//			print fmt("ft_u:%e, ", ft_unit)
+//			print fmt("cgs_u:%e, ", cgs_unit)
+//			print fmt("cgg_u:%e, ", cgg_unit)
+//			print fmt("cgd_u:%e, ", cgd_unit)
+//			print fmt("cgb_u:%e, ", cgb_unit)
+//			print fmt("cdb_u:%e, ", cdb_unit)
+//			print fmt("css_u:%e, ", css_unit)
+//			print fmt("cdd_u:%e, ", cdd_unit)
+//			print fmt("cds_u:%e, ", cds_unit)
+//			print fmt("id_u:%e, ", ids_u_med_inv)
+//			print fmt("L:%e, ", dc_op_point->l)
+//			print fmt("W:%e, ", dc_op_point->w) 
+//			print fmt("VGS:%e, ", dc_op_point->vgs) 
+//			print fmt("VDS:%e, ", dc_op_point->vds) 
+//			print fmt("VSB:%e, ", dc_op_point->vsb) 
+//			print fmt("type:%e, ", dc_op_point->type)
+//			print fmt("ids: %e, ", dc_op_point->ids)
+//			print fmt("vth:%e, ", dc_op_point->vth)
+//		    print fmt("vdsat:%e, ", dc_op_point->vdsat)
+//			print fmt("gm:%e, ", dc_op_point->gm)
+//			print fmt("gmb:%e, ", dc_op_point->gmb)
+//			print fmt("gds:%e, ", dc_op_point->gds)
+//			print fmt("cgg:%e, ", dc_op_point->cgg)
+//			print fmt("cgs:%e, ", dc_op_point->cgs)
+//			print fmt("cgd:%e, ", dc_op_point->cgd)
+//			print fmt("cgb:%e, ", dc_op_point->cgb)
+//			print fmt("cdb:%e, ", dc_op_point->cdb)
+//			print fmt("cdd:%e, ", dc_op_point->cdd)
+//			print fmt("cds:%e, ", dc_op_point->cds)
+//			print fmt("css:%e, ", dc_op_point->css)
+//			print fmt("va:%e, ", dc_op_point->va)
+//			print fmt("ro:%e, ", dc_op_point->ro)
+//			print fmt("rds:%e, ", dc_op_point->rds)
+//			//print fmt("ids:%e, ", dc_op_point->ids)
+//			print fmt("kcgs:%e, ", dc_op_point->kcgs)
+//			print fmt("kcgd:%e, ", dc_op_point->kcgd)
+//			print fmt("kcdb:%e, ", dc_op_point->kcdb)
+//			print fmt("kcds:%e, ", dc_op_point->kcds)
+//			print fmt("kgm:%e, ", dc_op_point->kgm)
+//			ids = dc_op_point->ids
+//			//inv_coeff = (ids)/(ids_u_med_inv*(width/length))
+//			inv_coeff = (ids)/(ids_u_med_inv)
+//		    print fmt("ic:%e, ", inv_coeff)
+//		    print fmt("n:%e, ", dc_op_point->subthresh_slope)
+//			//print fmt("---END_TABLE---\n\n")
+//			print fmt("\n")
+//		//
+//		//	print fmt("+++\n") addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("L:%e\n", dc_op_point->l) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("W:%e\n", dc_op_point->w) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"	
+//		//	print fmt("VGS:%e\n", dc_op_point->vgs) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"	
+//		//	print fmt("VDS:%e\n", dc_op_point->vds) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"	
+//		//	print fmt("VSB:%e\n", dc_op_point->vsb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"	
+//		//	print fmt("type:%e\n", dc_op_point->type) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("ids: %e\n", dc_op_point->ids) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("vth:%e\n", dc_op_point->vth) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("gm:%e\n", dc_op_point->gm) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("gmb:%e\n", dc_op_point->gmb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("gds:%e\n", dc_op_point->gds) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("cgg:%e\n", dc_op_point->cgg) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("cgs:%e\n", dc_op_point->cgs) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("cgd:%e\n", dc_op_point->cgd) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("cgb:%e\n", dc_op_point->cgb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("cdb:%e\n", dc_op_point->cdb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("cdd:%e\n", dc_op_point->cdd) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("css:%e\n", dc_op_point->css) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("va:%e\n", dc_op_point->va) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("ro:%e\n", dc_op_point->ro) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("rds:%e\n", dc_op_point->rds) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	//print fmt("ids:%e\n", dc_op_point->ids) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("kcgs:%e\n", dc_op_point->kcgs) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("kcgd:%e\n", dc_op_point->kcgd) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("kcdb:%e\n", dc_op_point->kcdb) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("kgm:%e\n", dc_op_point->kgm) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("ic:%e\n", inv_coeff) addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//		//	print fmt("---\n\n") addto="/scratch/tmp/adair/ids_sweep_nfet.txt"
+//
+//
+//			//if(power_count < 9) {
+//			//	power_count = power_count + 1
+//			//} else {
+//			//	power_count = 1
+//		    //
+//			//}
+//			//linear sweep
+//			//i_swp = i_swp + ids_step_size
+//
+//			//logarithmic sweep
+//			//if(i_swp which)
+//		}
+//	}
+//}
+
