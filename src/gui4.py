@@ -7,8 +7,24 @@ from tkinter.ttk import *
 
 from tkinter import filedialog
 from tkinter import simpledialog
-#import Image, ImageTk
+import sys
+import os
 
+ROAR_HOME = os.environ["ROAR_HOME"]
+ROAR_LIB = os.environ["ROAR_LIB"]
+ROAR_SRC = os.environ["ROAR_SRC"]
+ROAR_CHARACTERIZATION = os.environ["ROAR_CHARACTERIZATION"]
+ROAR_DESIGN_SCRIPTS = os.environ["ROAR_DESIGN_SCRIPTS"]
+
+
+sys.path.append(ROAR_LIB + "/python/sv_ttk-2.5.4/")
+sys.path.append(ROAR_LIB + "/python/ttkwidgets-0.13.0/")
+sys.path.append(ROAR_LIB + "/python/schemdraw-master")
+sys.path.append(ROAR_LIB + "/python/ttkthemes-3.2.2")
+sys.path.append(ROAR_LIB + "/python/ecos/ecos-2.0.13")
+sys.path.append(ROAR_LIB + "/python/cvx/cvxpy-1.4.3/")
+
+#import Image, ImageTk
 
 from ttkwidgets import CheckboxTreeview
 from ttkthemes import ThemedTk
@@ -218,6 +234,7 @@ class CIDGraphingWindow(ttk.Frame):
                 self.ylog = True
             else:
                 self.ax.set_yscale('linear')
+                self.ylog = False
         if event.key == 'k':
             if self.xlog == False:
                 self.ax.set_xscale('log')
