@@ -50,3 +50,5 @@ wheels/
 .installed.cfg
 *.egg
 
+# ROAR Environment file
+roar_env.csh
