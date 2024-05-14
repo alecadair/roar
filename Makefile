@@ -8,9 +8,9 @@
 SHELL = /usr/local/bin/tcsh
 CURRENT_DIRECTORY := $(shell pwd)
 
-all: generate_dd_env
+all: generate_roar_env
 
-generate_dd_env:
+generate_roar_env:
 	@echo "Generating ROAR Environment File: roar_env.csh"
 	@echo "If running ROAR from source code, roar_env.csh must be sourced before running ROAR"
 	@echo "source roar_env.csh "
