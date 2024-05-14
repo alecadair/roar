@@ -7,6 +7,7 @@ from tkinter.ttk import *
 
 from tkinter import filedialog
 from tkinter import simpledialog
+import sys
 #import Image, ImageTk
 
 
