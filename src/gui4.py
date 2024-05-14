@@ -219,6 +219,7 @@ class CIDGraphingWindow(ttk.Frame):
                 self.ylog = True
             else:
                 self.ax.set_yscale('linear')
+                self.ylog = False
         if event.key == 'k':
             if self.xlog == False:
                 self.ax.set_xscale('log')
