@@ -158,7 +158,7 @@ class CIDTechBrowser(ttk.Frame):
         self.tree.insert('PDK', str(self.tree_item_counter), pdk, text=pdk)
         tech_dict = self.graph_controller.graph_control_notebook.tech_dict
         pdk_dict = tech_dict[pdk_name]
-        delim = ">"g
+        delim = ">"
         for model in pdk_dict:
             model_dict = pdk_dict[model]
             item_str = pdk + delim + model
