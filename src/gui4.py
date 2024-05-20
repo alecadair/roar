@@ -124,7 +124,7 @@ class CIDTechBrowser(ttk.Frame):
         )
 
         self.tree_item_counter = 0
-        self.tree.pack(expand=True, fill="both")
+        self.tree.pack(expand=True, fill="both", side="top")
         self.tree.insert('', str(self.tree_item_counter), 'PDK', text='PDK')
         self.tree_item_counter += 1
         self.tree.bind('<Button 1>', self.select_item)
@@ -279,8 +279,8 @@ class CIDGraphController(ttk.PanedWindow):
         self.tech_browser = CIDTechBrowser(self, theme=theme)
         #self.graph_settings = CIDGraphSettings(self)
         self.graph_settings = CIDOptimizerSettings(self)
-        #self.graph_settings.pack(fill=tk.BOTH, expand=True)
-        self.graph_settings.grid(row=0, column=0, sticky="nsew")
+        self.graph_settings.pack(fill=tk.BOTH, expand=True)
+        #self.graph_settings.grid(row=0, column=0, sticky="nsew")
         self.graph_settings.rowconfigure(0, weight=1)
         self.add(self.tech_browser)
         self.add(self.graph_settings)
