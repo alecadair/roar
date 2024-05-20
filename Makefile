@@ -3,9 +3,18 @@
 # ROAR - Turku, Finland
 #
 # Intended to run with Centos/Redhat operating systems and tcsh or csh
+# Also tested with Ubuntu and should run on Ubuntu
 #
 
-SHELL = /usr/local/bin/tcsh
+TCSH_PATH := $(shell which tcsh)
+
+# If tcsh is found, set the SHELL variable to its path
+ifeq ($(TCSH_PATH),)
+    $(error "tcsh is not installed or not in the system PATH.")
+endif
+
+# Set the SHELL variable to use the detected tcsh path
+SHELL := $(TCSH_PATH)
 CURRENT_DIRECTORY := $(shell pwd)
 
 all: generate_roar_env
