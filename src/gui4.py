@@ -104,7 +104,7 @@ class CIDPythonIDE(ttk.PanedWindow):
 
 
 class CIDTechBrowser(ttk.Frame):
-    def __init__(self, parent, theme):
+    def __init__(self, parent, graph_controller, theme=None):
         super().__init__(parent)
         self.parent = parent
         self.graphing_widget = None
@@ -115,7 +115,7 @@ class CIDTechBrowser(ttk.Frame):
         self.columnconfigure(index=2, weight=1)
         self.rowconfigure(index=2, weight=1)
         self.scrollbar = ttk.Scrollbar(self)
-
+        self.graph_controller = graph_controller
         self.scrollbar.pack(side="right", fill="y")
         self.tree = CheckboxTreeview(
             self,
@@ -124,7 +124,7 @@ class CIDTechBrowser(ttk.Frame):
         )
 
         self.tree_item_counter = 0
-        self.tree.pack(expand=True, fill="both")
+        self.tree.pack(expand=True, fill="both", side="top")
         self.tree.insert('', str(self.tree_item_counter), 'PDK', text='PDK')
         self.tree_item_counter += 1
         self.tree.bind('<Button 1>', self.select_item)
@@ -153,9 +153,11 @@ class CIDTechBrowser(ttk.Frame):
         else:
             lut_dir = dirname
             pdk = pdk_name
-        self.add_tech_from_dir(dir=lut_dir, pdk_name=pdk)
-        pdk_dict = self.tech_dict[pdk]
+        #self.add_tech_from_dir(dir=lut_dir, pdk_name=pdk)
+        #pdk_dict = self.tech_dict[pdk]
         self.tree.insert('PDK', str(self.tree_item_counter), pdk, text=pdk)
+        tech_dict = self.graph_controller.graph_control_notebook.tech_dict
+        pdk_dict = tech_dict[pdk_name]
         delim = ">"
         for model in pdk_dict:
             model_dict = pdk_dict[model]
@@ -257,7 +259,9 @@ class CIDGraphingWindow(ttk.Frame):
             model_name = model_tokens[1]
             length = model_tokens[2]
             corner = model_tokens[3]
-            cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
+            cid_corner = self.graph_controller.graph_control_notebook.tech_dict[pdk][model_name][length]["corners"][corner]
+
+            #cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
             param1 = self.graph_controller.graph_settings.x_dropdown.get()
             param2 = self.graph_controller.graph_settings.y_dropdown.get()
             legend_str = pdk + " " + model_name + " " + length + " " + corner
@@ -274,17 +278,18 @@ class CIDGraphingWindow(ttk.Frame):
 
 
 class CIDGraphController(ttk.PanedWindow):
-    def __init__(self, parent):
+    def __init__(self, parent, graph_control_notebook):
         super().__init__(parent, orient=tk.VERTICAL)
-        self.tech_browser = CIDTechBrowser(self, theme=theme)
+        self.tech_browser = CIDTechBrowser(self, graph_controller=self, theme=theme)
         #self.graph_settings = CIDGraphSettings(self)
         self.graph_settings = CIDOptimizerSettings(self)
-        #self.graph_settings.pack(fill=tk.BOTH, expand=True)
-        self.graph_settings.grid(row=0, column=0, sticky="nsew")
+        self.graph_settings.pack(fill=tk.BOTH, expand=True)
+        #self.graph_settings.grid(row=0, column=0, sticky="nsew")
         self.graph_settings.rowconfigure(0, weight=1)
         self.add(self.tech_browser)
         self.add(self.graph_settings)
         self.graphing_widget = None
+        self.graph_control_notebook = graph_control_notebook
         #self.pack(fill=tk.BOTH, expand=True)
 
 
@@ -308,6 +313,7 @@ class CIDApp(ThemedTk):
         self.center_pane.pack(fill=tk.BOTH, expand=True)
 
         self.left_pane = CIDGraphControlNotebook(self.top_level_pane)
+        self.graph_control_notebook = self.left_pane
         self.left_pane.pack(fill=tk.BOTH, expand=True)
         self.top_level_pane.add(self.left_pane)
 
@@ -324,9 +330,10 @@ class CIDApp(ThemedTk):
         self.center_pane.add(self.grid_button_widget)
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
-        self.left_pane.add_tech_luts(dirname="/work/ala1/gf12lp/characterization_master/LUT_GF12", pdk_name="GF12LP")
+        self.graph_control_notebook.add_tech_luts(dirname="/work/ala1/gf12lp/characterization_master/LUT_GF12", pdk_name="GF12LP")
         #self.left_pane.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/ala1_lteng4448/cds_run/ICU_param/characterization_pls_analysis/GF22FDX-PLS", pdk_name="GF22FDXPLUS")
-        self.left_pane.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/KARHU_TRUNK/cds_run/characterization/characterization_master/GF22FDX_LUTs", pdk_name="GF22FDXPLUS")
+        self.graph_control_notebook.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/KARHU_TRUNK/cds_run/characterization/characterization_master/GF22FDX_LUTs", pdk_name="GF22FDXPLUS")
+        #self.graph_control_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
 
         print("Window Initialized")
         # Create a vertical pane
@@ -469,6 +476,7 @@ class CIDGraphControlNotebook(ttk.Notebook):
         self.master = master
         self.graph_controllers = []
         self.create_widgets()
+        self.tech_dict = {}
 
     def create_widgets(self):
         tab_titles = ["Upper Left", "Upper Right", "Lower Left", "Lower Right"]
@@ -476,13 +484,14 @@ class CIDGraphControlNotebook(ttk.Notebook):
         for i in range(0, 4):
             tab = ttk.Frame(self)
             self.add(tab, text=tab_titles[i])
-            graph_controller = CIDGraphController(tab)
+            graph_controller = CIDGraphController(tab, graph_control_notebook=self)
             graph_controller.pack(expand=True, fill="both")
             self.graph_controllers.append(graph_controller)
             tab_counter = tab_counter + 1
         self.bind("<<NotebookTabChanged>>", self.tab_changed)
 
     def add_tech_luts(self, dirname, pdk_name):
+        self.add_tech_from_dir(dir=dirname, pdk_name=pdk_name)
         for graph_controller in self.graph_controllers:
             graph_controller.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
 
@@ -513,7 +522,7 @@ class CIDGraphControlNotebook(ttk.Notebook):
 
     def tab_changed(self, event):
         current_tab = self.index("current")
-        print("Tab Changed to:", current_tab)
+        #print("Tab Changed to:", current_tab)
 
 class CIDCornerSelector(ttk.LabelFrame):
     def __init__(self, master):
