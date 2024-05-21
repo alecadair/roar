@@ -422,7 +422,7 @@ class CIDGraphSettings(ttk.LabelFrame):
         self.x_axis_choosen = ttk.Combobox(self.settings_frame, textvariable=self.x_axis_lookup, width=15)
         self.x_axis_choosen['values'] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                                          'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
-                                         'va', 'vds', 'vdsat', 'vgs', 'vth')
+                                         'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
         self.x_axis_choosen.current(21)
         #self.x_axis_choosen.pack(side="top", anchor="w")
         self.x_axis_choosen.grid(row=0, column=1,  padx=5, pady=5, sticky="nw")
@@ -436,7 +436,7 @@ class CIDGraphSettings(ttk.LabelFrame):
         self.y_axis_choosen = ttk.Combobox(self.settings_frame, textvariable=self.y_axis_lookup, width=15)
         self.y_axis_choosen["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                                          'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
-                                         'va', 'vds', 'vdsat', 'vgs', 'vth')
+                                         'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
         self.y_axis_choosen.current(8)
         self.y_axis_choosen.grid(row=1, column=1, padx=5, pady=5, sticky="nw")
 
@@ -493,7 +493,7 @@ class CIDGraphSettings(ttk.LabelFrame):
         self.results = []
 
         self.lookup_vals = ['cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
-                                         'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
+                                         'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm', 'kgmft', 'n', 'rds', 'ro',
                                          'va', 'vds', 'vdsat', 'vgs', 'vth']
 
 

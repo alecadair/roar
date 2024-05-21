@@ -318,7 +318,7 @@ class CIDOptimizerSettings(ttk.Frame):
         self.x_dropdown = ttk.Combobox(top_buttons_frame, width=10)
         self.x_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                                          'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
-                                         'va', 'vds', 'vdsat', 'vgs', 'vth')
+                                         'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
         self.x_dropdown.grid(row=0, column=1, padx=5, pady=5, sticky="w")
         self.x_dropdown.current(21)
         self.y_label = ttk.Label(top_buttons_frame, text="Y:")
@@ -328,7 +328,7 @@ class CIDOptimizerSettings(ttk.Frame):
         self.y_dropdown = ttk.Combobox(top_buttons_frame, width=10)
         self.y_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                                          'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
-                                         'va', 'vds', 'vdsat', 'vgs', 'vth')
+                                         'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
         self.y_dropdown.current(8)
         self.y_dropdown.grid(row=1, column=1, padx=5, pady=5, sticky="w")
 
