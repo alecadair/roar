@@ -175,6 +175,26 @@ if results is not None:
 
 
 """
+class CIDGraphChecks(ttk.Frame):
+    def __init(self, master):
+        self.tl = tk.BooleanVar()
+        self.tl_check = ttk.Checkbutton(self, variable=self.tl)
+        self.tl_check.grid(row=0, column=0, padx=5, pady=5, sticky="nw")
+
+        self.tr = tk.BooleanVar()
+        self.tr_check = ttk.Checkbutton(self, variable=self.tr)
+        self.tr_check.grid(row=0, column=1, padx=5, pady=5, sticky="ne")
+
+        self.bl = tk.BooleanVar()
+        self.bl_check = ttk.Checkbutton(self, variable=self.bl)
+        self.bl_check.grid(row=1, column=0, padx=5, pady=5, sticky="sw")
+
+        self.br = tk.BooleanVar()
+        self.br_check = ttk.Checkbutton(self, variable=self.br)
+        self.br_check.grid(row=1, column=0, padx=5, pady=5, sticky="nw")
+
+
+
 class CIDExpressionWidget(ttk.LabelFrame):
     def __init__(self, master):
         super().__init__(master, text="Expression Editor")
