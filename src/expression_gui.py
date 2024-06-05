@@ -10,15 +10,15 @@ import numpy as np
 
 
 class CIDEquationSolver:
-    def __init__(self, lookup_vals, graph_controller):
+    def __init__(self, lookup_vals, graph_controller, test=False):
         self.equations = {}
         self.variables = {}
         self.lookup_vals = lookup_vals
         self.graph_controller = graph_controller
-
-    def add_equation1(self, name, equation):
-        self.equations[name] = equation
-
+        self.data_frames = []
+        if test:
+            test_df = self.graph_controller
+            print("TODO")
     def add_equation(self, name, equation_or_value):
         if isinstance(equation_or_value, np.ndarray):
             self.variables[name] = equation_or_value
@@ -109,21 +109,17 @@ class CIDEquationSolver:
                 return True
             if node in visited:
                 return False
-
             visited.add(node)
             stack.add(node)
-
             for neighbor in list(graph[node]):  # Make a copy of the neighbors to avoid modifying the graph
                 if dfs(neighbor):
                     return True
-
             stack.remove(node)
             return False
 
         for node in list(graph):  # Make a copy of the nodes to avoid modifying the graph
             if dfs(node):
                 return True
-
         return False
 
     def topological_sort(self, graph):
@@ -131,10 +127,8 @@ class CIDEquationSolver:
         for node in graph:
             for neighbor in graph[node]:
                 indegree[neighbor] += 1
-
         queue = deque(node for node in graph if indegree[node] == 0)
         result = []
-
         while queue:
             node = queue.popleft()
             result.append(node)
@@ -142,10 +136,8 @@ class CIDEquationSolver:
                 indegree[neighbor] -= 1
                 if indegree[neighbor] == 0:
                     queue.append(neighbor)
-
             # Remove node from the graph to prevent revisiting it
             del graph[node]
-
         # Check if there are any remaining nodes in the graph (cycles)
         if graph:
             print("Error: The equations have cyclical dependencies.")
@@ -207,7 +199,7 @@ class CIDGraphChecks(ttk.Frame):
 
 
 class CIDConstraintWidget(ttk.LabelFrame):
-    def __init__(self, master):
+    def __init__(self, master, test=False):
         super().__init__(master, text="Constraint Editor")
         self.master = master
 
@@ -311,10 +303,10 @@ class CIDConstraintWidget(ttk.LabelFrame):
         #self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
 class CIDExpressionWidget(ttk.LabelFrame):
-    def __init__(self, master):
+    def __init__(self, master, test=False):
         super().__init__(master, text="Expression Editor")
         self.master = master
-
+        self.test = test
         # Create canvas with scrollbars
         self.canvas = tk.Canvas(self)
         self.v_scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.canvas.yview)
@@ -351,7 +343,6 @@ class CIDExpressionWidget(ttk.LabelFrame):
             #label.grid(row=0, column=i, padx=5, pady=5, sticky="w")
             label.pack(side=tk.LEFT, expand=True, fill=tk.X)
         label_frame.pack(side=tk.TOP, expand=False, fill=tk.X)
-        self.entry_counter = 1
         #self.expression_frame.bind("<Configure>", self.on_frame_configure)
         #self.canvas.bind("<Configure>", self.on_canvas_configure)
 
@@ -368,10 +359,42 @@ class CIDExpressionWidget(ttk.LabelFrame):
 
         #self.canvas.bind("<Configure>", resize_canvas)
         self.add_expression()
+        if test:
+            self.add_expression()
+            self.add_expression()
+            self.add_expression()
+            self.add_expression()
+            self.add_expression()
+            self.add_expression()
+            self.add_expression()
+            self.add_expression()
+
+            var0 = self.var_names[0]
+            var0.insert(0, "kgm")
+            var1 = self.var_names[1]
+            var1.insert(0, "c_load")
+            var2 = self.var_names[2]
+            var2.insert(0, "gbw")
+            var3 = self.var_names[3]
+            var3.insert(0, "ids_0")
+
+            expr0 = self.expr_entries[0]
+            expr0.insert(0, "gm/id")
+            expr1 = self.expr_entries[1]
+            expr1.insert(0, "50e-15")
+            expr2 = self.expr_entries[2]
+            expr2.insert(0, "250e6")
+            expr3 = self.expr_entries[3]
+            expr3.insert(0, "2*pi*gbw*c_load/kgm")
+
+            self.evaluate_expressions()
+            print("TODO")
 
     def evaluate_expressions(self):
-
-        solver = CIDEquationSolver(lookup_vals=None, graph_controller=None)
+        self_control_notebook = self.master
+        self_optimizer_settings = self_control_notebook.master
+        self_graph_controller = self_optimizer_settings.master
+        solver = CIDEquationSolver(lookup_vals=None, graph_controller=self_graph_controller, test=self.test)
         default_frame = None
         for i in range(self.entry_counter):
             expr_enable_var = self.expr_enables[i].get()
@@ -379,8 +402,13 @@ class CIDExpressionWidget(ttk.LabelFrame):
                 continue
             variable_name = self.var_names[i].get()
             expression = self.expr_entries[i].get()
+            var_white_space = variable_name.replace(" ", "")
+            expression_white_space = expression.replace(" ", "")
+            if var_white_space == "" or expression_white_space == "":
+                continue
             solver.add_equation(variable_name, expression)
             print("processed expression" + variable_name)
+        results = solver.evaluate_equations()
         print("TODO: Evaluate Constraints")
 
     def remove_expression(self):
@@ -440,7 +468,7 @@ class CIDExpressionWidget(ttk.LabelFrame):
 
 
 class CIDOptimizerSettings(ttk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, test=False):
         super().__init__(master)
         self.master = master
         top_buttons_frame = ttk.Frame(self)
@@ -458,10 +486,10 @@ class CIDOptimizerSettings(ttk.Frame):
 
         button_width = 10
 
-        self.cid_expression_widget = CIDExpressionWidget(expression_editor_frame)
+        self.cid_expression_widget = CIDExpressionWidget(expression_editor_frame, test=test)
         self.cid_expression_widget.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
 
-        self.constraint_editor = CIDConstraintWidget(constraint_editor_frame)
+        self.constraint_editor = CIDConstraintWidget(constraint_editor_frame, test=test)
         self.constraint_editor.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
 
         self.x_label = ttk.Label(top_buttons_frame, text="X:")

@@ -278,11 +278,11 @@ class CIDGraphingWindow(ttk.Frame):
 
 
 class CIDGraphController(ttk.PanedWindow):
-    def __init__(self, parent, graph_control_notebook):
+    def __init__(self, parent, graph_control_notebook, test=False):
         super().__init__(parent, orient=tk.VERTICAL)
         self.tech_browser = CIDTechBrowser(self, graph_controller=self, theme=theme)
         #self.graph_settings = CIDGraphSettings(self)
-        self.graph_settings = CIDOptimizerSettings(self)
+        self.graph_settings = CIDOptimizerSettings(self, test=test)
         self.graph_settings.pack(fill=tk.BOTH, expand=True)
         #self.graph_settings.grid(row=0, column=0, sticky="nsew")
         self.graph_settings.rowconfigure(0, weight=1)
@@ -303,7 +303,7 @@ class CIDGraphController(ttk.PanedWindow):
 
 #class CIDApp(tk.Tk):
 class CIDApp(ThemedTk):
-    def __init__(self, theme):
+    def __init__(self, theme, test=False):
         ThemedTk.__init__(self, theme=theme)
 
         self.top_level_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
@@ -312,7 +312,7 @@ class CIDApp(ThemedTk):
         self.center_pane = ttk.PanedWindow(self.top_level_pane, orient=tk.VERTICAL)
         self.center_pane.pack(fill=tk.BOTH, expand=True)
 
-        self.left_pane = CIDGraphControlNotebook(self.top_level_pane)
+        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, test=test)
         self.graph_control_notebook = self.left_pane
         self.left_pane.pack(fill=tk.BOTH, expand=True)
         self.left_pane.config(width=490)
@@ -469,20 +469,20 @@ class CIDGraphingGrid(tk.Tk):
 
 
 class CIDGraphControlNotebook(ttk.Notebook):
-    def __init__(self, master=None, **kw):
+    def __init__(self, master=None, test=False, **kw):
         super().__init__(master, **kw)
         self.master = master
         self.graph_controllers = []
-        self.create_widgets()
+        self.create_widgets(test)
         self.tech_dict = {}
 
-    def create_widgets(self):
+    def create_widgets(self, test):
         tab_titles = ["Upper Left", "Upper Right", "Lower Left", "Lower Right"]
         tab_counter = 0
         for i in range(0, 4):
             tab = ttk.Frame(self)
             self.add(tab, text=tab_titles[i])
-            graph_controller = CIDGraphController(tab, graph_control_notebook=self)
+            graph_controller = CIDGraphController(tab, graph_control_notebook=self, test=test)
             graph_controller.pack(expand=True, fill="both")
             self.graph_controllers.append(graph_controller)
             tab_counter = tab_counter + 1
@@ -709,7 +709,7 @@ if __name__ == "__main__":
         root.mainloop()
     else:
         theme = "arc"
-        app = CIDApp(theme)
+        app = CIDApp(theme, test=True)
         style = ttk.Style()
         # Configure the style to use the theme
         #style.theme_use(theme)  # You can choose different themes here
