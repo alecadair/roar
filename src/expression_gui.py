@@ -15,10 +15,15 @@ class CIDEquationSolver:
         self.variables = {}
         self.lookup_vals = lookup_vals
         self.graph_controller = graph_controller
+        self.graph_controller_notebook = self.graph_controller.master.master
         self.data_frames = []
+        self.corners = []
         if test:
-            test_df = self.graph_controller
-            print("TODO")
+            self.graph_controller_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
+            test_corner = self.graph_controller_notebook.tech_dict["sky130"]["nch_18_mac"]["150n"]["corners"]["nfetttroom"]
+            self.corners.append(test_corner)
+            print("Testing Equation Solver")
+
     def add_equation(self, name, equation_or_value):
         if isinstance(equation_or_value, np.ndarray):
             self.variables[name] = equation_or_value
@@ -30,6 +35,23 @@ class CIDEquationSolver:
             equation_or_value = equation_or_value.replace("(", " ( ")
             equation_or_value = equation_or_value.replace(")", " ) ")
             self.equations[name] = equation_or_value
+
+    @staticmethod
+    def check_if_var_is_lookup(var_name, corner):
+        corner_df = corner.df
+        corner_keys = corner_df.keys()
+        for key in corner_keys:
+            if key == var_name:
+                return True
+        return False
+
+    def check_if_lookup(self, var_name):
+        for corner in self.corners:
+            corner_df = corner.df
+            is_lookup = self.check_if_var_is_lookup(var_name, corner)
+            if is_lookup:
+                return True
+        return False
 
     def remove_equation(self, name):
         if name in self.equations:
@@ -46,6 +68,17 @@ class CIDEquationSolver:
         if name in self.variables:
             del self.variables[name]
 
+    def create_matrix_from_lookup(self, var_name):
+        column_vectors = []
+        for corner in self.corners:
+            df = corner.df
+            if var_name in df.columns:
+                column_vectors.append(df[var_name].values)
+        # Stack the column vectors horizontally to form a 2D matrix
+        matrix = np.column_stack(column_vectors)
+        return matrix
+
+
     def evaluate_equations(self):
         dependency_graph = self.build_dependency_graph()
         if self.has_cycle(dependency_graph):
@@ -57,12 +90,18 @@ class CIDEquationSolver:
         sorted_equations.reverse()
         results = {}
         for equation in sorted_equations:
-            eq = ""
+            eq = None
             if equation in self.variables.keys():
                 eq = self.variables[equation]
                 result = self.variables[equation]
             else:
-                eq = self.equations[equation]
+                eq_is_lookup = self.check_if_lookup(equation)
+                if eq_is_lookup:
+                    eq = self.create_matrix_from_lookup(equation)
+                    self.add_variable(equation, eq)
+                    continue
+                else:
+                    eq = self.equations[equation]
                 result = self.evaluate_equation(eq, results)
             if result is not None:
                 results[equation] = result
@@ -379,7 +418,7 @@ class CIDExpressionWidget(ttk.LabelFrame):
             var3.insert(0, "ids_0")
 
             expr0 = self.expr_entries[0]
-            expr0.insert(0, "gm/id")
+            expr0.insert(0, "gm/ids")
             expr1 = self.expr_entries[1]
             expr1.insert(0, "50e-15")
             expr2 = self.expr_entries[2]
