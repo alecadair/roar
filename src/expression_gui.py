@@ -5,9 +5,9 @@
 
 import tkinter as tk
 from tkinter import ttk
-from collections import defaultdict, deque
 import numpy as np
-
+from sympy import symbols, sympify, Number
+from collections import defaultdict, deque
 
 class CIDEquationSolver:
     def __init__(self, lookup_vals, graph_controller, test=False):
@@ -18,6 +18,9 @@ class CIDEquationSolver:
         self.graph_controller_notebook = self.graph_controller.master.master
         self.data_frames = []
         self.corners = []
+        self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
+                                         'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
+                                         'va', 'vds', 'vdsat', 'vgs', 'vth')
         if test:
             self.graph_controller_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
             test_corner = self.graph_controller_notebook.tech_dict["sky130"]["nch_18_mac"]["150n"]["corners"]["nfetttroom"]
@@ -34,7 +37,18 @@ class CIDEquationSolver:
             equation_or_value = equation_or_value.replace("/", " / ")
             equation_or_value = equation_or_value.replace("(", " ( ")
             equation_or_value = equation_or_value.replace(")", " ) ")
-            self.equations[name] = equation_or_value
+            equation = equation_or_value
+            try:
+                # Preprocess the equation to handle scientific notation
+                if 'e' in equation:
+                    # Split the expression at 'e' and reconstruct it with '*10**' notation
+                    parts = equation.split('e')
+                    if len(parts) == 2:
+                        equation = f"({parts[0]}*10**{parts[1]})"
+                # Now, sympify the equation
+                self.equations[name] = sympify(equation)
+            except Exception as e:
+                print(f"Error adding equation {name}: {e}")
 
     @staticmethod
     def check_if_var_is_lookup(var_name, corner):
@@ -79,7 +93,7 @@ class CIDEquationSolver:
         return matrix
 
 
-    def evaluate_equations(self):
+    def evaluate_equations1(self):
         dependency_graph = self.build_dependency_graph()
         if self.has_cycle(dependency_graph):
             print("Error: The equations have cyclical dependencies.")
@@ -90,19 +104,22 @@ class CIDEquationSolver:
         sorted_equations.reverse()
         results = {}
         for equation in sorted_equations:
-            eq = None
-            if equation in self.variables.keys():
-                eq = self.variables[equation]
-                result = self.variables[equation]
-            else:
-                eq_is_lookup = self.check_if_lookup(equation)
-                if eq_is_lookup:
-                    eq = self.create_matrix_from_lookup(equation)
-                    self.add_variable(equation, eq)
-                    continue
-                else:
-                    eq = self.equations[equation]
-                result = self.evaluate_equation(eq, results)
+            if equation not in self.equations:
+                self.equations[equation] = "lookup"
+        for equation in sorted_equations:
+            #eq = None
+            eq = equation
+            #if equation in self.variables.keys():
+            #    eq = self.variables[equation]
+            #    result = self.variables[equation]
+            #else:
+            #    eq_is_lookup = self.check_if_lookup(equation)
+            #    if eq_is_lookup:
+            #        eq = self.create_matrix_from_lookup(equation)
+            #        self.add_variable(equation, eq)
+            #    else:
+            #        eq = self.equations[equation]
+            result = self.evaluate_equation(eq, results)
             if result is not None:
                 results[equation] = result
             else:
@@ -110,18 +127,62 @@ class CIDEquationSolver:
 
         return results
 
-    def evaluate_equation(self, symbolic_equation, results):
+    def evaluate_equation1(self, symbolic_equation, results):
         try:
             symbolic_equation = ''.join(symbolic_equation.split())  # Remove white space characters
-            for symbol in symbolic_equation:
-                if symbol in self.lookup_vals:
-                    self.get_vector_for_variable(symbol)
-                print(symbol)
-            #variables_used = set(symbol for symbol in symbolic_equation if symbol.isalpha())
-            #symbolic_equation.replace("+", " + ")
+            #for symbol in symbolic_equation:
+            #    if symbol in self.lookup_vals:
+            #        self.get_vector_for_variable(symbol)
+            #    print(symbol)
+            variables_used = set(symbol for symbol in symbolic_equation if symbol.isalpha())
             variables_dict = {**self.variables, **results}
-            #print("Variables:", variables_dict)
+            print("Variables:", variables_dict)
             result = eval(symbolic_equation, {}, variables_dict)
+            return result
+        except Exception as e:
+            print("Error:", e)
+            return None
+
+    def evaluate_equations(self):
+        dependency_graph = self.build_dependency_graph()
+        if self.has_cycle(dependency_graph):
+            print("Error: The equations have cyclical dependencies.")
+            return None
+
+        sorted_equations = self.topological_sort(dependency_graph)
+        sorted_equations.reverse()
+        results = {}
+
+        for equation_name in sorted_equations:
+            equation = self.equations[equation_name]
+            result = self.evaluate_equation(equation, results)
+            if result is not None:
+                results[equation_name] = result
+            else:
+                return None
+        return results
+
+    def evaluate_equation(self, equation, results):
+        try:
+            variables_dict = {**self.variables, **results}
+            evaluated_equation = equation.subs(variables_dict)
+
+            for var in equation.free_symbols:
+                var_name = str(var)
+                if var_name not in variables_dict:
+                    if var_name in self.numpy_arrays:
+                        evaluated_equation = evaluated_equation.subs(symbols(var_name), self.numpy_arrays[var_name])
+                    elif var_name in self.lookup_data:
+                        value = self.lookup_data[var_name]
+                        if isinstance(value, np.ndarray):
+                            self.numpy_arrays[var_name] = value
+                        else:
+                            self.variables[var_name] = value
+                        evaluated_equation = evaluated_equation.subs(symbols(var_name), value)
+                    else:
+                        raise ValueError(f"Variable {var_name} not found in variables or lookup data.")
+
+            result = np.array(evaluated_equation.evalf())
             return result
         except Exception as e:
             print("Error:", e)
@@ -446,7 +507,7 @@ class CIDExpressionWidget(ttk.LabelFrame):
             if var_white_space == "" or expression_white_space == "":
                 continue
             solver.add_equation(variable_name, expression)
-            print("processed expression" + variable_name)
+            print("processed expression " + variable_name)
         results = solver.evaluate_equations()
         print("TODO: Evaluate Constraints")
 
