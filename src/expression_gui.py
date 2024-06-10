@@ -8,10 +8,12 @@ from tkinter import ttk
 import numpy as np
 from sympy import symbols, sympify, Number
 from collections import defaultdict, deque
+import re
 
 class CIDEquationSolver:
     def __init__(self, lookup_vals, graph_controller, test=False):
         self.equations = {}
+        self.equation_strs = {}
         self.variables = {}
         self.lookup_vals = lookup_vals
         self.graph_controller = graph_controller
@@ -46,7 +48,10 @@ class CIDEquationSolver:
                     if len(parts) == 2:
                         equation = f"({parts[0]}*10**{parts[1]})"
                 # Now, sympify the equation
-                self.equations[name] = sympify(equation)
+                sympified_equation = sympify(equation)
+                self.equations[name] = sympified_equation
+                self.equation_strs[name] = str(sympified_equation)
+
             except Exception as e:
                 print(f"Error adding equation {name}: {e}")
 
@@ -193,8 +198,11 @@ class CIDEquationSolver:
 
     def build_dependency_graph(self):
         dependency_graph = defaultdict(set)
-        for name, equation in self.equations.items():
-            variables = set(symbol for symbol in equation.split() if symbol.isalpha())
+        #for name, equation in self.equations.items():<ss<ss
+        for name, equation in self.equation_strs.items():
+            #variables = set(symbol for symbol in equation.split() if symbol.isalpha())
+            equation_delimiters = "+|-|*|/|^|(|)| "
+            variables = set(symbol for symbol in equation.split())
             for var in variables:
                 if var != name:
                     dependency_graph[name].add(var)
