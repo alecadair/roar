@@ -312,7 +312,7 @@ class CIDApp(ThemedTk):
         self.center_pane = ttk.PanedWindow(self.top_level_pane, orient=tk.VERTICAL)
         self.center_pane.pack(fill=tk.BOTH, expand=True)
 
-        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, test=test)
+        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, test=True)
         self.graph_control_notebook = self.left_pane
         self.left_pane.pack(fill=tk.BOTH, expand=True)
         self.left_pane.config(width=490)
@@ -476,8 +476,8 @@ class CIDGraphControlNotebook(ttk.Notebook):
         super().__init__(master, **kw)
         self.master = master
         self.graph_controllers = []
-        self.create_widgets(test)
         self.tech_dict = {}
+        self.create_widgets(test)
 
     def create_widgets(self, test):
         tab_titles = ["Upper Left", "Upper Right", "Lower Left", "Lower Right"]
