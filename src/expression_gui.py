@@ -23,6 +23,7 @@ class CIDEquationSolver:
         self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                                          'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
                                          'va', 'vds', 'vdsat', 'vgs', 'vth')
+
         if test:
             self.graph_controller_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
             test_corner = self.graph_controller_notebook.tech_dict["sky130"]["nch_18_mac"]["150n"]["corners"]["nfetttroom"]
