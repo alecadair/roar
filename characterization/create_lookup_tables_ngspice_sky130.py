@@ -130,7 +130,7 @@ def create_lookup_tables(tech_name=""):
                                 if i == 0:
                                     file.write(line.rstrip('\n') + ", W, L, pdk\n")
                                 else:
-                                    file.write(line.rstrip('\n') + ", 1.0," + str(length) + ", " + tech_name + "\n")
+                                    file.write(line.rstrip('\n') + ", 1.0, " + str(length) + ", " + tech_name + "\n")
                         with open("pfet_cid_characterization.csv", 'r') as file:
                             lines = file.readlines()
                         with open("pfet_cid_characterization.csv", 'w') as file:
