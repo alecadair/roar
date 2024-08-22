@@ -36,7 +36,7 @@ def create_lookup_tables(tech_name=""):
     ff = "ff"
 
     corners = [ss, tt, ff]
-    corners = [tt]
+    #corners = [tt]
     cold = "cold"
     room = "room"
     hot = "hot"
@@ -111,15 +111,15 @@ def create_lookup_tables(tech_name=""):
                 if os.path.exists(p_length_dir):
                     shutil.rmtree(p_length_dir)
                 os.system("mkdir " + p_length_dir)
-            sim_string = "simulator lang=spectre"
-            param_string = "parameters L=" + length
             for corner in corners:
                 for temp in temperatures:
+                    print("Creating netlist...")
                     edited_netlist = create_netlist_from_template(netlist_template=netlist_template_file, length=length, corner=corner, temperature=temp)
                     netlist_name = model + "_" + length + "_" + corner + "_" + temp + ".cir"
                     corner_name = corner+temp
                     with open(netlist_name, 'w') as file:
                         file.write(edited_netlist)
+                    print("Running characterization...")
                     os.system("ngspice -b " + netlist_name)
                     if os.path.exists(n_length_dir) and os.path.exists("nfet_cid_characterization.csv"):
                         os.system("mv nfet_cid_characterization.csv " + n_length_dir + "/nfet" + corner_name + ".csv")
