@@ -81,7 +81,7 @@ def create_lookup_tables(tech_name=""):
     model = "nfet"
 
     netlists_dir = "netlists"
-    netlist_mkdir = "mkdir netlists"
+    netlist_mkdir = "mkdir " + netlists_dir
     if not os.path.exists(netlists_dir):
         os.system(netlist_mkdir)
 
@@ -122,6 +122,24 @@ def create_lookup_tables(tech_name=""):
                     print("Running characterization...")
                     os.system("ngspice -b " + netlist_name)
                     if os.path.exists(n_length_dir) and os.path.exists("nfet_cid_characterization.csv"):
+                        with open("nfet_cid_characterization.csv", 'r') as file:
+                            lines = file.readlines()
+                        with open("nfet_cid_characterization.csv", 'w') as file:
+                            for i, line in enumerate(lines):
+                                line = line.replace("  ", ", ")
+                                if i == 0:
+                                    file.write(line.rstrip('\n') + ", W, L, pdk\n")
+                                else:
+                                    file.write(line.rstrip('\n') + ", 1.0," + str(length) + ", " + tech_name + "\n")
+                        with open("pfet_cid_characterization.csv", 'r') as file:
+                            lines = file.readlines()
+                        with open("pfet_cid_characterization.csv", 'w') as file:
+                            for i, line in enumerate(lines):
+                                line = line.replace("  ", ", ")
+                                if i == 0:
+                                    file.write(line.rstrip('\n') + ", W, L, pdk\n")
+                                else:
+                                    file.write(line.rstrip('\n') + ", 1.0, " + str(length) + ", " + tech_name + "\n")
                         os.system("mv nfet_cid_characterization.csv " + n_length_dir + "/nfet" + corner_name + ".csv")
                     if os.path.exists(n_length_dir) and os.path.exists("pfet_cid_characterization.csv"):
                         os.system("mv pfet_cid_characterization.csv " + p_length_dir + "/pfet" + corner_name + ".csv")
