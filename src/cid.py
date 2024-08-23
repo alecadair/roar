@@ -285,7 +285,7 @@ class CIDDevice:
 
 class CIDCorner():
 
-    def __init__(self, corner_name="", lut_csv="", vdd=0.0):
+    def __init__(self, corner_name="", lut_csv="", vdd=0.0, pdk=""):
         self.vdd = vdd
         self.max_min_vals = {}
         self.ic_consts = {}
@@ -296,7 +296,7 @@ class CIDCorner():
         self.length = 0
         self.nfet_df = None
         self.pfet_df = None
-        self.pdk = ""
+        self.pdk = pdk
 
         if lut_csv != "" and os.path.isfile(lut_csv):
             self.import_lut(lut_csv, vdd, corner_name=corner_name)
@@ -317,6 +317,8 @@ class CIDCorner():
         self.pdk = pdk_col[0]
         self.lut_csv = lut_csv
         length_col = self.df["L"]
+        if "ids" not in self.df.columns:
+            self.df["ids"] = self.df["id"]
         self.length = length_col[0]
         if corner_name == "":
             self.corner_name = corner_name
@@ -355,11 +357,11 @@ class CIDCorner():
             gmro_array = []
             gds_gm_array = []
             gm_col = self.df["gm"]
-            ro_col = self.df["ro"]
+            gds_col = self.df["gds"]
             for i in range(len(gm_col)):
                 gm = gm_col[i]
-                ro = ro_col[i]
-                gmro = gm*ro
+                gds = gds_col[i]
+                gmro = gm/gds
                 gds_gm = 1/gmro
                 gmro_array.append(gmro)
                 gds_gm_array.append(gds_gm)
@@ -402,9 +404,9 @@ class CIDCorner():
             self.df["vgs"] = vgs_array
         if not self.check_if_param_exists("kgds"):
             kgds_array = []
-            gds_col = self.df["ro"]
+            gds_col = self.df["gds"]
             ids_col = self.df["ids"]
-            gds_col = 1/gds_col
+            #gds_col = 1/gds_col
             for i in range(len(gds_col)):
                 kgds = gds_col[i]/ids_col[i]
                 kgds_array.append(kgds)
