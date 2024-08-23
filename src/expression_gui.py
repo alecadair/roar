@@ -25,8 +25,8 @@ class CIDEquationSolver:
                                          'va', 'vds', 'vdsat', 'vgs', 'vth')
 
         if test:
-            self.graph_controller_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
-            test_corner = self.graph_controller_notebook.tech_dict["sky130"]["nch_18_mac"]["150n"]["corners"]["nfetttroom"]
+            self.graph_controller_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130", pdk_name="sky130")
+            test_corner = self.graph_controller_notebook.tech_dict["sky130"]["n_01v8"]["150"]["corners"]["nfettt-25"]
             self.corners.append(test_corner)
             print("Testing Equation Solver")
 

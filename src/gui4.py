@@ -312,7 +312,7 @@ class CIDApp(ThemedTk):
         self.center_pane = ttk.PanedWindow(self.top_level_pane, orient=tk.VERTICAL)
         self.center_pane.pack(fill=tk.BOTH, expand=True)
 
-        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, test=True)
+        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, test=test)
         self.graph_control_notebook = self.left_pane
         self.left_pane.pack(fill=tk.BOTH, expand=True)
         self.left_pane.config(width=490)
@@ -331,9 +331,10 @@ class CIDApp(ThemedTk):
         self.center_pane.add(self.grid_button_widget)
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
-        self.graph_control_notebook.add_tech_luts(dirname="/work/ala1/gf12lp/characterization_master/LUT_GF12", pdk_name="GF12LP")
+        self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130", pdk_name="sky130")
+        #self.graph_control_notebook.add_tech_luts(dirname="/work/ala1/gf12lp/characterization_master/LUT_GF12", pdk_name="GF12LP")
         #self.left_pane.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/ala1_lteng4448/cds_run/ICU_param/characterization_pls_analysis/GF22FDX-PLS", pdk_name="GF22FDXPLUS")
-        self.graph_control_notebook.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/KARHU_TRUNK/cds_run/characterization/characterization_master/GF22FDX_LUTs", pdk_name="GF22FDXPLUS")
+        #self.graph_control_notebook.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/KARHU_TRUNK/cds_run/characterization/characterization_master/GF22FDX_LUTs", pdk_name="GF22FDXPLUS")
         #self.graph_control_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
 
         print("Window Initialized")
@@ -712,7 +713,7 @@ if __name__ == "__main__":
         root.mainloop()
     else:
         theme = "arc"
-        app = CIDApp(theme, test=True)
+        app = CIDApp(theme, test=False)
         style = ttk.Style()
         # Configure the style to use the theme
         #style.theme_use(theme)  # You can choose different themes here
