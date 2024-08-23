@@ -7,6 +7,7 @@
 
 import os
 import shutil
+import re
 
 def create_netlist_from_template(netlist_template, length, corner, temperature):
     if os.path.exists(netlist_template):
@@ -18,7 +19,17 @@ def create_netlist_from_template(netlist_template, length, corner, temperature):
         netlist_data = netlist_data.replace("_TEMPERATURE", temperature)
         return netlist_data
 
+def fix_data_line(text):
+    # Remove leading spaces from each line
+    text = re.sub(r'^\s+', '', text, flags=re.MULTILINE)
+
+    # Replace one or more spaces with a single comma, but keep newline characters
+    text = re.sub(r'[ \t]+', ',', text)
+
+    return text
+
 def create_lookup_tables(tech_name=""):
+    pdk = "sky130"
     luts_dir = "LUTs_" + tech_name
     netlists_dir = "netlists_" + tech_name
     if os.path.exists(luts_dir):
@@ -36,10 +47,11 @@ def create_lookup_tables(tech_name=""):
     ff = "ff"
 
     corners = [ss, tt, ff]
-    #corners = [tt]
-    cold = "cold"
-    room = "room"
-    hot = "hot"
+    corners = [tt]
+
+    cold = "-25"
+    room = "25"
+    hot = "75"
 
     temperatures = [cold, room, hot]
 
@@ -64,7 +76,8 @@ def create_lookup_tables(tech_name=""):
     pffhot = pfet + ff + hot
 
     lengths = [".150", ".200", ".250", ".300", ".500", "1.000"]
-
+    #lengths = [".150"]
+    width = "1.0"
     ncorners = [nsscold, nttcold, nffcold,
                 nssroom, nttroom, nffroom,
                 nsshot, ntthot, nffhot]
@@ -126,20 +139,22 @@ def create_lookup_tables(tech_name=""):
                             lines = file.readlines()
                         with open("nfet_cid_characterization.csv", 'w') as file:
                             for i, line in enumerate(lines):
-                                line = line.replace("  ", ", ")
+                                line = fix_data_line(line)
                                 if i == 0:
-                                    file.write(line.rstrip('\n') + ", W, L, pdk\n")
+                                    #file.write(line.rstrip('\n') + ",W,L,pdk\n")
+                                    file.write(line)
                                 else:
-                                    file.write(line.rstrip('\n') + ", 1.0, " + str(length) + ", " + tech_name + "\n")
+                                    file.write(line.rstrip('\n') + "1.0," + str(length) + "," + pdk + "\n")
                         with open("pfet_cid_characterization.csv", 'r') as file:
                             lines = file.readlines()
                         with open("pfet_cid_characterization.csv", 'w') as file:
                             for i, line in enumerate(lines):
-                                line = line.replace("  ", ", ")
+                                line = fix_data_line(line)
                                 if i == 0:
-                                    file.write(line.rstrip('\n') + ", W, L, pdk\n")
+                                    file.write(line)
+                                    #file.write(line.rstrip('\n') + ",W,L,pdk,\n")
                                 else:
-                                    file.write(line.rstrip('\n') + ", 1.0, " + str(length) + ", " + tech_name + "\n")
+                                    file.write(line.rstrip('\n') + "1.0," + str(length) + "," + pdk + "\n")
                         os.system("mv nfet_cid_characterization.csv " + n_length_dir + "/nfet" + corner_name + ".csv")
                     if os.path.exists(n_length_dir) and os.path.exists("pfet_cid_characterization.csv"):
                         os.system("mv pfet_cid_characterization.csv " + p_length_dir + "/pfet" + corner_name + ".csv")
