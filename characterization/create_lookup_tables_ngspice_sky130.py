@@ -47,10 +47,10 @@ def create_lookup_tables(tech_name=""):
     ff = "ff"
 
     corners = [ss, tt, ff]
-    corners = [tt]
+    #corners = [tt]
 
     cold = "-25"
-    room = "25"
+    room = "27"
     hot = "75"
 
     temperatures = [cold, room, hot]
@@ -76,7 +76,8 @@ def create_lookup_tables(tech_name=""):
     pffhot = pfet + ff + hot
 
     lengths = [".150", ".200", ".250", ".300", ".500", "1.000"]
-    #lengths = [".150"]
+    lengths = [".150", "0.300", "0.600", "1.00"]
+    lengths = ["0.150"]
     width = "1.0"
     ncorners = [nsscold, nttcold, nffcold,
                 nssroom, nttroom, nffroom,
@@ -133,7 +134,7 @@ def create_lookup_tables(tech_name=""):
                     with open(netlist_name, 'w') as file:
                         file.write(edited_netlist)
                     print("Running characterization...")
-                    os.system("ngspice -b " + netlist_name)
+                    os.system("ngspice -b -n " + netlist_name)
                     if os.path.exists(n_length_dir) and os.path.exists("nfet_cid_characterization.csv"):
                         with open("nfet_cid_characterization.csv", 'r') as file:
                             lines = file.readlines()
@@ -144,7 +145,8 @@ def create_lookup_tables(tech_name=""):
                                     #file.write(line.rstrip('\n') + ",W,L,pdk\n")
                                     file.write(line)
                                 else:
-                                    file.write(line.rstrip('\n') + "1.0," + str(length) + "," + pdk + "\n")
+                                    #file.write(line.rstrip('\n') + "0.42," + str(length) + "," + pdk + "\n")
+                                    file.write(line.rstrip('\n') + "0.840," + str(length) + "," + pdk + "\n")
                         with open("pfet_cid_characterization.csv", 'r') as file:
                             lines = file.readlines()
                         with open("pfet_cid_characterization.csv", 'w') as file:
@@ -154,7 +156,8 @@ def create_lookup_tables(tech_name=""):
                                     file.write(line)
                                     #file.write(line.rstrip('\n') + ",W,L,pdk,\n")
                                 else:
-                                    file.write(line.rstrip('\n') + "1.0," + str(length) + "," + pdk + "\n")
+                                    #file.write(line.rstrip('\n') + "0.42," + str(length) + "," + pdk + "\n")
+                                    file.write(line.rstrip('\n') + "0.840," + str(length) + "," + pdk + "\n")
                         os.system("mv nfet_cid_characterization.csv " + n_length_dir + "/nfet" + corner_name + ".csv")
                     if os.path.exists(n_length_dir) and os.path.exists("pfet_cid_characterization.csv"):
                         os.system("mv pfet_cid_characterization.csv " + p_length_dir + "/pfet" + corner_name + ".csv")

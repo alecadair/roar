@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
+plt.rcParams['svg.fonttype'] = 'none'
 import pandas as pd
 import math
 
@@ -205,7 +206,7 @@ class CIDDevice:
             corner = CIDCorner(corner_name=corner_name, lut_csv=lut_csv, vdd=vdd)
             self.corner_list.append(corner)
 
-    def magic_equation(self, gbw, cload, epsilon=10, show_plot=False, new_plot=True, ax1=None, fig1=None):
+    def magic_equation(self, gbw, cload, beta_factor=1, c_coeff=[1, 1, 1], epsilon=10, show_plot=False, new_plot=False, ax1=None, fig1=None):
         kgm_min = 1e13
         ids_opt = 1e13
         first_corner = True
@@ -218,8 +219,7 @@ class CIDDevice:
             color = color_list[color_index]
             if first_corner == True:
                 new_plot = True
-            ids_opt, kgm_opt, ax1, fig1 = corner.magic_equation(gbw=gbw, cload=cload, show_plot=show_plot, new_plot=new_plot,
-                                                     ax1=ax1, fig1=fig1, color=color)
+            ids_opt, kgm_opt, ax1, fig1 = corner.current_as_function_of_kgm(gbw=gbw, cload=cload, beta_factor=beta_factor, c_coeff=c_coeff, show_plot=show_plot, new_plot=new_plot,ax1=ax1, fig1=fig1, color=color)
             if abs(kgm_opt) < kgm_min:
                 kgm_min = kgm_opt
             new_plot = False
@@ -328,7 +328,7 @@ class CIDCorner():
             cgg_col = self.df["cgg"]
             gm_col = self.df["gm"]
             for i in range(len(cgg_col)):
-                cgg = cgg_col[i]
+                cgg = abs(cgg_col[i])
                 gm = gm_col[i]
                 ft = gm/(2*math.pi*cgg)
                 ft_array.append(ft)
@@ -353,25 +353,63 @@ class CIDCorner():
                 kcgg = cgg/id
                 kcgg_array.append(kcgg)
             self.df["kcgg"] = kcgg_array
+        if not self.check_if_param_exists("kcgd"):
+            kcgd_array = []
+            cgd_col = abs(self.df["cgd"])
+            i_col = self.df["ids"]
+            for i in range(len(cgd_col)):
+                cgd = cgd_col[i]
+                id = i_col[i]
+                kcgd = cgd/id
+                kcgd_array.append(kcgd)
+            self.df["kcgd"] = kcgg_array
+        if not self.check_if_param_exists("kcgs"):
+            kcgs_array = []
+            cgs_col = abs(self.df["cgs"])
+            i_col = self.df["ids"]
+            for i in range(len(cgs_col)):
+                cgs = cgs_col[i]
+                id = i_col[i]
+                kcgs = cgs/id
+                kcgs_array.append(kcgs)
+            self.df["kcgs"] = kcgs_array
+        if not self.check_if_param_exists("kcds"):
+            kcds_array = []
+            cds_col = abs(self.df["cds"])
+            i_col = self.df["ids"]
+            for i in range(len(cds_col)):
+                cds = cds_col[i]
+                id = i_col[i]
+                kcds = cds/id
+                kcds_array.append(kcds)
+            self.df["kcds"] = kcds_array
         if not self.check_if_param_exists("gmro"):
             gmro_array = []
             gds_gm_array = []
+            kgds_array = []
             gm_col = self.df["gm"]
             gds_col = self.df["gds"]
+            i_col = self.df["ids"]
+
             for i in range(len(gm_col)):
                 gm = gm_col[i]
                 gds = gds_col[i]
                 gmro = gm/gds
                 gds_gm = 1/gmro
+                kgds = gds_col[i]/i_col[i]
+                kgds_array.append(kgds)
                 gmro_array.append(gmro)
                 gds_gm_array.append(gds_gm)
             self.df["gmro"] = gmro_array
             self.df["gm/gds"] = gmro_array
             self.df["gds/gm"] = gds_gm_array
+            self.df["kgds"] = kgds_array
         if not self.check_if_param_exists("iden"):
             iden_array = []
             ids_col = self.df["ids"]
             width = self.df["W"][0]
+            if self.pdk == "sky130":
+                width = width*1e-6
             for i in range(len(ids_col)):
                 ids = ids_col[i]
                 iden = ids/width
@@ -556,7 +594,52 @@ class CIDCorner():
         vals = self.df[param].values
         return vals
 
-    def magic_equation(self, gbw, cload, show_plot=False, new_plot=True, ax1=None, fig1=None, color="blue", kcgd_col=None, legend_str=""):
+    def current_as_function_of_kgm(self, gbw, cload, beta_factor=1, c_coeff=[1, 1, 1], show_plot=False, new_plot=True, ax1=None, fig1=None, color="blue", kcgd_col=None, legend_str=""):
+        legend_str = "PDK: " + self.pdk + ", L: " + str(self.length) + ", corner: " + self.corner_name
+        graph_data_x = []
+        graph_data_y = []
+        #graph = show_plot
+        min_ids = 1000000000
+        kgm_col  = self.df["kgm"]
+        cgg_col = self.df["cgg"]
+        #if kcgd_col == None:
+        #    kcgd_col = self.df["kcgd"]
+        kcgd_col = self.df["kcgd"]
+        kcgs_col = self.df["kcgs"]
+        kcds_col = self.df["kcds"]
+        ids_col = self.df["ids"]
+        kgm_opt = 0
+        for i in range(len(kgm_col)):
+            kcgd = kcgd_col[i]*c_coeff[0]
+            kcgs = kcgs_col[i]*c_coeff[1]
+            kcds = kcds_col[i]*c_coeff[2]
+            kgm = kgm_col[i]
+            strong_inv = 2*math.pi*gbw*cload/(kgm*beta_factor)
+            weak_inv = 1/(1 - (2*math.pi*gbw*(kcgd + kcgs + kcds))/kgm)
+            ids = strong_inv*weak_inv
+            if ids >= 0:
+                graph_data_y.append(ids)
+                graph_data_x.append(kgm)
+            if ids <= min_ids and ids > 0:
+                min_ids = ids
+                kgm_opt = kgm
+        if show_plot:
+            if new_plot:
+                fig1, ax1 = plt.subplots()
+                plt.plot(graph_data_x, graph_data_y, color=color, label=legend_str)
+                if show_plot == True:
+                    plt.show()
+            else:
+                ax1.plot(graph_data_x, graph_data_y, color=color, label=legend_str)
+            ax1.set_xlabel("kgm")
+            ax1.set_ylabel("id")
+            ax1.set_title(self.pdk + " GBW = " + str(gbw) + " CLoad = " + str(cload))
+            legend = ax1.legend()
+            #legend = ax1.legend(bbox_to_anchor=(1.0, 0.5), loc="center left", fontsize='small')
+        return min_ids, kgm_opt, ax1, fig1
+
+
+    def magic_equation(self, gbw, cload, beta_scale=1, show_plot=False, new_plot=True, ax1=None, fig1=None, color="blue", kcgd_col=None, legend_str=""):
         legend_str = "PDK: " + self.pdk + ", L: " + str(self.length) + ", corner: " + self.corner_name
         graph_data_x = []
         graph_data_y = []
