@@ -270,6 +270,8 @@ class CIDGraphingWindow(ttk.Frame):
             #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
             cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
                                  fig1=self.fig, ax1=self.ax, color=color, legend_str=legend_str)
+            self.ax.grid(True, which="both")
+
             color_index += 1
             if color_index >= len(color_list):
                 color_index = 0
@@ -329,7 +331,7 @@ class CIDApp(ThemedTk):
         self.ide = CIDPythonIDE(self.top_level_pane)
         self.top_level_pane.add(self.ide)
         self.center_pane.add(self.grid_button_widget)
-        #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
+        self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
         self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130", pdk_name="sky130")
         #self.graph_control_notebook.add_tech_luts(dirname="/work/ala1/gf12lp/characterization_master/LUT_GF12", pdk_name="GF12LP")
