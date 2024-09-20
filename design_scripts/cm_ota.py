@@ -1,6 +1,5 @@
 import sys, os, getpass, shutil, operator, collections, copy, re, math
-
-sys.path.append('/home/aadair/Documents/GradSchoolGeneral/LCAS/ICU')
+sys.path.append("/pri/ala1/Documents/CAD/roar/src")
 from cid import *
 
 def parallel(x1, x2):
@@ -8,6 +7,40 @@ def parallel(x1, x2):
 
 def create_spice_netlist_for_place_and_route(nf1_2, nf3_4, nf5_6, nf7_8):
     print("TODO")
+
+def total_current_ota_v2(ncorner, pcorner, alpha, gbw, cload, kgm1, kgm2, gain_spec):
+    f1 = 2*math.pi*gbw
+    p_factor = 1
+    kcgs_8 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm2*p_factor)
+    kcgd_8 = ncorner.lookup(param1="kgm", param2="kcgd", param1_val=kgm2*p_factor)
+    kcds_8 = ncorner.lookup(param1="kgm", param2="kcds", param1_val=kgm2*p_factor)
+    kcgs_6 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm2)
+    kcds_6 = ncorner.lookup(param1="kgm", param2="kcds", param1_val=kgm2)
+    kcgs_4 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm1*p_factor)
+    kgds_6 = ncorner.lookup(param1="kgm", param2="kgds", param1_val=kgm2)
+    kgds_8 = ncorner.lookup(param1="kgm", param2="kgds", param1_val=kgm2)
+    gain = kgm1/(kgds_6 + kgds_8)
+    kcout = kcgs_8 + (kcds_8) + kcgs_6 + kcds_6
+    beta_num = kgm1 - 2*math.pi*alpha*gbw*kcgs_4
+    beta_denom = 1/(2*math.pi*alpha*gbw*(kcgs_8 + kcgd_8))
+    beta = beta_num*beta_denom
+    #m1_current_term1 = 2*math.pi*gbw*cload/(beta*kgm1)
+    #m1_current_term2 = 1/(1 - 2*math.pi*gbw*kcout/kgm1)
+    #m1_current = m1_current_term1*m1_current_term2
+    #total_current = m1_current + beta*m1_current
+    kcsg_8 = kcgs_8 + kcgd_8
+
+    total_current_num = alpha*cload*f1*f1*kcsg_8 - alpha*cload*f1*f1*kcgs_4 + f1*cload*kgm1
+    total_current_denom = (kgm1 - alpha*f1*kcgs_4)*(kgm1 - f1*kcout)
+    total_current = total_current_num/total_current_denom
+    beta_valid = True
+    gain_valid = True
+    if beta < 1:
+        beta_valid = False
+    if gain < gain_spec:
+        gain_valid = False
+    return total_current, beta, beta_valid, gain_valid
+
 
 def total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1, kgm2, gain_spec):
     p_factor = 1
@@ -34,10 +67,15 @@ def total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1, kgm2, g
         beta_valid = False
     if gain < gain_spec:
         gain_valid = False
-    return total_current, beta_valid, gain_valid
+    return total_current, beta, beta_valid, gain_valid
 
-def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gbw, cload):
-    gain = 60
+
+
+
+
+def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, bw, cload, fig, ax1, ax2, ax3, ax4,
+                                         color_map, beta_color, gain_color, alpha_graph, marker_size):
+    gbw = gain*bw
     kgm_n_v = nom_ncorner.df["kgm"]
     kgm_p_v = nom_pcorner.df["kgm"]
     max_n = max(kgm_n_v)
@@ -47,59 +85,77 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gbw, c
     kgm_min = min(min_n, min_p)
     kgm_max = max(max_n, max_p)
     #kgm_max = 18
-    kgm_max = 18
-    kgm_min = 4
+    kgm_max = 20
+    kgm_min = 0.1
+    num_samples = 50
     if kgm_min < 0:
         kgm_min = 0.001
-    kgm1_vals = np.linspace(kgm_min, kgm_max, 50)
-    kgm2_vals = np.linspace(kgm_min, kgm_max, 50)
+    kgm1_vals = np.linspace(kgm_min, kgm_max, num_samples)
+    kgm2_vals = np.linspace(kgm_min, kgm_max, num_samples)
     kgm1_grid, kgm2_grid = np.meshgrid(kgm1_vals, kgm2_vals)
     z = np.zeros_like(kgm1_grid)
+    beta = np.zeros_like(kgm1_grid)
     beta_valid_grid = np.zeros_like(kgm1_grid)
     gain_valid_grid = np.zeros_like(kgm1_grid)
-    zlim_min = 0.6
-    zlim_max = 20
+    zlim_min = -0.5
+    zlim_max = 10
+    beta_min = -10
+    beta_max = 10
     for i in range(len(kgm1_vals)):
         for j in range(len(kgm2_vals)):
-            total_current, beta_valid, gain_valid = total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_vals[i], kgm2_vals[j], gain_spec=gain)
+            #total_current, beta1, beta_valid, gain_valid = total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_vals[i], kgm2_vals[j], gain_spec=gain)
+            total_current, beta_i_j, beta_valid, gain_valid = total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_vals[i], kgm2_vals[j], gain_spec=gain)
             total_current = total_current*1e6
-            if total_current <= 0:
-                total_current = zlim_max
-            else:
+            #total_current2 = total_current2 * 1e6
+            if total_current < zlim_min:
+                total_current = zlim_min
                 total_current = total_current
-                if total_current > zlim_max:
-                    total_current = zlim_max
+            if total_current > zlim_max:
+                total_current = zlim_max
+            if beta_i_j < beta_min:
+                beta_i_j = beta_min
+            if beta_i_j > beta_max:
+                beta_i_j = beta_max
             #if beta_valid == False:
             #    total_current = np.nan
             #if gain_valid == False:
             #    total_current = np.nan
             z[i, j] = total_current
+            beta[i, j] = beta_i_j
             beta_valid_grid[i, j] = beta_valid
             gain_valid_grid[i, j] = gain_valid
     #z = total_current_ota(nom_ncorner,nom_pcorner,alpha, gbw, cload, kgm1, kgm2)
-    font_properties = {'family': 'Arial', 'weight': 'bold'}
-    fig = plt.figure(figsize=(12,6))
-    ax = fig.add_subplot(121, projection='3d')
 
+    font_properties = {'family': 'Arial', 'weight': 'bold'}
+    #fig = plt.figure(figsize=(12,6))
+
+    #ax = fig.add_subplot(121, projection='3d')
+    #ax = ax1
     #plot where kgm1 = kgm2
     diagonal_mask = np.isclose(kgm1_grid, kgm2_grid)
-    ax.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], z[diagonal_mask], color='black', linewidth=2, label="kgm1 = kgm2")
-    surf = ax.plot_surface(kgm1_grid, kgm2_grid, z, cmap='winter', edgecolor='none', alpha=0.8)
+    #surf = ax.plot_surface(kgm1_grid, kgm2_grid, z, cmap=color_map, lw=0.5, edgecolor='k', rstride=3, cstride=3, alpha=alpha_graph)
+    surf_i_total = ax1.plot_surface(kgm1_grid, kgm2_grid, z, lw=0.5, cmap=color_map, edgecolor='royalblue', rstride=3, cstride=3, alpha=alpha_graph)
+    surf_beta = ax3.plot_surface(kgm1_grid, kgm2_grid, beta, lw=0.5, cmap=color_map, edgecolor="royalblue", rstride=3, cstride=3, alpha=alpha_graph)
+    ax1.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], z[diagonal_mask]+0.5, color='k', linewidth=4, label="kgm1 = kgm2")
+    ax1.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], beta[diagonal_mask]+0.5, color='k', linewidth=4, label="kgm1 = kgm2")
     #surf = ax.plot_surface(kgm1_grid, kgm2_grid, z, cmap='viridis', edgecolor='none', alpha=0.8)
     #surf = ax.plot_surface(kgm1_grid, kgm2_grid, z, cmap='cividis', edgecolor='none', rstride=10, cstride=10)
     #ax.set_zscale('log')
     #ax.set_xscale('log')
     #ax.set_yscale('log')
-    ax.set_zlim(zlim_min, zlim_max)
 
-    ax.set_xlabel("kgm1", fontdict=font_properties)
-    ax.set_ylabel("kgm2", fontdict=font_properties)
-    ax.set_zlabel("Total Current [uA]", fontdict=font_properties)
+    ax1.set_xlabel("kgm1", fontdict=font_properties)
+    ax1.set_ylabel("kgm2", fontdict=font_properties)
+    ax1.set_zlabel("Total Current [uA]", fontdict=font_properties)
 
-    cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10)
-    cbar.set_label('Total Current [uA]', fontdict=font_properties)
-    surf.set_clim(zlim_min, zlim_max)  # Set the colorbar limits to match the z-axis limits
-    cbar.ax.yaxis.set_tick_params(labelsize=10, width=2)  # Adjust tick parameters if needed
+    ax3.set_xlabel("kgm1")
+    ax3.set_ylabel("kgm2")
+    ax3.set_zlabel("Beta")
+    #cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10)
+    #cbar.set_label('Total Current [uA]', fontdict=font_properties)
+    #surf.set_clim(zlim_min, zlim_max)  # Set the colorbar limits to match the z-axis limits
+    #cbar.ax.yaxis.set_tick_params(labelsize=12, width=2)  # Adjust tick parameters if needed
+
     # Overlay red X's for NaN values
     nan_mask = np.isnan(z)
     beta_false_mask = beta_valid_grid == False
@@ -113,54 +169,166 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gbw, c
     #ax.scatter(kgm1_grid[gain_mask], kgm2_grid[gain_mask], np.full_like(kgm1_grid[gain_mask], zlim_min), color='g', marker='x', s=50, label="Gain < 60")
 
     beta_false_mask = beta_valid_grid == False
-    ax.scatter(kgm1_grid[beta_false_mask], kgm2_grid[beta_false_mask], np.full_like(kgm1_grid[beta_false_mask], zlim_min), color='r', marker='x', s=50, label="Beta < 1")
+    #ax.scatter(kgm1_grid[beta_false_mask], kgm2_grid[beta_false_mask], np.full_like(kgm1_grid[beta_false_mask], zlim_min), color=beta_color, marker='x', alpha=alpha_graph, s=marker_size, label="Beta < 1")
 
     # Overlay green X's for invalid gain values
     gain_false_mask = gain_valid_grid == False
-    ax.scatter(kgm1_grid[gain_false_mask], kgm2_grid[gain_false_mask], np.full_like(kgm1_grid[gain_false_mask], zlim_min), color='g', marker='x', s=50, label="Gain < 60")
+    #ax.scatter(kgm1_grid[gain_false_mask], kgm2_grid[gain_false_mask], np.full_like(kgm1_grid[gain_false_mask], zlim_min), color=gain_color, marker='o', s=marker_size, alpha=alpha_graph, label="Gain < 60 V/V")
 
+    #ax1.contour(kgm1_grid, kgm2_grid, z, zdir="x", offset=kgm_max + 8, cmap=color_map)
+    #ax1.contour(kgm1_grid, kgm2_grid, z, zdir="y", offset=-8, cmap=color_map)
+    #ax1.contour(kgm1_grid, kgm2_grid, z, zdir="z", offset=-2,  cmap=color_map)
 
     # Add a grid for better readability
-    ax.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax.legend()
+    ax1.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax1.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax1.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
 
+    ax1.set_xlim(kgm_min, kgm_max)
+    ax1.set_ylim(kgm_min, kgm_max)
+    ax1.set_zlim(zlim_min, zlim_max)
+    ax1.legend()
 
-    ax2 = fig.add_subplot(122)
-    contour = ax2.contourf(kgm1_grid, kgm2_grid, z, levels=20, cmap='winter')
+    ax3.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax3.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax3.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax3.set_xlim(kgm_min, kgm_max)
+    ax3.set_ylim(kgm_min, kgm_max)
+    ax3.set_zlim(beta_min, beta_max)
+    ax3.legend()
+
+    #ax2 = fig.add_subplot(122)
+    contour1 = ax2.contourf(kgm1_grid, kgm2_grid, z, levels=25,  alpha=alpha_graph, cmap=color_map)
+    contour2 = ax4.contourf(kgm1_grid, kgm2_grid, beta, levels=15, alpha=alpha_graph, cmap=color_map)
     #ax2.scatter(kgm1_grid[nan_mask], kgm2_grid[nan_mask], color='red', marker='x', s=50, label="Infeasible Region")
-    ax2.scatter(kgm1_grid[beta_mask], kgm2_grid[beta_mask], color='r', marker='x', s=50, label="Beta < 1 Region")
-    ax2.scatter(kgm1_grid[gain_mask], kgm2_grid[gain_mask], color='g', marker='x', s=50, label="Gain < 50")
-
-
-
-
-    #ax2.plot(kgm1_vals, kgm1_vals, color="black", linewidth=2, label="kgm1 = kgm2")
-    # Add color bar to show total current magnitude
-    cbar2 = fig.colorbar(contour, ax=ax2)
-    cbar2.set_label('log10(Total Current (ota))', fontdict=font_properties)
-
+    ax2.scatter(kgm1_grid[beta_mask], kgm2_grid[beta_mask], color=beta_color, marker='x', alpha=alpha_graph, s=marker_size, label="Beta < 1 Region")
+    ax2.scatter(kgm1_grid[gain_mask], kgm2_grid[gain_mask], color=gain_color, marker='o', alpha=alpha_graph, s=marker_size, label="Gain < 50")
+    cbar2 = fig.colorbar(contour1, ax=ax2)
+    cbar2.set_label('Total Current [uA]', fontdict=font_properties)
+    cbar4 = fig.colorbar(contour2, ax=ax4)
+    cbar4.set_label("Beta")
     # Set axis labels with custom font properties
     ax2.set_xlabel('kgm1', fontdict=font_properties)
     ax2.set_ylabel('kgm2', fontdict=font_properties)
-
+    ax4.set_xlabel("kgm1")
+    ax4.set_ylabel("kgm2")
     # Add gridlines for better readability
     ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
-
+    ax4.grid(True, which='both', linestyle='--', linewidth=0.5)
     # Show the legend for the contour plot
     ax2.legend()
-
+    ax4.legend()
+    """
+    num_slices = 10
+    kgm1_contour_vals = np.linspace(kgm_min, kgm_max, num_slices)
+    kgm2_contour_vals = np.linspace(kgm_min, kgm_max, num_slices)
+    #kgm1_slices = np.linspac
+    #kgm3_contour_vals = np.linspace(zlim_min, zlim_max, num_slices)
+    for kgm2_slice in kgm2_contour_vals:
+        kgm1_total_current = []
+        for kgm1_val in kgm1_vals:
+            kgm1_total_current_i, kgm1_beta, kgm1_beta_valid, kgm1_gain_valid = total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_val, kgm2_slice, gain_spec=gain)
+            kgm1_total_current_i = kgm1_total_current_i*1e6
+            if kgm1_total_current_i >= zlim_max:
+                kgm1_total_current_i = zlim_max
+            if kgm1_total_current_i < zlim_min:
+                kgm1_total_current_i = zlim_min
+            kgm1_total_current.append(kgm1_total_current_i)
+        ax3.plot(kgm1_vals, kgm1_total_current, label=f'kgm2={kgm2_slice:.2f}')
+    #contour2 = ax2.contourf(x, y, z, )
+    #ax3.legend()
+    for kgm1_slice in kgm1_contour_vals:
+        kgm2_total_current = []
+        for kgm2_val in kgm2_vals:
+            kgm2_total_current_i, kgm2_beta, kgm2_beta_valid, kgm2_gain_valid = total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_slice, kgm2_val, gain_spec=gain)
+            kgm2_total_current_i = kgm2_total_current_i*1e6
+            if kgm2_total_current_i >= zlim_max:
+                kgm2_total_current_i = zlim_max
+            if kgm2_total_current_i < zlim_min:
+                kgm2_total_current_i = zlim_min
+            kgm2_total_current.append(kgm2_total_current_i)
+        ax4.plot(kgm2_vals, kgm2_total_current, label=f'kgm1={kgm1_slice:.2f}')
+    #contour2 = ax2.contourf(x, y, z, )
+    #ax4.legend()
     # Adjust layout for better spacing
-    plt.tight_layout()
+    #plt.tight_layout()
 
-    plt.show()
-
+    #plt.show()
+    """
     print("TODO")
 
+def cm_ota_plotting():
+
+
+    av= 60
+    #bw = 250e6
+    bw = 5e5
+    #bw = 25e5
+    gbw = bw * av
+    cload = 250e-15
+
+
+    inverse_tan_thirty = math.tan(30*math.pi/180)
+    inverse_tan_thirty = math.tan(30*math.pi/180)
+    alpha = 1/inverse_tan_thirty
+    two_pi_alpha_gbw = 2*math.pi*alpha*gbw
+    f2 = alpha*gbw
+    nfet_nominal = CIDCorner(corner_name="nfet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt27.csv",
+                             vdd=1.8)
+
+    pfet_nominal = CIDCorner(corner_name="pet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt27.csv",
+                             vdd=1.8)
+    nfet_hot = CIDCorner(corner_name="nfet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt75.csv",
+                             vdd=1.8)
+
+    pfet_hot = CIDCorner(corner_name="pet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt75.csv",
+                             vdd=1.8)
+    nfet_cold = CIDCorner(corner_name="nfet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt-25.csv",
+                             vdd=1.8)
+
+    pfet_cold = CIDCorner(corner_name="pet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt-25.csv",
+                             vdd=1.8)
+
+    n_list = [nfet_cold, nfet_nominal, nfet_hot]
+    p_list = [pfet_cold, pfet_nominal, pfet_hot]
+    n_list = [nfet_nominal]
+    p_list = [pfet_nominal]
+    #fig = plt.figure(figsize=(12,6))
+    fig = plt.figure(figsize=(14,10))
+    ax1 = fig.add_subplot(2, 2, 1, projection='3d')
+    ax2 = fig.add_subplot(2, 2, 2)
+    ax3 = fig.add_subplot(2, 2, 3, projection='3d')
+    ax4 = fig.add_subplot(2, 2, 4)
+    color_map_list = ["Blues", "Greens", "Reds"]
+    beta_color_list = ["b", "g", "r"]
+    alpha_graph = 0.6
+    marker_size = 70
+    for i in range(len(n_list)):
+        nfet_corner = n_list[i]
+        pfet_corner = p_list[i]
+        color_map = color_map_list[i]
+        beta_color = beta_color_list[i]
+        gain_color= beta_color_list[i]
+        plot_results_krummenechar_ota_stage1(nom_ncorner=nfet_corner,nom_pcorner=pfet_corner,alpha=alpha,gain=av, bw=bw, cload=cload,
+                                             fig=fig, ax1=ax1, ax2=ax2, ax3=ax3, ax4=ax4, color_map=color_map, beta_color=beta_color,
+                                             gain_color=gain_color, alpha_graph=alpha_graph, marker_size=marker_size)
+        plt.tight_layout()
+
+        plt.show()
+        alpha_graph = alpha_graph - 0.35
+        marker_size = marker_size - 20
+        print(nfet_corner.corner_name)
+
+    return 0
 
 def krummenechar_ota_stage1(av, bw, cload, nfet_device, pfet_device, nom_ncorner, nom_pcorner):
-    av= 50
+    av= 60
     #bw = 250e6
     bw = 5e5
     gbw = bw * av
@@ -294,7 +462,56 @@ def krummenechar_ota_stage1(av, bw, cload, nfet_device, pfet_device, nom_ncorner
     print("kgm 5,6 " + str(kgm5_6))
     print("kgm 7,8 " + str(kgm7_8))
     print("")
-    plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gbw, cload)
+
+    nfet_nominal = CIDCorner(corner_name="nfet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt27.csv",
+                             vdd=1.8)
+
+    pfet_nominal = CIDCorner(corner_name="pet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt27.csv",
+                             vdd=1.8)
+    nfet_hot = CIDCorner(corner_name="nfet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt75.csv",
+                             vdd=1.8)
+
+    pfet_hot = CIDCorner(corner_name="pet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt75.csv",
+                             vdd=1.8)
+    nfet_cold = CIDCorner(corner_name="nfet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt-25.csv",
+                             vdd=1.8)
+
+    pfet_cold = CIDCorner(corner_name="pet_150n_nominal",
+                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt-25.csv",
+                             vdd=1.8)
+
+    n_list = [nfet_cold, nfet_nominal, nfet_hot]
+    p_list = [pfet_cold, pfet_nominal, pfet_hot]
+    n_list = [nfet_nominal]
+    p_list = [pfet_nominal]
+    #fig = plt.figure(figsize=(12,6))
+    fig = plt.figure(figsize=(15,10))
+    ax1 = fig.add_subplot(121, projection='3d')
+    ax2 = fig.add_subplot(122)
+    color_map_list = ["Blues", "Greens", "Reds"]
+    beta_color_list = ["b", "g", "r"]
+    alpha_graph = 0.6
+    marker_size = 70
+    for i in range(len(n_list)):
+        nfet_corner = n_list[i]
+        pfet_corner = p_list[i]
+        color_map = color_map_list[i]
+        beta_color = beta_color_list[i]
+        gain_color = beta_color_list[i]
+        plot_results_krummenechar_ota_stage1(nfet_corner, pfet_corner, alpha, gain, bw, cload,
+                                             fig, ax1, ax2, ax3, ax4, color_map, beta_color, gain_color, alpha_graph, marker_size)
+        plt.tight_layout()
+
+        plt.show()
+        alpha_graph = alpha_graph - 0.35
+        marker_size = marker_size - 20
+        print(nfet_corner.corner_name)
+
     return w1, gm1, kgm1, w2, gm2, kgm2
 
 
@@ -318,8 +535,9 @@ pfet_nominal = CIDCorner(corner_name="pet_150n_nominal",
 av1 = 100
 bw = 500e3
 cload1 = 50e-15
-w1, gm1, kgm1, w2, gm2, kgm2 = krummenechar_ota_stage1(av=av1, bw=bw, cload=cload1, nfet_device=nfet_device,
-                                                       pfet_device=pfet_device, nom_ncorner=nfet_nominal, nom_pcorner=pfet_nominal)
+cm_ota_plotting()
+#w1, gm1, kgm1, w2, gm2, kgm2 = krummenechar_ota_stage1(av=av1, bw=bw, cload=cload1, nfet_device=nfet_device,
+#                                                       pfet_device=pfet_device, nom_ncorner=nfet_nominal, nom_pcorner=pfet_nominal)
 
 
 
