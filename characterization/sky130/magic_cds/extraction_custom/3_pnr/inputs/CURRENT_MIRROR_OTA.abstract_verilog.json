@@ -66,7 +66,7 @@
               "actual": "VSS"
             }
           ],
-          "abstract_template_name": "DCL_NMOS_S_47956387_X2_Y2"
+          "abstract_template_name": "DCL_NMOS_S_8415993_X1_Y1"
         },
         {
           "instance_name": "X_M5",
@@ -80,7 +80,7 @@
               "actual": "VSS"
             }
           ],
-          "abstract_template_name": "DCL_NMOS_S_13341824_X6_Y2"
+          "abstract_template_name": "DCL_NMOS_S_91990922_X14_Y1"
         },
         {
           "instance_name": "X_M3",
@@ -94,7 +94,7 @@
               "actual": "VDD"
             }
           ],
-          "abstract_template_name": "DCL_PMOS_S_40212493_X6_Y1"
+          "abstract_template_name": "DCL_PMOS_S_18488141_X5_Y1"
         },
         {
           "instance_name": "X_M4",
@@ -108,7 +108,7 @@
               "actual": "VDD"
             }
           ],
-          "abstract_template_name": "DCL_PMOS_S_40212493_X6_Y1"
+          "abstract_template_name": "DCL_PMOS_S_18488141_X5_Y1"
         },
         {
           "instance_name": "X_M6",
@@ -126,7 +126,7 @@
               "actual": "VSS"
             }
           ],
-          "abstract_template_name": "NMOS_S_7151189_X6_Y2"
+          "abstract_template_name": "NMOS_S_70322697_X14_Y1"
         },
         {
           "instance_name": "X_M9",
@@ -144,7 +144,7 @@
               "actual": "VSS"
             }
           ],
-          "abstract_template_name": "NMOS_S_18635307_X2_Y2"
+          "abstract_template_name": "NMOS_S_73503000_X1_Y1"
         },
         {
           "instance_name": "X_M7",
@@ -162,7 +162,7 @@
               "actual": "VDD"
             }
           ],
-          "abstract_template_name": "PMOS_S_18257507_X7_Y3"
+          "abstract_template_name": "PMOS_S_55784090_X26_Y2"
         },
         {
           "instance_name": "X_M8",
@@ -180,7 +180,7 @@
               "actual": "VDD"
             }
           ],
-          "abstract_template_name": "PMOS_S_18257507_X7_Y3"
+          "abstract_template_name": "PMOS_S_55784090_X26_Y2"
         },
         {
           "instance_name": "X_M1",
@@ -202,7 +202,7 @@
               "actual": "SOURCE"
             }
           ],
-          "abstract_template_name": "NMOS_4T_40251920_X2_Y2"
+          "abstract_template_name": "NMOS_4T_9061234_X1_Y1"
         },
         {
           "instance_name": "X_M2",
@@ -224,7 +224,7 @@
               "actual": "SOURCE"
             }
           ],
-          "abstract_template_name": "NMOS_4T_40251920_X2_Y2"
+          "abstract_template_name": "NMOS_4T_9061234_X1_Y1"
         }
       ],
       "name": "CURRENT_MIRROR_OTA"
