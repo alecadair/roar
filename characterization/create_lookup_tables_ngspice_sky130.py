@@ -77,7 +77,7 @@ def create_lookup_tables(tech_name=""):
 
     lengths = [".150", ".200", ".250", ".300", ".500", "1.000"]
     lengths = [".150", "0.300", "0.600", "1.00"]
-    lengths = ["0.150"]
+    lengths = ["0.500"]
     width = "1.0"
     ncorners = [nsscold, nttcold, nffcold,
                 nssroom, nttroom, nffroom,

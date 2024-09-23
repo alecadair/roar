@@ -58,7 +58,7 @@
       ],
       "instances": [
         {
-          "abstract_template_name": "DCL_NMOS_S_47956387",
+          "abstract_template_name": "DCL_NMOS_S_8415993",
           "instance_name": "X_M10",
           "fa_map": [
             {
@@ -72,7 +72,7 @@
           ]
         },
         {
-          "abstract_template_name": "DCL_NMOS_S_13341824",
+          "abstract_template_name": "DCL_NMOS_S_91990922",
           "instance_name": "X_M5",
           "fa_map": [
             {
@@ -86,7 +86,7 @@
           ]
         },
         {
-          "abstract_template_name": "DCL_PMOS_S_40212493",
+          "abstract_template_name": "DCL_PMOS_S_18488141",
           "instance_name": "X_M3",
           "fa_map": [
             {
@@ -100,7 +100,7 @@
           ]
         },
         {
-          "abstract_template_name": "DCL_PMOS_S_40212493",
+          "abstract_template_name": "DCL_PMOS_S_18488141",
           "instance_name": "X_M4",
           "fa_map": [
             {
@@ -114,7 +114,7 @@
           ]
         },
         {
-          "abstract_template_name": "NMOS_S_7151189",
+          "abstract_template_name": "NMOS_S_70322697",
           "instance_name": "X_M6",
           "fa_map": [
             {
@@ -132,7 +132,7 @@
           ]
         },
         {
-          "abstract_template_name": "NMOS_S_18635307",
+          "abstract_template_name": "NMOS_S_73503000",
           "instance_name": "X_M9",
           "fa_map": [
             {
@@ -150,7 +150,7 @@
           ]
         },
         {
-          "abstract_template_name": "PMOS_S_18257507",
+          "abstract_template_name": "PMOS_S_55784090",
           "instance_name": "X_M7",
           "fa_map": [
             {
@@ -168,7 +168,7 @@
           ]
         },
         {
-          "abstract_template_name": "PMOS_S_18257507",
+          "abstract_template_name": "PMOS_S_55784090",
           "instance_name": "X_M8",
           "fa_map": [
             {
@@ -186,7 +186,7 @@
           ]
         },
         {
-          "abstract_template_name": "NMOS_4T_40251920",
+          "abstract_template_name": "NMOS_4T_9061234",
           "instance_name": "X_M1",
           "fa_map": [
             {
@@ -208,7 +208,7 @@
           ]
         },
         {
-          "abstract_template_name": "NMOS_4T_40251920",
+          "abstract_template_name": "NMOS_4T_9061234",
           "instance_name": "X_M2",
           "fa_map": [
             {

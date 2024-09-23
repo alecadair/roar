@@ -1,15 +1,29 @@
 .subckt current_mirror_ota vss vdd vout vinn vinp id
-M10 id id vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=8
-M9 source id vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=8
-M1 net7 vinn source vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=8
-M2 net8 vinp source vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=8
-M3 net7 net7 vdd vdd sky130_fd_pr__pfet_01v8 L=150e-09 w=8.4e-7 nf=12
-M8 vout net7 vdd vdd sky130_fd_pr__pfet_01v8 L=150e-09 w=8.4e-7 nf=42
-M4 net8 net8 vdd vdd sky130_fd_pr__pfet_01v8 L=150e-09 w=8.4e-7 nf=12
-M7 net9 net8 vdd vdd sky130_fd_pr__pfet_01v8 L=150e-09 w=8.4e-7 nf=42
-M5 net9 net9 vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=24
-M6 vout net9 vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=24
+M10 id id vss vss sky130_fd_pr__nfet_01v8 L=500e-09 w=4.2e-7 nf=2
+M9 source id vss vss sky130_fd_pr__nfet_01v8 L=500e-09 w=4.2e-7 nf=2
+M1 net7 vinn source vss sky130_fd_pr__nfet_01v8 L=500e-09 w=4.2e-7 nf=2
+M2 net8 vinp source vss sky130_fd_pr__nfet_01v8 L=500e-09 w=4.2e-7 nf=2
+M3 net7 net7 vdd vdd sky130_fd_pr__pfet_01v8 L=500e-09 w=4.2e-7 nf=10
+M8 vout net7 vdd vdd sky130_fd_pr__pfet_01v8 L=500e-09 w=4.2e-7 nf=104
+M4 net8 net8 vdd vdd sky130_fd_pr__pfet_01v8 L=500e-09 w=4.2e-7 nf=10
+M7 net9 net8 vdd vdd sky130_fd_pr__pfet_01v8 L=500e-09 w=4.2e-7 nf=104
+M5 net9 net9 vss vss sky130_fd_pr__nfet_01v8 L=500e-09 w=4.2e-7 nf=28
+M6 vout net9 vss vss sky130_fd_pr__nfet_01v8 L=500e-09 w=4.2e-7 nf=28
 .ends current_mirror_ota
+
+//.subckt current_mirror_ota vss vdd vout vinn vinp id
+//M10 id id vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=8
+//M9 source id vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=8
+//M1 net7 vinn source vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=8
+//M2 net8 vinp source vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=8
+//M3 net7 net7 vdd vdd sky130_fd_pr__pfet_01v8 L=150e-09 w=8.4e-7 nf=12
+//M8 vout net7 vdd vdd sky130_fd_pr__pfet_01v8 L=150e-09 w=8.4e-7 nf=42
+//M4 net8 net8 vdd vdd sky130_fd_pr__pfet_01v8 L=150e-09 w=8.4e-7 nf=12
+//M7 net9 net8 vdd vdd sky130_fd_pr__pfet_01v8 L=150e-09 w=8.4e-7 nf=42
+//M5 net9 net9 vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=24
+//M6 vout net9 vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=8.4e-7 nf=24
+//.ends current_mirror_ota
+
 
 //.subckt current_mirror_ota vdd out inp inn itail vss
 //M10 itail itail vss vss sky130_fd_pr__nfet_01v8 L=150e-09 w=4.2e-7 nf=14

@@ -149,7 +149,7 @@ Group{
 
 	TimeFct[] = ($Time < pulse) ? 1 : 0;
 
-	Flux[] = Pmax / 3.26152e-11 * TimeFct[];       // Power density [W/m^2]
+	Flux[] = Pmax / 2.22076e-11 * TimeFct[];       // Power density [W/m^2]
 	qVol[] = 0;
 	t0 = 0;
 	t1 = timemax;
