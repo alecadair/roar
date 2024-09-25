@@ -307,39 +307,51 @@ class CIDGraphController(ttk.PanedWindow):
 class CIDApp(ThemedTk):
     def __init__(self, theme, test=False):
         ThemedTk.__init__(self, theme=theme)
-
+        # Create the top-level horizontal paned window
         self.top_level_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         self.top_level_pane.pack(fill=tk.BOTH, expand=True)
 
-        self.center_pane = ttk.PanedWindow(self.top_level_pane, orient=tk.VERTICAL)
-        self.center_pane.pack(fill=tk.BOTH, expand=True)
-
-        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, test=test)
+        # Left Pane
+        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, test=test, width=450)
         self.graph_control_notebook = self.left_pane
-        self.left_pane.pack(fill=tk.BOTH, expand=True)
-        self.left_pane.config(width=490)
-        self.top_level_pane.add(self.left_pane)
 
-        self.grid_button_widget = CIDGraphGrid(self.center_pane, graph_controllers=self.left_pane.graph_controllers)
-        self.grid_button_widget.pack(fill=tk.BOTH, expand=True)
-
-        self.top_level_pane.add(self.center_pane)
-        #self.right_pane = tk.PanedWindow(self.top_level_pane, orient=tk.VERTICAL)
-        #self.right_pane.pack(fill=tk.BOTH, expand=True)
-        #self.top_level_pane.add(self.right_pane)
-
-        self.ide = CIDPythonIDE(self.top_level_pane)
-        self.top_level_pane.add(self.ide)
+        # Center Pane
+        self.center_pane = ttk.PanedWindow(self.top_level_pane, orient=tk.VERTICAL)
+        self.grid_button_widget = CIDGraphGrid(self.center_pane, graph_controllers=self.graph_control_notebook.graph_controllers)
         self.center_pane.add(self.grid_button_widget)
-        self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
+
+        # Right Pane
+        self.right_pane = CIDPythonIDE(self.top_level_pane)
+        self.right_pane_width = 300
+        self.right_pane.config(width=self.right_pane_width)
+        self.ide = self.right_pane
+
+        # Add panes to the top-level paned window
+        self.top_level_pane.add(self.left_pane, weight=2)
+        self.top_level_pane.add(self.center_pane, weight=3)
+        self.top_level_pane.add(self.right_pane, weight=1)
+
+        # After adding the panes, set the sash position for control
+        #self.top_level_pane.sashpos(1, 400)  # Position the sash at 400px
+
+        # Add a tiny button to mimic being on the handle of the sash
+        #self.toggle_button = ttk.Button(self, text="<<", command=self.toggle_right_pane, width=5)
+        #self.toggle_button.place(x=405, y=20)  # Place button near the sash handle (adjust as necessary)
+
+        # Track the state of the right pane
+        self.is_right_pane_collapsed = False
+
+        print("Window Initialized")
+
+        print("Window Initialized")
+        #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
-        self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130", pdk_name="sky130")
+        #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130", pdk_name="sky130")
         #self.graph_control_notebook.add_tech_luts(dirname="/work/ala1/gf12lp/characterization_master/LUT_GF12", pdk_name="GF12LP")
         #self.left_pane.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/ala1_lteng4448/cds_run/ICU_param/characterization_pls_analysis/GF22FDX-PLS", pdk_name="GF22FDXPLUS")
         #self.graph_control_notebook.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/KARHU_TRUNK/cds_run/characterization/characterization_master/GF22FDX_LUTs", pdk_name="GF22FDXPLUS")
         #self.graph_control_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
 
-        print("Window Initialized")
         # Create a vertical pane
         #self.paned_window = tk.PanedWindow(self, orient=tk.VERTICAL)
         #self.paned_window.pack(fill=tk.BOTH, expand=True)
@@ -358,6 +370,19 @@ class CIDApp(ThemedTk):
         #self.paned_window.add(self.bottom_frame)
 
         #self.create_table()
+
+    def toggle_right_pane(self):
+        """Toggle the visibility of the right pane."""
+        if self.is_right_pane_collapsed:
+            # Expand the right pane
+            self.top_level_pane.add(self.right_pane, weight=1)
+            self.toggle_right_pane_button.config(text="<<")
+            self.is_right_pane_collapsed = False
+        else:
+            # Collapse the right pane
+            self.top_level_pane.forget(self.right_pane)
+            self.toggle_right_pane_button.config(text=">>")
+            self.is_right_pane_collapsed = True
 
     def plot_graph(self):
         x = np.linspace(0, 10, 100)
@@ -647,6 +672,19 @@ class CIDPaintWidget(ttk.Frame):
         """Update the scroll region of the canvas."""
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
+def on_file_new():
+    print("New File")
+
+def on_solver_run():
+    print("Run Solver")
+
+def on_export_file():
+    print("Export File")
+
+def on_help_about():
+    print("About Help")
+
+
 if __name__ == "__main__":
     test_app = 0
     app = ""
@@ -717,6 +755,38 @@ if __name__ == "__main__":
         theme = "arc"
         app = CIDApp(theme, test=False)
         style = ttk.Style()
+        menu_bar = tk.Menu(app)
+        file_menu = tk.Menu(menu_bar, tearoff=0)
+        file_menu.add_command(label="New", command=on_file_new)
+        file_menu.add_command(label="Open", command=lambda: print("Open File"))
+        file_menu.add_command(label="Save", command=lambda: print("Save File"))
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=app.quit)
+        menu_bar.add_cascade(label="File", menu=file_menu)
+
+        # Solver Menu
+        solver_menu = tk.Menu(menu_bar, tearoff=0)
+        solver_menu.add_command(label="Run Solver", command=on_solver_run)
+        solver_menu.add_command(label="Stop Solver", command=lambda: print("Stop Solver"))
+        menu_bar.add_cascade(label="Solver", menu=solver_menu)
+
+        # Window Menu
+        window_menu = tk.Menu(menu_bar, tearoff=0)
+        window_menu.add_command(label="Minimize", command=lambda: print("Minimize Window"))
+        window_menu.add_command(label="Maximize", command=lambda: print("Maximize Window"))
+        menu_bar.add_cascade(label="Window", menu=window_menu)
+
+        # Export Menu
+        export_menu = tk.Menu(menu_bar, tearoff=0)
+        export_menu.add_command(label="Export to PDF", command=on_export_file)
+        export_menu.add_command(label="Export to Image", command=lambda: print("Export to Image"))
+        menu_bar.add_cascade(label="Export", menu=export_menu)
+
+        # Help Menu
+        help_menu = tk.Menu(menu_bar, tearoff=0)
+        help_menu.add_command(label="About", command=on_help_about)
+        menu_bar.add_cascade(label="Help", menu=help_menu)
+        app.config(menu=menu_bar)
         # Configure the style to use the theme
         #style.theme_use(theme)  # You can choose different themes here
         #ttk.Style().theme_use('clam')
