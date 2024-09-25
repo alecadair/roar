@@ -426,6 +426,7 @@ class CIDExpressionWidget(ttk.LabelFrame):
         self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
 
         self.canvas.configure(yscrollcommand=self.v_scrollbar.set, xscrollcommand=self.h_scrollbar.set)
+        # Add and Remove buttons
 
         # Create expression frame inside canvas
         self.expression_frame = ttk.Frame(self.canvas)
@@ -445,7 +446,12 @@ class CIDExpressionWidget(ttk.LabelFrame):
         self.entry_counter = 0
         expressions_dict = {}
 
+        #self.remove_expression_button = ttk.Button(self, text="Remove Expression", command=self.remove_expression)
+        #self.remove_expression_button.pack(side=tk.BOTTOM, padx=5, pady=5)
         label_frame = ttk.Frame(self.expression_frame)
+        self.add_expression_button = ttk.Button(label_frame, text="Add", command=self.add_expression)
+        self.add_expression_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
+
         label_names = ["Function", "Expression", "Graph"]
         for i, label_name in enumerate(label_names):
             label = ttk.Label(label_frame, text=label_name)
@@ -580,69 +586,58 @@ class CIDOptimizerSettings(ttk.Frame):
     def __init__(self, master, test=False):
         super().__init__(master)
         self.master = master
-        top_buttons_frame = ttk.Frame(self)
+
+        # Top frame for buttons and dropdowns
+        drop_down_frame = ttk.Frame(self)
+        drop_down_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)  # Ensures it stays at the top and uses horizontal space
+
+        eval_update_frame = ttk.Frame(self)
+        eval_update_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)
+
+        # Expression editor frame
         expression_editor_frame = ttk.Frame(self)
+        expression_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Allows dynamic resizing
 
-        expression_editor_buttons_frame = ttk.Frame(self)
+        # Constraint editor frame
         constraint_editor_frame = ttk.Frame(self)
-        constraint_editor_buttons_frame = ttk.Frame(self)
+        constraint_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Similar to expression editor
 
-        constraint_editor_buttons_frame.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
-        constraint_editor_frame.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
-        expression_editor_buttons_frame.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
-        expression_editor_frame.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
-        top_buttons_frame.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
-
+        # Add the widgets for X and Y dropdowns and buttons
         button_width = 10
+        bigger_button_width = 30
+        self.x_label = ttk.Label(drop_down_frame, text="X:")
+        self.x_label.pack(side=tk.LEFT, padx=5, pady=5)
 
+        self.x_dropdown = ttk.Combobox(drop_down_frame, width=button_width)
+        self.x_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
+                                     'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
+                                     'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
+        self.x_dropdown.current(21)
+        self.x_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.y_label = ttk.Label(drop_down_frame, text="Y:")
+        self.y_label.pack(side=tk.LEFT, padx=5, pady=2)
+
+        self.y_dropdown = ttk.Combobox(drop_down_frame, width=button_width)
+        self.y_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
+                                     'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
+                                     'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
+        self.y_dropdown.current(8)
+        self.y_dropdown.pack(side=tk.LEFT, padx=5, pady=2)
+
+        self.eval_button = ttk.Button(eval_update_frame, width=bigger_button_width, text="Evaluate", command=self.evaluate_expressions)
+        self.eval_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
+        self.update_button = ttk.Button(drop_down_frame, width=bigger_button_width, text="Update", command=self.update_graphs)
+        self.update_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
+        # Add expression and constraint editor widgets
         self.cid_expression_widget = CIDExpressionWidget(expression_editor_frame, test=test)
-        self.cid_expression_widget.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
+        self.cid_expression_widget.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
 
         self.constraint_editor = CIDConstraintWidget(constraint_editor_frame, test=test)
-        self.constraint_editor.pack(side=tk.BOTTOM, padx=5, pady=5, expand=True, fill=tk.BOTH)
+        self.constraint_editor.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
 
-        self.x_label = ttk.Label(top_buttons_frame, text="X:")
-        self.x_label.grid(row=0, column=0, padx=5, pady=5, sticky="e")
+    def evaluate_expressions(self):
+        print("TODO")
 
-        #x_dropdown = ttk.Combobox(top_buttons_frame, values=["X1", "X2", "X3"], width=10)
-        self.x_dropdown = ttk.Combobox(top_buttons_frame, width=10)
-        self.x_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
-                                         'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
-                                         'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
-        self.x_dropdown.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        self.x_dropdown.current(21)
-        self.y_label = ttk.Label(top_buttons_frame, text="Y:")
-        self.y_label.grid(row=1, column=0, padx=5, pady=5, sticky="e")
-
-        #y_dropdown = ttk.Combobox(top_buttons_frame, values=["Y1", "Y2", "Y3"], width=10)
-        self.y_dropdown = ttk.Combobox(top_buttons_frame, width=10)
-        self.y_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
-                                         'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
-                                         'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
-        self.y_dropdown.current(8)
-        self.y_dropdown.grid(row=1, column=1, padx=5, pady=5, sticky="w")
-
-        #empty_space_label = ttk.Label(top_buttons_frame, text="")
-        #empty_space_label.grid(row=2, column=0, padx=5, pady=5, sticky="nw")
-
-        self.update_button = ttk.Button(top_buttons_frame, text="Update", width=20)
-        self.update_button.grid(row=1, column=2, padx=5, pady=5, sticky="nw")
-
-        self.add_expression_button = ttk.Button(expression_editor_buttons_frame, text="Add", width=button_width, command=self.cid_expression_widget.add_expression)
-        self.add_expression_button.pack(side=tk.LEFT, padx=5, pady=5, expand=False)
-
-        self.remove_expression_button = ttk.Button(expression_editor_buttons_frame, text="Remove", width=button_width, command=self.cid_expression_widget.remove_expression)
-        self.remove_expression_button.pack(side=tk.LEFT, padx=5, pady=5, expand=False)
-
-        self.add_constraint_button = ttk.Button(constraint_editor_buttons_frame, text="Add", width=button_width, command=self.constraint_editor.add_constraint)
-        self.add_constraint_button.pack(side=tk.LEFT, padx=5, pady=5, expand=False)
-
-        self.remove_constraint_button = ttk.Button(constraint_editor_buttons_frame, text="Remove", width=button_width, command=self.constraint_editor.remove_constraint)
-        self.remove_constraint_button.pack(side=tk.LEFT, padx=5, pady=5, expand=False)
-
-
-        self.evaluate_button = ttk.Button(constraint_editor_buttons_frame, text="Evaluate", width=button_width*2, command=self.cid_expression_widget.evaluate_expressions)
-        self.evaluate_button.pack(side=tk.RIGHT, padx=5, pady=5, expand=False)
-
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+    def update_graphs(self):
+        print("TODO")
