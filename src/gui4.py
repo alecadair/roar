@@ -331,9 +331,10 @@ class CIDApp(ThemedTk):
         self.ide = CIDPythonIDE(self.top_level_pane)
         self.top_level_pane.add(self.ide)
         self.center_pane.add(self.grid_button_widget)
-        self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
+        sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
+        #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
-        self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130", pdk_name="sky130")
+        self.left_pane.add_tech_luts(dirname=sky130_luts, pdk_name="sky130")
         #self.graph_control_notebook.add_tech_luts(dirname="/work/ala1/gf12lp/characterization_master/LUT_GF12", pdk_name="GF12LP")
         #self.left_pane.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/ala1_lteng4448/cds_run/ICU_param/characterization_pls_analysis/GF22FDX-PLS", pdk_name="GF22FDXPLUS")
         #self.graph_control_notebook.add_tech_luts(dirname="/hizz/pro/lteng4448/design/methodics/ala1/KARHU_TRUNK/cds_run/characterization/characterization_master/GF22FDX_LUTs", pdk_name="GF22FDXPLUS")
