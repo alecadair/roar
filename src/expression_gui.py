@@ -11,6 +11,13 @@ from collections import defaultdict, deque
 import re
 from space_craft import *
 from equation_solver import *
+from PIL import Image, ImageTk
+
+ROAR_HOME = os.environ["ROAR_HOME"]
+ROAR_LIB = os.environ["ROAR_LIB"]
+ROAR_SRC = os.environ["ROAR_SRC"]
+ROAR_CHARACTERIZATION = os.environ["ROAR_CHARACTERIZATION"]
+ROAR_DESIGN_SCRIPTS = os.environ["ROAR_DESIGN_SCRIPTS"]
 
 
 class CIDEquationSolver:
@@ -527,7 +534,8 @@ class CIDExpressionWidget(ttk.LabelFrame):
             solver.add_equation(variable_name, expression)
             print("processed expression " + variable_name)
         results = solver.evaluate_equations()
-        print("TODO: Evaluate Constraints")
+        print(results)
+
 
     def remove_expression(self):
         if self.entry_counter <= 1:
@@ -639,17 +647,27 @@ class CIDOptimizerSettings(ttk.Frame):
                                         command=self.update_graphs)
         self.update_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
 
-        self.space_ship = EquationBuilder(self.expression_editor_frame)
-        self.space_ship.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
+        self.space_craft = EquationBuilder(self.expression_editor_frame)
+        self.space_craft.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
 
 
-        self.space_ship.update_scroll_region()
+        self.space_craft.update_scroll_region()
         print("update scroll region")
         self.master.master.master.master.master.update_idletasks()
-        space_ship_label = self.space_ship.get_builder()
-        space_ship_label.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
-        self.space_ship.update_scroll_region()
+        self.space_craft_label = self.space_craft.get_builder()
+        self.space_craft_label.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
+        self.space_craft.update_scroll_region()
 
+        self.logo_path = ROAR_HOME + "/images/png/ROAR_LOGO.png"
+        self.logo_image = Image.open(self.logo_path)
+        self.logo_width, self.logo_height = self.logo_image.size
+        self.new_width = int(self.logo_width * 0.75)
+        self.new_height = int(self.logo_height * 0.75)
+        self.resized_image = self.logo_image.resize((self.new_width, self.new_height), Image.ANTIALIAS)
+        self.photo = ImageTk.PhotoImage(self.resized_image)
+        #.logo_image = tk.PhotoImage(file=self.logo_path)
+        self.logo_label = ttk.Label(self, image=self.photo)
+        self.logo_label.pack(side=tk.BOTTOM, padx=1, pady=1)
         #Add expression and constraint editor widgets
         #self.cid_expression_widget = CIDExpressionWidget(expression_editor_frame, test=test)
         #self.cid_expression_widget.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
@@ -661,6 +679,8 @@ class CIDOptimizerSettings(ttk.Frame):
         print("TODO")
 
     def evaluate_expressions(self):
+        print("")
+        print("Evaluating Expressions")
         self_control_notebook = self.master
         self_optimizer_settings = self_control_notebook.master
         self_graph_controller = self_optimizer_settings.master
@@ -673,7 +693,7 @@ class CIDOptimizerSettings(ttk.Frame):
             df_array.append(df)
         solver.data_frames = df_array
         default_frame = None
-        for entry in self.space_ship.entries:
+        for entry in self.space_craft.entries:
             symbol_entry, function_entry, options_combobox, delete_button, enable_box, enable_row_var, graph_button = entry
             expr_enable_var = enable_row_var.get()
             if expr_enable_var == False:
@@ -688,24 +708,24 @@ class CIDOptimizerSettings(ttk.Frame):
             solver.add_equation(variable_name, expression)
             print("processed expression " + variable_name)
         results = solver.evaluate_equations()
-        print("TODO: Evaluate Constraints")
+        print("")
+        print(results)
 
     def update_graphs(self):
         print("TODO")
 
     def open_eq_window(self):
-        builder_window = EquationBuilderWindow(master=self, builder_label=self.space_ship)
+        builder_window = EquationBuilderWindow(master=self, builder_label=self.space_craft)
         builder_label = builder_window.get_builder()
-        #self.space_ship = builder_label
+        #self.space_craft = builder_label
         builder_label.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
-        #self.space_ship.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
-        print("Window Opened")
+        #self.space_craft.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
 
     def eq_window_closed(self, builder_label):
-        #self.space_ship = builder_label
-        #self.space_ship.pack_forget()
-
-        print("Window Closed")
+        #self.space_craft = builder_label
+        #self.space_craft.pack_forget()
+        print("")
+        #print("Window Closed")
 
     def get_selected_corners(self):
         models_selected = self.tech_browser.tree.get_checked()

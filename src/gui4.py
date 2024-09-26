@@ -802,6 +802,17 @@ if __name__ == "__main__":
     else:
         theme = "arc"
         app = CIDApp(theme, test=False)
+        app.title("ROAR")
+        # Load the icon image using PIL and set it to the Toplevel window
+        icon_path = ROAR_HOME + "/images/png/ROAR_ICON.png"
+        icon_image = Image.open(icon_path)
+        # Resize the icon if necessary (optional)
+        icon_image_resized = icon_image.resize((32, 32))  # Optional: Resize to 32x32 pixels
+        icon_photo = ImageTk.PhotoImage(icon_image_resized)
+
+        # Set the icon for the Toplevel window
+        app.iconphoto(True, icon_photo)
+
         style = ttk.Style()
         style.theme_use(theme)
 

@@ -2,16 +2,16 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="16"
-   height="16"
-   viewBox="0 0 4.2333334 4.2333334"
+   width="5"
+   height="5"
+   viewBox="0 0 1.3229167 1.3229167"
    version="1.1"
    id="svg1"
    inkscape:version="1.3.2 (091e20e, 2023-11-25)"
    sodipodi:docname="delete_icon.svg"
    inkscape:export-filename="../../../../CAD/roar/images/png/delete_icon.png"
-   inkscape:export-xdpi="96"
-   inkscape:export-ydpi="96"
+   inkscape:export-xdpi="300"
+   inkscape:export-ydpi="300"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -27,11 +27,11 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="px"
      showgrid="true"
-     inkscape:zoom="19.356453"
-     inkscape:cx="13.613031"
-     inkscape:cy="23.144736"
-     inkscape:window-width="2206"
-     inkscape:window-height="1538"
+     inkscape:zoom="54.748318"
+     inkscape:cx="-3.6987438"
+     inkscape:cy="4.5115541"
+     inkscape:window-width="3072"
+     inkscape:window-height="1556"
      inkscape:window-x="0"
      inkscape:window-y="31"
      inkscape:window-maximized="1"
@@ -60,13 +60,13 @@
      inkscape:groupmode="layer"
      id="layer1">
     <path
-       style="fill:#000000;stroke:#000000;stroke-width:0.786234;stroke-linecap:round;stroke-linejoin:miter;stroke-dasharray:none"
-       d="M 0.39311722,0.39311743 1.2179739,1.2179745 3.8402162,3.8402164"
+       style="fill:#000000;stroke:#000000;stroke-width:0.248109;stroke-linejoin:miter;stroke-dasharray:none"
+       d="M 0.08897713,0.08897715 0.36325627,0.36325632 1.235197,1.2351971"
        id="path1"
        sodipodi:nodetypes="ccc" />
     <path
-       style="fill:#000000;stroke:#000000;stroke-width:0.753367;stroke-linecap:round;stroke-linejoin:miter;stroke-dasharray:none"
-       d="M 3.8566504,0.37668351 3.0239285,1.2094052 0.37668368,3.85665"
+       style="fill:#000000;stroke:#000000;stroke-width:0.248345;stroke-linejoin:miter;stroke-dasharray:none"
+       d="M 1.2351136,0.08780316 0.96057345,0.36234324 0.08780315,1.2351135"
        id="path1-8"
        sodipodi:nodetypes="ccc" />
   </g>
