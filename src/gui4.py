@@ -272,6 +272,19 @@ class CIDGraphingWindow(ttk.Frame):
                 self.ax.set_xscale('linear')
                 self.xlog = False
 
+    def get_selected_corners(self):
+        models_selected = self.graph_controller.tech_browser.tree.get_checked()
+        corner_list = []
+        for model in models_selected:
+            model_tokens = model.split(">")
+            pdk = model_tokens[0]
+            model_name = model_tokens[1]
+            length = model_tokens[2]
+            corner = model_tokens[3]
+            cid_corner = self.graph_controller.graph_control_notebook.tech_dict[pdk][model_name][length]["corners"][corner]
+            corner_list.append(cid_corner)
+        return corner_list
+
     def update_graph_from_tech_browser(self, equation_eval=None):
         models_selected = self.graph_controller.tech_browser.tree.get_checked()
         self.ax.cla()
@@ -313,15 +326,15 @@ class CIDGraphController(ttk.PanedWindow):
     def __init__(self, parent, graph_control_notebook, test=False):
         super().__init__(parent, orient=tk.VERTICAL)
         self.tech_browser = CIDTechBrowser(self, graph_controller=self, theme=theme)
+        self.graph_control_notebook = graph_control_notebook
         #self.graph_settings = CIDGraphSettings(self)
-        self.graph_settings = CIDOptimizerSettings(self, test=test)
+        self.graph_settings = CIDOptimizerSettings(self, graph_controller=self, tech_browser=self.tech_browser, test=test)
         self.graph_settings.pack(fill=tk.BOTH, expand=True)
         #self.graph_settings.grid(row=0, column=0, sticky="nsew")
         self.graph_settings.rowconfigure(0, weight=1)
         self.add(self.tech_browser)
         self.add(self.graph_settings)
         self.graphing_widget = None
-        self.graph_control_notebook = graph_control_notebook
         #self.pack(fill=tk.BOTH, expand=True)
 
 
@@ -360,6 +373,8 @@ class CIDApp(ThemedTk):
         self.top_level_pane.add(self.left_pane, weight=2)
         self.top_level_pane.add(self.center_pane, weight=3)
         self.top_level_pane.add(self.right_pane, weight=1)
+
+
 
         # After adding the panes, set the sash position for control
         #self.top_level_pane.sashpos(1, 400)  # Position the sash at 400px
