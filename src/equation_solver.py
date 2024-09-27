@@ -12,12 +12,12 @@ class EquationSolver:
         self.equations = {}
         self.variables = {}
         self.constants = {}
-        self.delimiters = r'[*,\-/+ ]'
+        self.delimiters = r"[\+\-\*/\^\(\)\s,;.]+|\d+"
         self.corners = []
         self.data_frames = []
         self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
-                            'va', 'vds', 'vdsat', 'vgs', 'vth', 'd', 'e')
+                            'va', 'vds', 'vdsat', 'vgs', 'vth', 'pi')
         if data_frames:
             for df in data_frames:
                 self.data_frames.append(df)
@@ -133,9 +133,11 @@ class EquationSolver:
     def build_dependency_graph(self):
         dependency_graph = defaultdict(set)
         for name, equation in self.equations.items():
-            variables = set(symbol for symbol in re.split(self.delimiters, str(equation)) if symbol.isalpha())
+            #variables = set(symbol for symbol in re.split(self.delimiters, str(equation)) if symbol.isalpha())
+            variables = set(symbol for symbol in re.split(self.delimiters, str(equation)))
+
             for var in variables:
-                if var != name:
+                if var != name and var != "":
                     dependency_graph[name].add(var)
         return dependency_graph
 
@@ -181,27 +183,28 @@ class EquationSolver:
                 result.append(node)
         return result
 
-# Example usage:
-data = {
-    'd': [1, 2, 3],
-    'e': [4, 5, 6]
-}
-df = pd.DataFrame(data)
+if __name__ == "__main__":
+    # Example usage:
+    data = {
+        'd': [1, 2, 3],
+        'e': [4, 5, 6]
+    }
+    df = pd.DataFrame(data)
 
-solver = EquationSolver(data_frames=[df])
+    solver = EquationSolver(data_frames=[df])
 
-# Add equations
-solver.add_equation('a', 'b + c')
-solver.add_equation('b', '2 * d')
-solver.add_equation('c', 'g - 1')
-solver.add_equation('j', 'i * a')
-solver.add_equation('f', '3 * e')
-solver.add_equation('g', '2')
-solver.add_equation('h', 'd - 1')
-solver.add_equation('i', 'b*2/4')
+    # Add equations
+    solver.add_equation('a', 'b + c')
+    solver.add_equation('b', '2 * d')
+    solver.add_equation('c', 'g - 1')
+    solver.add_equation('j', 'i * a')
+    solver.add_equation('f', '3 * e')
+    solver.add_equation('g', '2')
+    solver.add_equation('h', 'd - 1')
+    solver.add_equation('i', 'b*2/4')
 
-# Evaluate equations
-results = solver.evaluate_equations()
-if results is not None:
-    for name, result in results.items():
-        print(f'{name}: {result}')
+    # Evaluate equations
+    results = solver.evaluate_equations()
+    if results is not None:
+        for name, result in results.items():
+            print(f'{name}: {result}')

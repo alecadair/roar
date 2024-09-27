@@ -201,9 +201,11 @@ class CIDTechBrowser(ttk.Frame):
 
 
 class CIDNavigationToolbar(NavigationToolbar2Tk):
-    def __init__(self, canvas, window, pack_toolbar, expand_callback):
+    def __init__(self, canvas, window, pack_toolbar, expand_callback, graph_settings_callback):
         super().__init__(canvas, window, pack_toolbar=pack_toolbar)
         # Create a custom button and add it to the toolbar
+        self.settings_button = ttk.Button(self, text="Settings", command=graph_settings_callback)
+        self.settings_button.pack(side=tk.LEFT)
         self.expand_button = ttk.Button(self, text="Expand", command=expand_callback)
         self.expand_button.pack(side=tk.LEFT)
 
@@ -220,16 +222,41 @@ class CIDGraphingWindow(ttk.Frame):
         self.t = np.arange(0, 3, .01)
         self.ax.plot(self.t, 2 * np.sin(2 * np.pi * self.t))
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
-        self.toolbar = CIDNavigationToolbar(self.canvas, self, pack_toolbar=False, expand_callback=self.expand_callback)
+        self.toolbar = CIDNavigationToolbar(self.canvas, self, pack_toolbar=False, expand_callback=self.expand_callback,
+                                            graph_settings_callback=self.settings_callback)
         self.toolbar.update()
         self.toolbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.canvas.mpl_connect("key_press_event", self.on_key_press)
+
         self.xlog = False
         self.ylog = False
 
+        self.label_font = None
+        self.x_title = ""
+        self.y_title = ""
+        self.set_3d = False
+        self.z_title = ""
+        self.colormap_3d = None
+        self.set_legend = False
+
+
+
+    def settings_callback(self):
+        print("TODO")
+
     def on_key_press(self, event):
+        if self.set_3d == True:
+            print("TODO")
+            z_ticks = np.array([1, 10, 100, 1000, 10000, 100000])
+            ax.set_zticks(np.log10(current_ticks))
+            ax1set_zticklabels(current_ticks)
+            ax.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+            ax.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+            ax.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+
+            return 0
         if event.key == 'l':
             if self.ylog == False:
                 self.ax.set_yscale('log')
@@ -245,14 +272,9 @@ class CIDGraphingWindow(ttk.Frame):
                 self.ax.set_xscale('linear')
                 self.xlog = False
 
-    def update_graph_from_tech_browser(self):
+    def get_selected_corners(self):
         models_selected = self.graph_controller.tech_browser.tree.get_checked()
-        self.ax.cla()
-        self.canvas.draw()
-        color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
-                      'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
-                      'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
-        color_index = 0
+        corner_list = []
         for model in models_selected:
             model_tokens = model.split(">")
             pdk = model_tokens[0]
@@ -260,7 +282,28 @@ class CIDGraphingWindow(ttk.Frame):
             length = model_tokens[2]
             corner = model_tokens[3]
             cid_corner = self.graph_controller.graph_control_notebook.tech_dict[pdk][model_name][length]["corners"][corner]
+            corner_list.append(cid_corner)
+        return corner_list
 
+    def update_graph_from_tech_browser(self, equation_eval=None):
+        models_selected = self.graph_controller.tech_browser.tree.get_checked()
+        self.ax.cla()
+        self.canvas.draw()
+        color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
+                      'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
+                      'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
+        color_index = 0
+
+        for model in models_selected:
+            model_tokens = model.split(">")
+            pdk = model_tokens[0]
+            model_name = model_tokens[1]
+            length = model_tokens[2]
+            corner = model_tokens[3]
+            cid_corner = self.graph_controller.graph_control_notebook.tech_dict[pdk][model_name][length]["corners"][corner]
+            if equation_eval != None:
+                print("TODO")
+                return 0
             #cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
             param1 = self.graph_controller.graph_settings.x_dropdown.get()
             param2 = self.graph_controller.graph_settings.y_dropdown.get()
@@ -283,15 +326,15 @@ class CIDGraphController(ttk.PanedWindow):
     def __init__(self, parent, graph_control_notebook, test=False):
         super().__init__(parent, orient=tk.VERTICAL)
         self.tech_browser = CIDTechBrowser(self, graph_controller=self, theme=theme)
+        self.graph_control_notebook = graph_control_notebook
         #self.graph_settings = CIDGraphSettings(self)
-        self.graph_settings = CIDOptimizerSettings(self, test=test)
+        self.graph_settings = CIDOptimizerSettings(self, graph_controller=self, tech_browser=self.tech_browser, test=test)
         self.graph_settings.pack(fill=tk.BOTH, expand=True)
         #self.graph_settings.grid(row=0, column=0, sticky="nsew")
         self.graph_settings.rowconfigure(0, weight=1)
         self.add(self.tech_browser)
         self.add(self.graph_settings)
         self.graphing_widget = None
-        self.graph_control_notebook = graph_control_notebook
         #self.pack(fill=tk.BOTH, expand=True)
 
 
@@ -331,9 +374,14 @@ class CIDApp(ThemedTk):
         self.top_level_pane.add(self.center_pane, weight=3)
         self.top_level_pane.add(self.right_pane, weight=1)
 
+
+
         # After adding the panes, set the sash position for control
         #self.top_level_pane.sashpos(1, 400)  # Position the sash at 400px
-
+        sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
+        #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
+        #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
+        self.left_pane.add_tech_luts(dirname=sky130_luts, pdk_name="sky130")
         # Add a tiny button to mimic being on the handle of the sash
         #self.toggle_button = ttk.Button(self, text="<<", command=self.toggle_right_pane, width=5)
         #self.toggle_button.place(x=405, y=20)  # Place button near the sash handle (adjust as necessary)
@@ -754,7 +802,29 @@ if __name__ == "__main__":
     else:
         theme = "arc"
         app = CIDApp(theme, test=False)
+        app.title("ROAR")
+        # Load the icon image using PIL and set it to the Toplevel window
+        icon_path = ROAR_HOME + "/images/png/ROAR_ICON.png"
+        icon_image = Image.open(icon_path)
+        # Resize the icon if necessary (optional)
+        icon_image_resized = icon_image.resize((32, 32))  # Optional: Resize to 32x32 pixels
+        icon_photo = ImageTk.PhotoImage(icon_image_resized)
+
+        # Set the icon for the Toplevel window
+        app.iconphoto(True, icon_photo)
+
         style = ttk.Style()
+        style.theme_use(theme)
+
+        # Get the foreground color from the current theme (TButton or TLabel can be used)
+        #fg_color = style.lookup("TButton", "background")
+        # Set the foreground color as the background for all widget types
+        #style.configure("TFrame", background=fg_color)
+        #style.configure("TLabel", background=fg_color)
+        #style.configure("TButton", background=fg_color)
+        #style.configure("TEntry", background=fg_color)
+        #style.configure("TCombobox", background=fg_color)
+        #app.configure(bg=fg_color)
         menu_bar = tk.Menu(app)
         file_menu = tk.Menu(menu_bar, tearoff=0)
         file_menu.add_command(label="New", command=on_file_new)

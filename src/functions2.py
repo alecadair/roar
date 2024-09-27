@@ -1,7 +1,6 @@
 import tkinter as tk
 import os
 from tkinter import ttk
-from tkinter import filedialog
 
 ROAR_HOME = os.environ["ROAR_HOME"]
 ROAR_LIB = os.environ["ROAR_LIB"]
@@ -11,7 +10,6 @@ ROAR_DESIGN_SCRIPTS = os.environ["ROAR_DESIGN_SCRIPTS"]
 ROAR_IMAGES = ROAR_HOME + "/images"
 ROAR_SVG = ROAR_IMAGES + "/svg/"
 ROAR_PNG = ROAR_IMAGES + "/png/"
-
 
 class EquationBuilder(tk.Toplevel):
     def __init__(self, master=None):
@@ -23,8 +21,8 @@ class EquationBuilder(tk.Toplevel):
         self.add_row_button.pack(pady=5, side=tk.LEFT)
         self.save_state_button = ttk.Button(self.buttons_frame, text="Save", command=self.save_state)
         self.load_state_button = ttk.Button(self.buttons_frame, text="Load", command=self.load_state)
-        self.load_state_button.pack(pady=5, side=tk.RIGHT)
-        self.save_state_button.pack(pady=5, side=tk.RIGHT)
+        self.load_state_button.pack(pady=5,side=tk.RIGHT)
+        self.save_state_button.pack(pady=5,side=tk.RIGHT)
         self.buttons_frame.pack(pady=5, side=tk.BOTTOM)
         self.top_frame = ttk.Frame(self)
         self.canvas = tk.Canvas(self.top_frame)
@@ -39,14 +37,14 @@ class EquationBuilder(tk.Toplevel):
         self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
         self.canvas_window = self.canvas.create_window((0, 0), window=self.internal_frame, anchor="nw")
-        # self.internal_frame.bind("<Configure>", self.update_scroll_region)
+        #self.internal_frame.bind("<Configure>", self.update_scroll_region)
 
-        # self.internal_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        # self.internal_frame.grid_rowconfigure(0, weight=1)
+        #self.internal_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        #self.internal_frame.grid_rowconfigure(0, weight=1)
         self.bind("<Configure>", self.resize_internal_frame)
         # Create a PanedWindow for the entire app with horizontal layout
         self.paned_window = ttk.PanedWindow(self.internal_frame, orient=tk.HORIZONTAL)
-        # self.paned_window.pack(fill=tk.BOTH, expand=True)
+        #self.paned_window.pack(fill=tk.BOTH, expand=True)
 
         # Create separate frames for each column in the PanedWindow
         self.symbol_frame = ttk.Frame(self.paned_window)
@@ -54,9 +52,9 @@ class EquationBuilder(tk.Toplevel):
         self.options_frame = ttk.Frame(self.paned_window)
 
         # Add frames to the PanedWindow
-        self.paned_window.add(self.symbol_frame, weight=1)  # Symbol frame stretches
-        self.paned_window.add(self.function_frame, weight=3)  # Function frame stretches more
-        self.paned_window.add(self.options_frame, weight=0)  # Options frame does not stretch
+        self.paned_window.add(self.symbol_frame, weight=1)      # Symbol frame stretches
+        self.paned_window.add(self.function_frame, weight=3)    # Function frame stretches more
+        self.paned_window.add(self.options_frame, weight=0)     # Options frame does not stretch
         self.paned_window.pack(fill=tk.BOTH, expand=True)
         # Configure column resizing in function_frame
         self.symbol_frame.grid_columnconfigure(0, weight=1)
@@ -66,34 +64,37 @@ class EquationBuilder(tk.Toplevel):
         self.delete_icon_path = ROAR_PNG + "delete_icon.png"
         self.delete_icon_image = tk.PhotoImage(file=self.delete_icon_path)
 
+
+
         # Keep track of grid rows
-        self.current_row = 1  # Start at 1 because row 0 is for titles
+        self.current_row = 1 # Start at 1 because row 0 is for titles
         self.num_entries = 0
         self.entries = []
 
         # Add a button to add new rows (place outside the PanedWindow)
-        # Ensure the button is placed below the paned window
-        # self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        # self.h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        # self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+  # Ensure the button is placed below the paned window
+        #self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        #self.h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        #self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
-        # self.canvas.pack(fill=tk.BOTH, expand=True)
+        #self.canvas.pack(fill=tk.BOTH, expand=True)
 
-        # self.canvas.pack(fill=tk.BOTH, expand=True)
-        # self.internal_frame.pack(fill=tk.X, expand=False)
-        # self.internal_frame.grid()
-        # self.paned_window.pack(fill=tk.BOTH, expand=True)
-        # self.bind("<Configure>", self.on_resize)
+        #self.canvas.pack(fill=tk.BOTH, expand=True)
+        #self.internal_frame.pack(fill=tk.X, expand=False)
+        #self.internal_frame.grid()
+        #self.paned_window.pack(fill=tk.BOTH, expand=True)
+        #self.bind("<Configure>", self.on_resize)
 
         # Add column titles
         self.create_titles()
         # Add initial row
         self.add_row()
-        # self.bind("<Configure>", self.on_resize)
+        #self.bind("<Configure>", self.on_resize)
+
 
     def create_titles(self):
         """Create the title row for the grid in each column."""
-        ttk.Label(self.symbol_frame, text="Symbol").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
+        ttk.Label(self.symbol_frame, text="Symbol").grid(row=0, column=0, padx=1, pady=1, sticky="ew" )
         ttk.Label(self.function_frame, text="Function").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
         ttk.Label(self.options_frame, text="Options").grid(row=0, column=0, padx=5, pady=1, sticky="ew")
 
@@ -113,8 +114,7 @@ class EquationBuilder(tk.Toplevel):
 
         # Button to delete the row
         delete_button = tk.Button(self.options_frame, image=self.delete_icon_image,
-                                  command=lambda: self.delete_row(symbol_entry, function_entry, options_combobox,
-                                                                  enable_checkbox, delete_button))
+                                  command=lambda: self.delete_row(symbol_entry, function_entry, options_combobox, enable_checkbox, delete_button))
 
         # Adjust button size to fit the image
         delete_button.config(width=self.delete_icon_image.width(), height=self.delete_icon_image.height())
@@ -129,12 +129,14 @@ class EquationBuilder(tk.Toplevel):
 
         # Store the row entries for later access or deletion (including the checkbox)
         self.entries.append((symbol_entry, function_entry, options_combobox, enable_checkbox, delete_button))
-        # self.internal_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        #self.internal_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+
 
         # Increment row counter
         self.current_row += 1
         self.num_entries += 1
         self.update_scroll_region()
+
 
     def update_scroll_region(self, event=None):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -204,6 +206,7 @@ class EquationBuilder(tk.Toplevel):
         with open(file_path, "w") as f:
             json.dump(state_data, f)
 
+
     def load_state(self):
         """Load the state from a user-selected JSON file and populate the EquationBuilder."""
         # Open file dialog to ask user which file to load
@@ -228,18 +231,15 @@ class EquationBuilder(tk.Toplevel):
         except FileNotFoundError:
             print("No saved state found.")
 
-
 # Initialize the main application window
 if __name__ == "__main__":
     root = tk.Tk()
     root.geometry("900x600")
 
-
     # Create a button to open the Equation Builder
     def open_equation_builder():
         builder = EquationBuilder(master=root)
-        # builder.grab_set()
-
+        #builder.grab_set()
 
     open_button = ttk.Button(root, text="Open Equation Builder", command=open_equation_builder)
     open_button.pack(pady=20)

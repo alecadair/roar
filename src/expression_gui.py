@@ -9,6 +9,16 @@ import numpy as np
 from sympy import symbols, sympify, Number
 from collections import defaultdict, deque
 import re
+from space_craft import *
+from equation_solver import *
+from PIL import Image, ImageTk
+
+ROAR_HOME = os.environ["ROAR_HOME"]
+ROAR_LIB = os.environ["ROAR_LIB"]
+ROAR_SRC = os.environ["ROAR_SRC"]
+ROAR_CHARACTERIZATION = os.environ["ROAR_CHARACTERIZATION"]
+ROAR_DESIGN_SCRIPTS = os.environ["ROAR_DESIGN_SCRIPTS"]
+
 
 class CIDEquationSolver:
     def __init__(self, lookup_vals, graph_controller, test=False):
@@ -202,10 +212,10 @@ class CIDEquationSolver:
         #for name, equation in self.equations.items():<ss<ss
         for name, equation in self.equation_strs.items():
             #variables = set(symbol for symbol in equation.split() if symbol.isalpha())
-            equation_delimiters = "+|-|*|/|^|(|)| "
-            variables = set(symbol for symbol in equation.split())
+            equation_delimiters = r"[\+\-\*/\^\(\)\s]"
+            variables = set(symbol for symbol in re.split(equation_delimiters, equation) if symbol)
             for var in variables:
-                if var != name:
+                if var != name and not var.isdigit() and var != "pi":
                     dependency_graph[name].add(var)
         return dependency_graph
 
@@ -509,7 +519,7 @@ class CIDExpressionWidget(ttk.LabelFrame):
         self_control_notebook = self.master
         self_optimizer_settings = self_control_notebook.master
         self_graph_controller = self_optimizer_settings.master
-        solver = CIDEquationSolver(lookup_vals=None, graph_controller=self_graph_controller, test=self.test)
+        solver = CIDEquationSolver(lookup_vals=None, graph_controller=self_graph_controller, test=False)
         default_frame = None
         for i in range(self.entry_counter):
             expr_enable_var = self.expr_enables[i].get()
@@ -524,7 +534,8 @@ class CIDExpressionWidget(ttk.LabelFrame):
             solver.add_equation(variable_name, expression)
             print("processed expression " + variable_name)
         results = solver.evaluate_equations()
-        print("TODO: Evaluate Constraints")
+        print(results)
+
 
     def remove_expression(self):
         if self.entry_counter <= 1:
@@ -583,61 +594,148 @@ class CIDExpressionWidget(ttk.LabelFrame):
 
 
 class CIDOptimizerSettings(ttk.Frame):
-    def __init__(self, master, test=False):
+    def __init__(self, master, graph_controller, tech_browser=None, test=False):
         super().__init__(master)
         self.master = master
-
+        self.graph_controller = graph_controller
+        self.tech_browser = tech_browser
         # Top frame for buttons and dropdowns
-        drop_down_frame = ttk.Frame(self)
-        drop_down_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)  # Ensures it stays at the top and uses horizontal space
+        self.drop_down_frame = ttk.Frame(self)
+        self.drop_down_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)  # Ensures it stays at the top and uses horizontal space
 
-        eval_update_frame = ttk.Frame(self)
-        eval_update_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)
+        self.eval_update_frame = ttk.Frame(self)
+        self.eval_update_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)
 
         # Expression editor frame
-        expression_editor_frame = ttk.Frame(self)
-        expression_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Allows dynamic resizing
+        self.expression_editor_frame = ttk.Frame(self)
+        self.expression_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Allows dynamic resizing
 
         # Constraint editor frame
-        constraint_editor_frame = ttk.Frame(self)
-        constraint_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Similar to expression editor
+        self.constraint_editor_frame = ttk.Frame(self)
+        self.constraint_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Similar to expression editor
 
         # Add the widgets for X and Y dropdowns and buttons
-        button_width = 10
-        bigger_button_width = 30
-        self.x_label = ttk.Label(drop_down_frame, text="X:")
+        self.button_width = 10
+        self.bigger_button_width = 30
+        self.x_label = ttk.Label(self.drop_down_frame, text="X:")
         self.x_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.x_dropdown = ttk.Combobox(drop_down_frame, width=button_width)
+        self.x_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
         self.x_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
                                      'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
                                      'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
         self.x_dropdown.current(21)
         self.x_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.y_label = ttk.Label(drop_down_frame, text="Y:")
+        self.y_label = ttk.Label(self.drop_down_frame, text="Y:")
         self.y_label.pack(side=tk.LEFT, padx=5, pady=2)
 
-        self.y_dropdown = ttk.Combobox(drop_down_frame, width=button_width)
+        self.y_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
         self.y_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
                                      'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
                                      'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
         self.y_dropdown.current(8)
         self.y_dropdown.pack(side=tk.LEFT, padx=5, pady=2)
 
-        self.eval_button = ttk.Button(eval_update_frame, width=bigger_button_width, text="Evaluate", command=self.evaluate_expressions)
+        self.eval_button = ttk.Button(self.eval_update_frame, width=self.bigger_button_width, text="Evaluate",
+                                      command=self.evaluate_expressions)
         self.eval_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
-        self.update_button = ttk.Button(drop_down_frame, width=bigger_button_width, text="Update", command=self.update_graphs)
+        self.space_craft_button = ttk.Button(self.eval_update_frame, width=self.bigger_button_width, text="Open SpaceCraft",
+                                             command=self.open_eq_window)
+        self.space_craft_button.pack(side=tk.RIGHT,padx=5, fill=tk.X)
+        self.update_button = ttk.Button(self.drop_down_frame, width=self.bigger_button_width, text="Update",
+                                        command=self.update_graphs)
         self.update_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
-        # Add expression and constraint editor widgets
-        self.cid_expression_widget = CIDExpressionWidget(expression_editor_frame, test=test)
-        self.cid_expression_widget.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
 
-        self.constraint_editor = CIDConstraintWidget(constraint_editor_frame, test=test)
-        self.constraint_editor.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        self.space_craft = EquationBuilder(self.expression_editor_frame)
+        self.space_craft.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
+
+
+        self.space_craft.update_scroll_region()
+        print("update scroll region")
+        self.master.master.master.master.master.update_idletasks()
+        self.space_craft_label = self.space_craft.get_builder()
+        self.space_craft_label.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
+        self.space_craft.update_scroll_region()
+
+        self.logo_path = ROAR_HOME + "/images/png/ROAR_LOGO.png"
+        self.logo_image = Image.open(self.logo_path)
+        self.logo_width, self.logo_height = self.logo_image.size
+        self.new_width = int(self.logo_width * 0.75)
+        self.new_height = int(self.logo_height * 0.75)
+        self.resized_image = self.logo_image.resize((self.new_width, self.new_height), Image.ANTIALIAS)
+        self.photo = ImageTk.PhotoImage(self.resized_image)
+        #.logo_image = tk.PhotoImage(file=self.logo_path)
+        self.logo_label = ttk.Label(self, image=self.photo)
+        self.logo_label.pack(side=tk.BOTTOM, padx=1, pady=1)
+        #Add expression and constraint editor widgets
+        #self.cid_expression_widget = CIDExpressionWidget(expression_editor_frame, test=test)
+        #self.cid_expression_widget.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
+
+        #self.constraint_editor = CIDConstraintWidget(constraint_editor_frame, test=test)
+        #self.constraint_editor.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
+
+    def get_eq_builder_closed_state(self, builder_entries):
+        print("TODO")
 
     def evaluate_expressions(self):
-        print("TODO")
+        print("")
+        print("Evaluating Expressions")
+        self_control_notebook = self.master
+        self_optimizer_settings = self_control_notebook.master
+        self_graph_controller = self_optimizer_settings.master
+        #solver = CIDEquationSolver(lookup_vals=None, graph_controller=self_graph_controller, test=False)
+        solver = EquationSolver()
+        corners_to_eval = self.get_selected_corners()
+        df_array = []
+        for corner in corners_to_eval:
+            df = corner.df
+            df_array.append(df)
+        solver.data_frames = df_array
+        default_frame = None
+        for entry in self.space_craft.entries:
+            symbol_entry, function_entry, options_combobox, delete_button, enable_box, enable_row_var, graph_button = entry
+            expr_enable_var = enable_row_var.get()
+            if expr_enable_var == False:
+                continue
+            variable_name = symbol_entry.get()
+            expression = function_entry.get()
+            expression = expression.replace("pi", "3.141592653589793")
+            var_white_space = variable_name.replace(" ", "")
+            expression_white_space = expression.replace(" ", "")
+            if var_white_space == "" or expression_white_space == "":
+                continue
+            solver.add_equation(variable_name, expression)
+            print("processed expression " + variable_name)
+        results = solver.evaluate_equations()
+        print("")
+        print(results)
 
     def update_graphs(self):
         print("TODO")
+
+    def open_eq_window(self):
+        builder_window = EquationBuilderWindow(master=self, builder_label=self.space_craft)
+        builder_label = builder_window.get_builder()
+        #self.space_craft = builder_label
+        builder_label.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
+        #self.space_craft.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
+
+    def eq_window_closed(self, builder_label):
+        #self.space_craft = builder_label
+        #self.space_craft.pack_forget()
+        print("")
+        #print("Window Closed")
+
+    def get_selected_corners(self):
+        models_selected = self.tech_browser.tree.get_checked()
+        corner_list = []
+        for model in models_selected:
+            model_tokens = model.split(">")
+            pdk = model_tokens[0]
+            model_name = model_tokens[1]
+            length = model_tokens[2]
+            corner = model_tokens[3]
+            cid_corner = self.graph_controller.graph_control_notebook.tech_dict[pdk][model_name][length]["corners"][corner]
+            corner_list.append(cid_corner)
+        return corner_list
