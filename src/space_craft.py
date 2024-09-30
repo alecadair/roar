@@ -147,7 +147,7 @@ class EquationBuilder(ttk.LabelFrame):
         """Create the title row for the grid in each column."""
         ttk.Label(self.symbol_frame, text="Symbol").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
         ttk.Label(self.function_frame, text="Expression").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
-        ttk.Label(self.options_frame, text="Options").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
+        ttk.Label(self.options_frame, text="Options").grid(row=0, column=0, columnspan=3, padx=1, pady=1, sticky="ew")
 
 
     def get_builder(self):
@@ -174,7 +174,7 @@ class EquationBuilder(ttk.LabelFrame):
                                                                    enable_checkbox, delete_button, graph_button))
 
         graph_button = ttk.Button(self.options_frame, image=self.graph_icon_image,
-                                  command=lambda: self.graph_callback(symbol_entry, function_entry, options_combobox))
+                                  command=lambda: self.graph_callback(symbol_entry, function_entry, graph_button))
         #delete_button = ttk.Button(self.options_frame, text="X",
         #                          command=lambda: self.delete_row(symbol_entry, function_entry, options_combobox,
         #                                                          enable_checkbox, delete_button))
@@ -185,10 +185,10 @@ class EquationBuilder(ttk.LabelFrame):
         # Place the widgets in the grid within their respective columns
         symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=4, sticky="ew")
         function_entry.grid(row=self.current_row, column=0, padx=1, pady=4, sticky="ew")  # Sticky for full width
-        options_combobox.grid(row=self.current_row, column=0, padx=1, pady=1, sticky="ew")
-        enable_checkbox.grid(row=self.current_row, column=1, padx=0, pady=1, sticky="ew")
-        graph_button.grid(row=self.current_row, column=2, padx=0, pady=1, sticky="ew")
-        delete_button.grid(row=self.current_row, column=3, padx=0, pady=1, sticky="ew")
+        #options_combobox.grid(row=self.current_row, column=0, padx=1, pady=1, sticky="ew")
+        enable_checkbox.grid(row=self.current_row, column=0, padx=0, pady=1, sticky="ew")
+        graph_button.grid(row=self.current_row, column=1, padx=0, pady=1, sticky="ew")
+        delete_button.grid(row=self.current_row, column=2, padx=0, pady=1, sticky="ew")
 
         # Store the row entries for later access or deletion, including the IntVar for the checkbox
         self.entries.append((symbol_entry, function_entry, options_combobox, delete_button,
@@ -311,5 +311,12 @@ class EquationBuilder(ttk.LabelFrame):
         except FileNotFoundError:
             print("No saved state found.")
 
-    def graph_callback(self, symbol=None, expression=None, type=None):
-        print("TODO")
+    def graph_callback(self, symbol=None, expression=None, button=None):
+        if button.instate(['disabled']):
+            # If button is disabled, enable it
+            button.state(['!disabled'])
+        else:
+            # If button is enabled, disable it
+            button.state(['disabled'])
+
+

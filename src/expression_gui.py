@@ -594,9 +594,10 @@ class CIDExpressionWidget(ttk.LabelFrame):
 
 
 class CIDOptimizerSettings(ttk.Frame):
-    def __init__(self, master, graph_controller, tech_browser=None, test=False):
+    def __init__(self, master, graph_controller, tech_browser=None, top_level_app=None, test=False):
         super().__init__(master)
         self.master = master
+        self.top_level_app = top_level_app
         self.graph_controller = graph_controller
         self.tech_browser = tech_browser
         # Top frame for buttons and dropdowns
@@ -621,9 +622,11 @@ class CIDOptimizerSettings(ttk.Frame):
         self.x_label.pack(side=tk.LEFT, padx=5, pady=5)
 
         self.x_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
-        self.x_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
-                                     'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
-                                     'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
+        #self.x_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
+        #                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
+        #                             'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
+
+        self.x_dropdown["values"] = self.top_level_app.lookups
         self.x_dropdown.current(21)
         self.x_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -631,9 +634,10 @@ class CIDOptimizerSettings(ttk.Frame):
         self.y_label.pack(side=tk.LEFT, padx=5, pady=2)
 
         self.y_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
-        self.y_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
-                                     'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
-                                     'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
+        #self.y_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
+        #                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
+        #                             'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
+        self.y_dropdown["values"] = self.top_level_app.lookups
         self.y_dropdown.current(8)
         self.y_dropdown.pack(side=tk.LEFT, padx=5, pady=2)
 
@@ -663,7 +667,7 @@ class CIDOptimizerSettings(ttk.Frame):
         self.logo_width, self.logo_height = self.logo_image.size
         self.new_width = int(self.logo_width * 0.75)
         self.new_height = int(self.logo_height * 0.75)
-        self.resized_image = self.logo_image.resize((self.new_width, self.new_height), Image.ANTIALIAS)
+        self.resized_image = self.logo_image.resize((self.new_width, self.new_height), Image.Resampling.LANCZOS)
         self.photo = ImageTk.PhotoImage(self.resized_image)
         #.logo_image = tk.PhotoImage(file=self.logo_path)
         self.logo_label = ttk.Label(self, image=self.photo)
