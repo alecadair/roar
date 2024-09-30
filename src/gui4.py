@@ -322,15 +322,15 @@ class CIDGraphingWindow(ttk.Frame):
             self.canvas.draw()
 
 
+# Graph Controller is the left pane of the top level application
 class CIDGraphController(ttk.PanedWindow):
-    def __init__(self, parent, graph_control_notebook, test=False):
+    def __init__(self, parent, graph_control_notebook, top_level_app, test=False):
         super().__init__(parent, orient=tk.VERTICAL)
         self.tech_browser = CIDTechBrowser(self, graph_controller=self, theme=theme)
+        self.top_level_app = top_level_app
         self.graph_control_notebook = graph_control_notebook
-        #self.graph_settings = CIDGraphSettings(self)
-        self.graph_settings = CIDOptimizerSettings(self, graph_controller=self, tech_browser=self.tech_browser, test=test)
+        self.graph_settings = CIDOptimizerSettings(self, graph_controller=self, tech_browser=self.tech_browser, top_level_app=self.top_level_app, test=test)
         self.graph_settings.pack(fill=tk.BOTH, expand=True)
-        #self.graph_settings.grid(row=0, column=0, sticky="nsew")
         self.graph_settings.rowconfigure(0, weight=1)
         self.add(self.tech_browser)
         self.add(self.graph_settings)
@@ -351,11 +351,15 @@ class CIDApp(ThemedTk):
     def __init__(self, theme, test=False):
         ThemedTk.__init__(self, theme=theme)
         # Create the top-level horizontal paned window
+        self.lookups = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
+                                     'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
+                                     'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
+
         self.top_level_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         self.top_level_pane.pack(fill=tk.BOTH, expand=True)
 
         # Left Pane
-        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, test=test, width=450)
+        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, top_level_app=self, test=test, width=450)
         self.graph_control_notebook = self.left_pane
 
         # Center Pane
@@ -495,6 +499,10 @@ class CIDApp(ThemedTk):
                 color_index = 0
             self.graphing_window.canvas.draw()
 
+    def add_lookup(self, lookup_name, lookup_values):
+        lookup_name = (lookup_name,)
+        self.lookups = self.lookups + lookup_name
+
 
 class CIDGraphGrid(ttk.Frame):
     def __init__(self, master, graph_controllers, **kwargs):
@@ -547,13 +555,16 @@ class CIDGraphingGrid(tk.Tk):
         self.grid_button_widget.pack(fill=tk.BOTH, expand=True)
 
 
+# Graft Control Notebook is the top left widget of the top level application
 class CIDGraphControlNotebook(ttk.Notebook):
-    def __init__(self, master=None, test=False, **kw):
+    def __init__(self, master=None, test=False, top_level_app=None, **kw):
         super().__init__(master, **kw)
+        self.top_level_app = top_level_app
         self.master = master
         self.graph_controllers = []
         self.tech_dict = {}
         self.create_widgets(test)
+        self.lookups = None
 
     def create_widgets(self, test):
         tab_titles = ["Upper Left", "Upper Right", "Lower Left", "Lower Right"]
@@ -561,7 +572,7 @@ class CIDGraphControlNotebook(ttk.Notebook):
         for i in range(0, 4):
             tab = ttk.Frame(self)
             self.add(tab, text=tab_titles[i])
-            graph_controller = CIDGraphController(tab, graph_control_notebook=self, test=test)
+            graph_controller = CIDGraphController(tab, graph_control_notebook=self, top_level_app=self.top_level_app, test=False)
             graph_controller.pack(expand=True, fill="both")
             self.graph_controllers.append(graph_controller)
             tab_counter = tab_counter + 1
@@ -596,6 +607,9 @@ class CIDGraphControlNotebook(ttk.Notebook):
                 self.tech_dict[pdk_name][model_name][length]["corners"][corner_name] = corner
         return(self.tech_dict)
 
+    def set_lookups(self, lookups):
+        self.lookups = lookups
+
 
     def tab_changed(self, event):
         current_tab = self.index("current")
@@ -605,72 +619,6 @@ class CIDCornerSelector(ttk.LabelFrame):
     def __init__(self, master):
         super().__init__(master, text="Device and Corner Selection")
 
-
-class MainApplication(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Paned Window Example")
-
-        # Create PanedWindow
-        #self.paned_window = ttk.PanedWindow(self, orient=tk.VERTICAL)
-        #self.paned_window.pack(fill=tk.BOTH, expand=True)
-
-        # Create top and bottom frames
-        top_frame = ttk.Frame(self)
-        top_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        #bottom_frame = ttk.Frame(self.paned_window)
-        #self.paned_window.add(top_frame)
-        #self.paned_window.add(bottom_frame)
-
-        self.cid_expression_widget = CIDExpressionWidget(top_frame)
-
-        # Add original buttons to top frame
-        x_label = ttk.Label(top_frame, text="X:")
-        x_label.grid(row=0, column=0, padx=5, pady=5, sticky="nw")
-
-        x_dropdown = ttk.Combobox(top_frame, values=["X1", "X2", "X3"], width=10)
-        x_dropdown.grid(row=0, column=1, padx=5, pady=5, sticky="nw")
-
-        evaluate_button = ttk.Button(top_frame, text="Evaluate Expression", width=20, command=self.cid_expression_widget.evaluate_expressions)
-        evaluate_button.grid(row=0, column=2, padx=5, pady=5, sticky="nw")
-
-        y_label = ttk.Label(top_frame, text="Y:")
-        y_label.grid(row=1, column=0, padx=5, pady=5, sticky="nw")
-
-        y_dropdown = ttk.Combobox(top_frame, values=["Y1", "Y2", "Y3"], width=10)
-        y_dropdown.grid(row=1, column=1, padx=5, pady=5, sticky="nw")
-
-        add_button = ttk.Button(top_frame, text="Add Expression", width=20, command=self.cid_expression_widget.add_expression)
-        add_button.grid(row=1, column=2, padx=5, pady=5, sticky="nw")
-
-        empty_space_label = ttk.Label(top_frame, text="")
-        empty_space_label.grid(row=2, column=0, padx=5, pady=5, sticky="nw")
-
-        update_button = ttk.Button(top_frame, text="Update", width=20)
-        update_button.grid(row=2, column=1, padx=5, pady=5, sticky="nw")
-
-        remove_button = ttk.Button(top_frame, text="Remove Expression", width=20, command=self.cid_expression_widget.remove_expression)
-        remove_button.grid(row=2, column=2, padx=5, pady=5, sticky="nw")
-
-        # Add expression editor widget to top frame
-        self.cid_expression_widget.grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
-        for i in range(3):
-            top_frame.rowconfigure(i, weight=1)
-        for i in range(2):
-            top_frame.columnconfigure(i, weight=1)
-        #top_frame.columnconfigure(0, weight=1)  # Ensure the widget stretches horizontally
-        #top_frame.rowconfigure(0, weight=1)  # Ensure the canvas stretches with the frame
-
-        # Add logo to bottom frame
-        #logo_label = ttk.Label(bottom_frame, text="Your Logo Here", font=("Arial", 18), foreground="blue")
-        #logo_label.pack(padx=20, pady=20)
-
-        # Add initial expression
-        self.cid_expression_widget.add_expression()
-
-        # Configure weight for resizing
-        #self.paned_window.rowconfigure(0, weight=1)
-        #self.paned_window.rowconfigure(1, weight=0)
 
 class CIDPaintWidget(ttk.Frame):
     def __init__(self, master, *args, **kwargs):
