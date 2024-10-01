@@ -201,21 +201,38 @@ class CIDTechBrowser(ttk.Frame):
 
 
 class CIDNavigationToolbar(NavigationToolbar2Tk):
-    def __init__(self, canvas, window, pack_toolbar, expand_callback, graph_settings_callback):
+    def __init__(self, canvas, window, pack_toolbar, expand_callback, graph_settings_callback, top_level_app):
+        # Initialize the original NavigationToolbar
         super().__init__(canvas, window, pack_toolbar=pack_toolbar)
-        # Create a custom button and add it to the toolbar
+
+        # Create a new frame for the extra row of custom widgets
+        # Create your custom widgets and add them to the custom_frame
+        self.top_level_app = top_level_app
+
         self.settings_button = ttk.Button(self, text="Settings", command=graph_settings_callback)
-        self.settings_button.pack(side=tk.LEFT)
+        self.settings_button.pack(side=tk.LEFT, padx=5, pady=5)
+
         self.expand_button = ttk.Button(self, text="Expand", command=expand_callback)
-        self.expand_button.pack(side=tk.LEFT)
+        self.expand_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+
+
 
     def on_custom_button_click(self):
         print("Custom button clicked")
 
 class CIDGraphingWindow(ttk.Frame):
-    def __init__(self, parent, expand_callback, graph_controller):
+    def __init__(self, parent, expand_callback, graph_controller, top_level_app):
         super().__init__(parent)
+        self.top_level_app = top_level_app
         self.graph_controller = graph_controller
+        self.update_button_width = 10
+        self.spinbox_width = 5
+        self.padx = 2
+        self.pady = 2
+        self.lookup_val = 0
+        self.lookup_label_val = tk.StringVar()
+        self.lookup_label_val.set(str(self.lookup_val))
         self.graphing_widget = None
         self.expand_callback = expand_callback
         self.fig, self.ax = plt.subplots()
@@ -223,9 +240,42 @@ class CIDGraphingWindow(ttk.Frame):
         self.ax.plot(self.t, 2 * np.sin(2 * np.pi * self.t))
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.toolbar = CIDNavigationToolbar(self.canvas, self, pack_toolbar=False, expand_callback=self.expand_callback,
-                                            graph_settings_callback=self.settings_callback)
+                                            graph_settings_callback=self.settings_callback, top_level_app=self.top_level_app)
+        self.custom_frame = ttk.Frame(self)
+        self.x_label = ttk.Label(self.custom_frame, text="X:")
+        self.x_label.pack(side=tk.LEFT, padx=self.padx, pady=self.pady)
+
+        self.x_dropdown = ttk.Combobox(self.custom_frame, width=7)
+        self.x_dropdown["values"] = self.top_level_app.lookups
+        self.x_dropdown.current(21)
+        self.x_dropdown.pack(side=tk.LEFT, padx=self.padx, pady=self.padx)
+        self.x_value_lookup = tk.DoubleVar()
+        self.x_value_lookup.set(15)
+        self.x_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.x_value_lookup, increment=0.1, width=self.spinbox_width)
+        self.x_spinbox.pack(side=tk.LEFT, padx=self.padx, pady=self.padx)
+        self.y_label = ttk.Label(self.custom_frame, text="Y:")
+        self.y_label.pack(side=tk.LEFT, padx=self.padx, pady=self.padx)
+
+        self.y_dropdown = ttk.Combobox(self.custom_frame, width=7)
+        self.y_dropdown["values"] = self.top_level_app.lookups
+        self.y_dropdown.current(8)
+        self.y_dropdown.pack(side=tk.LEFT, padx=self.padx, pady=self.padx)
+        self.y_value_lookup = tk.DoubleVar()
+        self.y_value_lookup.set(15)
+        self.y_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.y_value_lookup, increment=0.1, width=self.spinbox_width)
+        self.y_spinbox.pack(side=tk.LEFT, padx=self.padx, pady=self.padx)
+
+        self.lookup_label = ttk.Label(self.custom_frame, textvariable=self.lookup_label_val)
+        self.lookup_label.pack(side=tk.LEFT, padx=10, pady=self.pady)
+
+        self.update_button = ttk.Button(self.custom_frame, width=self.update_button_width, text="Update",
+                                command=self.update_graph)
+        self.update_button.pack(side=tk.LEFT, padx=self.padx, pady=self.padx)
+        # Pack the custom_frame below the default toolbar
         self.toolbar.update()
+        self.custom_frame.pack(side=tk.TOP, fill=tk.X)
         self.toolbar.pack(side=tk.BOTTOM, fill=tk.X)
+
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.canvas.mpl_connect("key_press_event", self.on_key_press)
@@ -250,11 +300,11 @@ class CIDGraphingWindow(ttk.Frame):
         if self.set_3d == True:
             print("TODO")
             z_ticks = np.array([1, 10, 100, 1000, 10000, 100000])
-            ax.set_zticks(np.log10(current_ticks))
-            ax1set_zticklabels(current_ticks)
-            ax.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-            ax.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-            ax.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+            self.ax.set_zticks(np.log10(z_ticks))
+            self.ax.set_zticklabels(z_ticks)
+            self.ax.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+            self.ax.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+            self.ax.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
 
             return 0
         if event.key == 'l':
@@ -284,6 +334,9 @@ class CIDGraphingWindow(ttk.Frame):
             cid_corner = self.graph_controller.graph_control_notebook.tech_dict[pdk][model_name][length]["corners"][corner]
             corner_list.append(cid_corner)
         return corner_list
+
+    def update_graph(self):
+        print("TODO")
 
     def update_graph_from_tech_browser(self, equation_eval=None):
         models_selected = self.graph_controller.tech_browser.tree.get_checked()
@@ -364,7 +417,7 @@ class CIDApp(ThemedTk):
 
         # Center Pane
         self.center_pane = ttk.PanedWindow(self.top_level_pane, orient=tk.VERTICAL)
-        self.grid_button_widget = CIDGraphGrid(self.center_pane, graph_controllers=self.graph_control_notebook.graph_controllers)
+        self.grid_button_widget = CIDGraphGrid(self.center_pane, graph_controllers=self.graph_control_notebook.graph_controllers, top_level_app=self)
         self.center_pane.add(self.grid_button_widget)
 
         # Right Pane
@@ -378,7 +431,7 @@ class CIDApp(ThemedTk):
         self.top_level_pane.add(self.center_pane, weight=3)
         self.top_level_pane.add(self.right_pane, weight=1)
 
-
+        #self.cid = self.grid_button_widget.
 
         # After adding the panes, set the sash position for control
         #self.top_level_pane.sashpos(1, 400)  # Position the sash at 400px
@@ -505,20 +558,22 @@ class CIDApp(ThemedTk):
 
 
 class CIDGraphGrid(ttk.Frame):
-    def __init__(self, master, graph_controllers, **kwargs):
+    def __init__(self, master, graph_controllers, top_level_app, **kwargs):
         super().__init__(master, **kwargs)
 
         # Initialize the grid
         self.graphing_windows = []
         self.graph_positions = []
         self.graph_controllers = graph_controllers
+        self.top_level_app = top_level_app
 
         graph_counter = 0
         for i in range(2):
             self.grid_rowconfigure(i, weight=1)
             for j in range(2):
                 self.grid_columnconfigure(j, weight=1)
-                graph = CIDGraphingWindow(self, expand_callback=lambda x=i, y=j: self.toggle_expand(x, y), graph_controller=self.graph_controllers[graph_counter])
+                graph = CIDGraphingWindow(self, expand_callback=lambda x=i, y=j: self.toggle_expand(x, y),
+                                          graph_controller=self.graph_controllers[graph_counter], top_level_app=self.top_level_app)
                 graph_controllers[graph_counter].set_graphing_widget(graph)
                 graph.grid(row=i,column=j,sticky="nsew")
                 self.graphing_windows.append(graph)
@@ -546,12 +601,12 @@ class CIDGraphGrid(ttk.Frame):
 
 
 class CIDGraphingGrid(tk.Tk):
-    def __init__(self):
+    def __init__(self, top_level_app):
         super().__init__()
         self.title("Grid Button Widget")
         self.geometry("1000x1000")
-
-        self.grid_button_widget = CIDGraphGrid(self)
+        self.top_level_app = top_level_app
+        self.grid_button_widget = CIDGraphGrid(self, top_level_app=top_level_app)
         self.grid_button_widget.pack(fill=tk.BOTH, expand=True)
 
 
@@ -736,9 +791,6 @@ if __name__ == "__main__":
         container.pack(fill=tk.BOTH, expand=True)
 
         root.mainloop()
-    elif test_app == 4:
-        app = MainApplication()
-        app.mainloop()
     elif test_app == 5:
         root = tk.Tk()
         root.title("CIDPaintWidget Demo")

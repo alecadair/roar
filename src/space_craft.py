@@ -4,7 +4,7 @@ from tkinter import ttk
 from tkinter import filedialog
 from ttkthemes import ThemedTk
 import json
-
+from PIL import Image, ImageTk
 
 ROAR_HOME = os.environ["ROAR_HOME"]
 ROAR_LIB = os.environ["ROAR_LIB"]
@@ -116,7 +116,11 @@ class EquationBuilder(ttk.LabelFrame):
         self.delete_icon_image = tk.PhotoImage(file=self.delete_icon_path)
         self.graph_icon_path = ROAR_PNG + "graph_icon.png"
         self.graph_icon_image = tk.PhotoImage(file=self.graph_icon_path)
-
+        self.graph_icon_image_pil = Image.open(self.graph_icon_path)
+        self.green = (52, 235, 152, 255)
+        self.green_icon_background = Image.new("RGBA", self.graph_icon_image_pil.size, (52, 235, 152, 255))
+        self.blended_image = Image.alpha_composite(self.green_icon_background, self.graph_icon_image_pil)
+        self.green_graph_icon_image = ImageTk.PhotoImage(self.blended_image)
         # Keep track of grid rows
         self.current_row = 1  # Start at 1 because row 0 is for titles
         self.num_entries = 0
@@ -147,7 +151,8 @@ class EquationBuilder(ttk.LabelFrame):
         """Create the title row for the grid in each column."""
         ttk.Label(self.symbol_frame, text="Symbol").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
         ttk.Label(self.function_frame, text="Expression").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
-        ttk.Label(self.options_frame, text="Options").grid(row=0, column=0, columnspan=3, padx=1, pady=1, sticky="ew")
+        #ttk.Label(self.options_frame, text="Options").grid(row=0, column=0, columnspan=3, padx=1, pady=1, sticky="ew")
+        ttk.Label(self.options_frame, text="").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
 
 
     def get_builder(self):
@@ -172,9 +177,9 @@ class EquationBuilder(ttk.LabelFrame):
         delete_button = ttk.Button(self.options_frame, image=self.delete_icon_image,
                                    command=lambda: self.delete_row(symbol_entry, function_entry, options_combobox,
                                                                    enable_checkbox, delete_button, graph_button))
-
+        enable_graphing = tk.IntVar(value=0)
         graph_button = ttk.Button(self.options_frame, image=self.graph_icon_image,
-                                  command=lambda: self.graph_callback(symbol_entry, function_entry, graph_button))
+                                  command=lambda: self.graph_callback(symbol_entry, function_entry, graph_button, enable_graphing))
         #delete_button = ttk.Button(self.options_frame, text="X",
         #                          command=lambda: self.delete_row(symbol_entry, function_entry, options_combobox,
         #                                                          enable_checkbox, delete_button))
@@ -183,16 +188,16 @@ class EquationBuilder(ttk.LabelFrame):
         #delete_button.config(bd=0, highlightthickness=0, relief="flat")
 
         # Place the widgets in the grid within their respective columns
-        symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=4, sticky="ew")
-        function_entry.grid(row=self.current_row, column=0, padx=1, pady=4, sticky="ew")  # Sticky for full width
+        symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=3, sticky="ew")
+        function_entry.grid(row=self.current_row, column=0, padx=1, pady=3, sticky="ew")  # Sticky for full width
         #options_combobox.grid(row=self.current_row, column=0, padx=1, pady=1, sticky="ew")
         enable_checkbox.grid(row=self.current_row, column=0, padx=0, pady=1, sticky="ew")
         graph_button.grid(row=self.current_row, column=1, padx=0, pady=1, sticky="ew")
         delete_button.grid(row=self.current_row, column=2, padx=0, pady=1, sticky="ew")
 
         # Store the row entries for later access or deletion, including the IntVar for the checkbox
-        self.entries.append((symbol_entry, function_entry, options_combobox, delete_button,
-                             enable_checkbox, enable_row_var, graph_button))
+        self.entries.append((symbol_entry, function_entry, delete_button,
+                             enable_checkbox, enable_row_var, graph_button, enable_graphing))
 
         # Increment row counter
         self.current_row += 1
@@ -204,30 +209,19 @@ class EquationBuilder(ttk.LabelFrame):
         self.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-    def toggle_edit(self, enable_row, symbol_entry, function_entry):
-        """Enable or disable editing of the entries based on the checkbox state."""
-        if enable_row.get() == 1:
-            # Enable editing when checkbox is checked (default)
-            symbol_entry.config(state="normal")
-            function_entry.config(state="normal")
-        else:
-            # Disable editing when checkbox is unchecked
-            symbol_entry.config(state="disabled")
-            function_entry.config(state="disabled")
-
-    def delete_row(self, symbol_entry, function_entry, options_combobox, enable_checkbox, delete_button, graph_button):
+    def delete_row(self, symbol_entry, function_entry, enable_checkbox, delete_button, graph_button):
         """Delete the specific row."""
         if self.num_entries == 0:
             return 0
         # Remove widgets from the grid
         symbol_entry.grid_forget()
         function_entry.grid_forget()
-        options_combobox.grid_forget()
+        #options_combobox.grid_forget()
         enable_checkbox.grid_forget()  # Remove the checkbox widget
         delete_button.grid_forget()
         graph_button.grid_forget()
         # Remove the row from the list, excluding the IntVar (enable_row_var)
-        self.entries = [(s, f, o, d, e, ev, g) for s, f, o, d, e, ev, g in self.entries if s != symbol_entry]
+        self.entries = [(s, f, d, e, ev, g, gv) for s, f, d, e, ev, g, gv in self.entries if s != symbol_entry]
         self.num_entries -= 1
         self.update_scroll_region()
 
@@ -270,15 +264,16 @@ class EquationBuilder(ttk.LabelFrame):
 
         state_data = []
         for entry in self.entries:
-            symbol_entry, function_entry, options_combobox, delete_button, enable_box, enable_row_var, graph_button = entry
+            symbol_entry, function_entry, delete_button, enable_box, enable_row_var, graph_button, graph_var = entry
             symbol = symbol_entry.get()
             function = function_entry.get()
-            option = options_combobox.get()
-            enable = enable_row_var.get()  # Use .get() on the IntVar to get the checkbox state
+            #option = options_combobox.get()
+            enable = enable_row_var.get() # Use .get() on the IntVar to get the checkbox state
+            graph = graph_var.get()
             state_data.append({
                 "symbol": symbol,
                 "function": function,
-                "option": option,
+                "graph_var": graph,
                 "enable": enable
             })
         # Save the data to the selected file
@@ -296,27 +291,48 @@ class EquationBuilder(ttk.LabelFrame):
                 state_data = json.load(f)
             # Clear current entries
             for entry in self.entries:
-                symbol_entry, function_entry, options_combobox, delete_button, enable_checkbox, enable_row_var, graph_button = entry
-                self.delete_row(symbol_entry, function_entry, options_combobox, enable_checkbox, delete_button, graph_button)
+                symbol_entry, function_entry, delete_button, enable_checkbox, enable_row_var, graph_button, graph_var = entry
+                self.delete_row(symbol_entry, function_entry, enable_checkbox, delete_button, graph_button)
             # Add rows from loaded state
             for row in state_data:
                 self.add_row()
-                symbol_entry, function_entry, options_combobox, delete_button, enable_checkbox, enable_row_var, graph_button = self.entries[-1]
+                symbol_entry, function_entry, delete_button, enable_checkbox, enable_row_var, graph_button, graph_var = self.entries[-1]
                 symbol_entry.insert(0, row["symbol"])
                 function_entry.insert(0, row["function"])
-                options_combobox.set(row["option"])
+                #options_combobox.set(row["option"])
                 row_enable = row["enable"]
                 enable_row_var.set(row["enable"])
+                graph_var.set(row["graph_var"])
                 self.toggle_edit(enable_row_var, symbol_entry, function_entry)
+                self.graph_load_set(graph_button, graph_var)
         except FileNotFoundError:
             print("No saved state found.")
 
-    def graph_callback(self, symbol=None, expression=None, button=None):
-        if button.instate(['disabled']):
-            # If button is disabled, enable it
-            button.state(['!disabled'])
+    def toggle_edit(self, enable_row, symbol_entry, function_entry):
+        """Enable or disable editing of the entries based on the checkbox state."""
+        if enable_row.get() == 1:
+            # Enable editing when checkbox is checked (default)
+            symbol_entry.config(state="normal")
+            function_entry.config(state="normal")
         else:
-            # If button is enabled, disable it
-            button.state(['disabled'])
+            # Disable editing when checkbox is unchecked
+            symbol_entry.config(state="disabled")
+            function_entry.config(state="disabled")
+
+    def graph_load_set(self, graph_button, graph_var):
+        if graph_var.get() == 1:
+            graph_button.config(image=self.green_graph_icon_image)
+        else:
+            graph_button.config(image=self.graph_icon_image)
+
+    def graph_callback(self, symbol=None, expression=None, button=None, enable_graphing=None):
+        style = ttk.Style(button)
+        style.configure('Green.TButton', background='green', foreground='green')
+        if enable_graphing.get() == 1:
+            button.config(image=self.graph_icon_image)
+            enable_graphing.set(0)
+        else:
+            button.config(image=self.green_graph_icon_image)
+            enable_graphing.set(1)
 
 

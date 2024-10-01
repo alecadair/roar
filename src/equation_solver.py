@@ -8,16 +8,18 @@ import re
 
 
 class EquationSolver:
-    def __init__(self, data_frames=None):
+    def __init__(self, top_level_app, data_frames=None):
         self.equations = {}
         self.variables = {}
         self.constants = {}
         self.delimiters = r"[\+\-\*/\^\(\)\s,;.]+|\d+"
         self.corners = []
         self.data_frames = []
+        self.top_level_app = top_level_app
         self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
                             'va', 'vds', 'vdsat', 'vgs', 'vth', 'pi')
+        self.corners = []
         if data_frames:
             for df in data_frames:
                 self.data_frames.append(df)
@@ -49,9 +51,10 @@ class EquationSolver:
         if name in self.variables:
             del self.variables[name]
 
-    def create_matrix_from_lookup(self, var_name):
+    def create_matrix_from_lookup(self, var_name, corner=None):
         column_vectors = []
-        for df in self.data_frames:
+        for corner in self.corners:
+            df = corner.df
             #df = corner.df
             if var_name in df.columns:
                 column_vectors.append(df[var_name].values)
@@ -71,13 +74,16 @@ class EquationSolver:
         except TypeError:
             return False
 
-    def evaluate_equations(self):
+    def evaluate_equations(self, symbols_to_add):
         dependency_graph = self.build_dependency_graph()
         if self.has_cycle(dependency_graph):
             print("Error: The equations have cyclical dependencies.")
             return None
         # Topological sort
         sorted_equations = self.topological_sort(dependency_graph)
+        symbols_to_add_string = []
+        for sym in symbols_to_add:
+            symbols_to_add_string.append(sym.get())
         if sorted_equations is None:
             return None
         sorted_equations.reverse()  # Process from the bottom up
@@ -93,7 +99,15 @@ class EquationSolver:
                 continue
             result = self.evaluate_equation(equation_to_evaluate, results)
             if result is not None:
+                if equation in symbols_to_add_string:
+                    corner_count = 0
+                    for corner in self.corners:
+                        result_column = result[:, corner_count]
+                        corner.df[equation] = result_column
+                    #if equation not in self.top_level_app.lookups:
+                    #    self.top_level_app.lookups = self.top_level_app.lookups + (equation,)
                 results[equation] = result
+                print("add to data frames")
             else:
                 return None
         return results
@@ -107,25 +121,6 @@ class EquationSolver:
             evaluated_equation = func(*[results.get(str(var), var) for var in symbolic_equation.free_symbols])
 
             return evaluated_equation
-        except Exception as e:
-            print("Error:", e)
-            return None
-
-    def evaluate_equation1(self, symbolic_equation, results):
-        try:
-            # Convert NumPy arrays in results to lists
-            results = {key: value.tolist() if isinstance(value, np.ndarray) else value for key, value in results.items()}
-            evaluated_equation = symbolic_equation.subs(results)
-            # Check for any remaining free symbols that need to be substituted
-            for var in evaluated_equation.free_symbols:
-                var_name = str(var)
-                if var_name not in results:
-                    if var_name in self.lookup_vals:
-                        raise ValueError(f"Variable {var_name} needs to be pulled from lookup data.")
-                    else:
-                        raise ValueError(f"Variable {var_name} not found.")
-            result = np.array(evaluated_equation.evalf())
-            return result
         except Exception as e:
             print("Error:", e)
             return None
