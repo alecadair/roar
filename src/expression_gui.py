@@ -20,274 +20,6 @@ ROAR_CHARACTERIZATION = os.environ["ROAR_CHARACTERIZATION"]
 ROAR_DESIGN_SCRIPTS = os.environ["ROAR_DESIGN_SCRIPTS"]
 
 
-class CIDEquationSolver:
-    def __init__(self, lookup_vals, graph_controller, test=False):
-        self.equations = {}
-        self.equation_strs = {}
-        self.variables = {}
-        self.lookup_vals = lookup_vals
-        self.graph_controller = graph_controller
-        self.graph_controller_notebook = self.graph_controller.master.master
-        self.data_frames = []
-        self.corners = []
-        self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
-                                         'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
-                                         'va', 'vds', 'vdsat', 'vgs', 'vth')
-
-        if test:
-            self.graph_controller_notebook.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130", pdk_name="sky130")
-            test_corner = self.graph_controller_notebook.tech_dict["sky130"]["n_01v8"]["150"]["corners"]["nfettt-25"]
-            self.corners.append(test_corner)
-            print("Testing Equation Solver")
-
-    def add_equation(self, name, equation_or_value):
-        if isinstance(equation_or_value, np.ndarray):
-            self.variables[name] = equation_or_value
-        else:
-            equation_or_value = equation_or_value.replace("+", " + ")
-            equation_or_value = equation_or_value.replace("-", " - ")
-            equation_or_value = equation_or_value.replace("*", " * ")
-            equation_or_value = equation_or_value.replace("/", " / ")
-            equation_or_value = equation_or_value.replace("(", " ( ")
-            equation_or_value = equation_or_value.replace(")", " ) ")
-            equation = equation_or_value
-            try:
-                # Preprocess the equation to handle scientific notation
-                if 'e' in equation:
-                    # Split the expression at 'e' and reconstruct it with '*10**' notation
-                    parts = equation.split('e')
-                    if len(parts) == 2:
-                        equation = f"({parts[0]}*10**{parts[1]})"
-                # Now, sympify the equation
-                sympified_equation = sympify(equation)
-                self.equations[name] = sympified_equation
-                self.equation_strs[name] = str(sympified_equation)
-
-            except Exception as e:
-                print(f"Error adding equation {name}: {e}")
-
-    @staticmethod
-    def check_if_var_is_lookup(var_name, corner):
-        corner_df = corner.df
-        corner_keys = corner_df.keys()
-        for key in corner_keys:
-            if key == var_name:
-                return True
-        return False
-
-    def check_if_lookup(self, var_name):
-        for corner in self.corners:
-            corner_df = corner.df
-            is_lookup = self.check_if_var_is_lookup(var_name, corner)
-            if is_lookup:
-                return True
-        return False
-
-    def remove_equation(self, name):
-        if name in self.equations:
-            del self.equations[name]
-
-    def modify_equation(self, name, new_equation):
-        if name in self.equations:
-            self.equations[name] = new_equation
-
-    def add_variable(self, name, value):
-        self.variables[name] = value
-
-    def remove_variable(self, name):
-        if name in self.variables:
-            del self.variables[name]
-
-    def create_matrix_from_lookup(self, var_name):
-        column_vectors = []
-        for corner in self.corners:
-            df = corner.df
-            if var_name in df.columns:
-                column_vectors.append(df[var_name].values)
-        # Stack the column vectors horizontally to form a 2D matrix
-        matrix = np.column_stack(column_vectors)
-        return matrix
-
-
-    def evaluate_equations1(self):
-        dependency_graph = self.build_dependency_graph()
-        if self.has_cycle(dependency_graph):
-            print("Error: The equations have cyclical dependencies.")
-            return None
-
-        # Topological sort
-        sorted_equations = self.topological_sort(dependency_graph)
-        sorted_equations.reverse()
-        results = {}
-        for equation in sorted_equations:
-            if equation not in self.equations:
-                self.equations[equation] = "lookup"
-        for equation in sorted_equations:
-            #eq = None
-            eq = equation
-            #if equation in self.variables.keys():
-            #    eq = self.variables[equation]
-            #    result = self.variables[equation]
-            #else:
-            #    eq_is_lookup = self.check_if_lookup(equation)
-            #    if eq_is_lookup:
-            #        eq = self.create_matrix_from_lookup(equation)
-            #        self.add_variable(equation, eq)
-            #    else:
-            #        eq = self.equations[equation]
-            result = self.evaluate_equation(eq, results)
-            if result is not None:
-                results[equation] = result
-            else:
-                return None
-
-        return results
-
-    def evaluate_equation1(self, symbolic_equation, results):
-        try:
-            symbolic_equation = ''.join(symbolic_equation.split())  # Remove white space characters
-            #for symbol in symbolic_equation:
-            #    if symbol in self.lookup_vals:
-            #        self.get_vector_for_variable(symbol)
-            #    print(symbol)
-            variables_used = set(symbol for symbol in symbolic_equation if symbol.isalpha())
-            variables_dict = {**self.variables, **results}
-            print("Variables:", variables_dict)
-            result = eval(symbolic_equation, {}, variables_dict)
-            return result
-        except Exception as e:
-            print("Error:", e)
-            return None
-
-    def evaluate_equations(self):
-        dependency_graph = self.build_dependency_graph()
-        if self.has_cycle(dependency_graph):
-            print("Error: The equations have cyclical dependencies.")
-            return None
-
-        sorted_equations = self.topological_sort(dependency_graph)
-        sorted_equations.reverse()
-        results = {}
-
-        for equation_name in sorted_equations:
-            equation = self.equations[equation_name]
-            result = self.evaluate_equation(equation, results)
-            if result is not None:
-                results[equation_name] = result
-            else:
-                return None
-        return results
-
-    def evaluate_equation(self, equation, results):
-        try:
-            variables_dict = {**self.variables, **results}
-            evaluated_equation = equation.subs(variables_dict)
-
-            for var in equation.free_symbols:
-                var_name = str(var)
-                if var_name not in variables_dict:
-                    if var_name in self.numpy_arrays:
-                        evaluated_equation = evaluated_equation.subs(symbols(var_name), self.numpy_arrays[var_name])
-                    elif var_name in self.lookup_data:
-                        value = self.lookup_data[var_name]
-                        if isinstance(value, np.ndarray):
-                            self.numpy_arrays[var_name] = value
-                        else:
-                            self.variables[var_name] = value
-                        evaluated_equation = evaluated_equation.subs(symbols(var_name), value)
-                    else:
-                        raise ValueError(f"Variable {var_name} not found in variables or lookup data.")
-
-            result = np.array(evaluated_equation.evalf())
-            return result
-        except Exception as e:
-            print("Error:", e)
-            return None
-
-    def get_vector_for_variable(self, variable):
-        print("variable found")
-
-    def build_dependency_graph(self):
-        dependency_graph = defaultdict(set)
-        #for name, equation in self.equations.items():<ss<ss
-        for name, equation in self.equation_strs.items():
-            #variables = set(symbol for symbol in equation.split() if symbol.isalpha())
-            equation_delimiters = r"[\+\-\*/\^\(\)\s]"
-            variables = set(symbol for symbol in re.split(equation_delimiters, equation) if symbol)
-            for var in variables:
-                if var != name and not var.isdigit() and var != "pi":
-                    dependency_graph[name].add(var)
-        return dependency_graph
-
-    def has_cycle(self, graph):
-        visited = set()
-        stack = set()
-
-        def dfs(node):
-            if node in stack:
-                return True
-            if node in visited:
-                return False
-            visited.add(node)
-            stack.add(node)
-            for neighbor in list(graph[node]):  # Make a copy of the neighbors to avoid modifying the graph
-                if dfs(neighbor):
-                    return True
-            stack.remove(node)
-            return False
-
-        for node in list(graph):  # Make a copy of the nodes to avoid modifying the graph
-            if dfs(node):
-                return True
-        return False
-
-    def topological_sort(self, graph):
-        indegree = {node: 0 for node in graph}
-        for node in graph:
-            for neighbor in graph[node]:
-                indegree[neighbor] += 1
-        queue = deque(node for node in graph if indegree[node] == 0)
-        result = []
-        while queue:
-            node = queue.popleft()
-            result.append(node)
-            for neighbor in graph[node]:
-                indegree[neighbor] -= 1
-                if indegree[neighbor] == 0:
-                    queue.append(neighbor)
-            # Remove node from the graph to prevent revisiting it
-            del graph[node]
-        # Check if there are any remaining nodes in the graph (cycles)
-        if graph:
-            print("Error: The equations have cyclical dependencies.")
-            return None
-
-        return result
-
-"""
-
-# Example usage:
-solver = EquationSolver()
-e = np.array([2, 2, 2])
-# Add equations
-solver.add_equation('a', '( b + id ) ** 2')
-solver.add_equation('b', '2 * gm')
-solver.add_equation('id', 'gm-1')
-solver.add_equation('gm', '3*e')
-solver.add_equation('e', e)
-
-# Add variables
-#solver.add_variable('e', np.array([1, 2, 3]))
-
-# Evaluate equations
-results = solver.evaluate_equations()
-if results is not None:
-    for name, result in results.items():
-        print(f'{name}: {result}')
-
-
-"""
-
 class CIDGraphChecks(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -689,17 +421,19 @@ class CIDOptimizerSettings(ttk.Frame):
         self_optimizer_settings = self_control_notebook.master
         self_graph_controller = self_optimizer_settings.master
         #solver = CIDEquationSolver(lookup_vals=None, graph_controller=self_graph_controller, test=False)
-        solver = EquationSolver()
+        solver = EquationSolver(top_level_app=self.top_level_app)
         corners_to_eval = self.get_selected_corners()
         df_array = []
+        symbols_to_add = []
         for corner in corners_to_eval:
             df = corner.df
             df_array.append(df)
-        solver.data_frames = df_array
+        solver.corners = corners_to_eval
         default_frame = None
         for entry in self.space_craft.entries:
-            symbol_entry, function_entry, options_combobox, delete_button, enable_box, enable_row_var, graph_button = entry
+            symbol_entry, function_entry, delete_button, enable_box, enable_row_var, graph_button, graph_var = entry
             expr_enable_var = enable_row_var.get()
+            plot_enable = graph_var.get()
             if expr_enable_var == False:
                 continue
             variable_name = symbol_entry.get()
@@ -710,13 +444,23 @@ class CIDOptimizerSettings(ttk.Frame):
             if var_white_space == "" or expression_white_space == "":
                 continue
             solver.add_equation(variable_name, expression)
+            if plot_enable:
+                symbols_to_add.append(symbol_entry)
+                if symbol_entry not in self.top_level_app.lookups:
+                    self.top_level_app.lookups = self.top_level_app.lookups + (symbol_entry.get(),)
             print("processed expression " + variable_name)
-        results = solver.evaluate_equations()
+        results = solver.evaluate_equations(symbols_to_add)
+        self.x_dropdown["values"] = self.top_level_app.lookups
+        #self.x_dropdown.current(self.x_dropdown.get())
+
+        self.y_dropdown["values"] = self.top_level_app.lookups
+        #self.y_dropdown.current(self.y_dropdown.get())
+
         print("")
         print(results)
 
     def update_graphs(self):
-        print("TODO")
+        self.top_level_app.update_graph_from_tech_browser()
 
     def open_eq_window(self):
         builder_window = EquationBuilderWindow(master=self, builder_label=self.space_craft)
