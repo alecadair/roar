@@ -325,16 +325,16 @@ class CIDExpressionWidget(ttk.LabelFrame):
         #self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
 
-class CIDOptimizerSettings(ttk.Frame):
+class CIDOptimizerSettings(ttk.PanedWindow):
     def __init__(self, master, graph_controller, tech_browser=None, top_level_app=None, test=False):
-        super().__init__(master)
+        super().__init__(master, orient=tk.VERTICAL)
         self.master = master
         self.top_level_app = top_level_app
         self.graph_controller = graph_controller
         self.tech_browser = tech_browser
         # Top frame for buttons and dropdowns
-        self.drop_down_frame = ttk.Frame(self)
-        self.drop_down_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)  # Ensures it stays at the top and uses horizontal space
+        #self.drop_down_frame = ttk.Frame(self)
+        #self.drop_down_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)  # Ensures it stays at the top and uses horizontal space
 
         self.expression_editor_frame = ttk.Frame(self)
         self.expression_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Allows dynamic resizing
@@ -343,8 +343,7 @@ class CIDOptimizerSettings(ttk.Frame):
         self.constraint_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Similar to expression editor
 
 
-        self.eval_update_frame = ttk.Frame(self)
-        self.eval_update_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)
+        self.eval_update_frame = ttk.Frame(self.constraint_editor_frame)
 
         # Expression editor frame
 
@@ -355,55 +354,41 @@ class CIDOptimizerSettings(ttk.Frame):
         self.button_width = 10
         self.bigger_button_width = 30
 
-        #self.x_label = ttk.Label(self.drop_down_frame, text="X:")
-        #self.x_label.pack(side=tk.LEFT, padx=5, pady=5)
-
-        #self.x_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
-        #self.x_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
-        #                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
-        #                             'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
-
-        #self.x_dropdown["values"] = self.top_level_app.lookups
-        #self.x_dropdown.current(21)
-        #self.x_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
-
-        #self.y_label = ttk.Label(self.drop_down_frame, text="Y:")
-        #self.y_label.pack(side=tk.LEFT, padx=5, pady=2)
-
-        #self.y_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
-        #self.y_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
-        #                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
-        #                             'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
-        #self.y_dropdown["values"] = self.top_level_app.lookups
-        #self.y_dropdown.current(8)
-        #self.y_dropdown.pack(side=tk.LEFT, padx=5, pady=2)
-
         self.eval_button = ttk.Button(self.eval_update_frame, width=self.bigger_button_width, text="Evaluate",
                                       command=self.evaluate_expressions)
         self.eval_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
         self.space_craft_button = ttk.Button(self.eval_update_frame, width=self.bigger_button_width, text="Open SpaceCraft",
                                              command=self.open_eq_window)
-        self.space_craft_button.pack(side=tk.RIGHT,padx=5, fill=tk.X)
+        self.space_craft_button.pack(side=tk.RIGHT, padx=5, fill=tk.X)
         #self.update_button = ttk.Button(self.drop_down_frame, width=self.bigger_button_width, text="Update",
         #                                command=self.update_graphs)
         #self.update_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
 
-        self.space_craft = EquationBuilder(self.expression_editor_frame)
+        self.space_craft = EquationBuilder(self.expression_editor_frame,top_level_app=self.top_level_app)
         self.space_craft.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
         self.space_craft_label = self.space_craft.get_builder()
         self.space_craft_label.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
-        self.space_craft.update_scroll_region()
+        #self.space_craft.update_scroll_region()
+
+        self.constraint_editor = ConstraintBuilder(self.constraint_editor_frame)
+        self.constraint_editor.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
+        self.constraint_editor.update()
+        #self.constraint_editor.update_scroll_region()
 
         self.logo_path = ROAR_HOME + "/images/png/ROAR_LOGO.png"
         self.logo_image = Image.open(self.logo_path)
         self.logo_width, self.logo_height = self.logo_image.size
-        self.new_width = int(self.logo_width * 0.75)
+        self.new_width = int(self.logo_width * 0.8)
         self.new_height = int(self.logo_height * 0.75)
         self.resized_image = self.logo_image.resize((self.new_width, self.new_height), Image.Resampling.LANCZOS)
         self.photo = ImageTk.PhotoImage(self.resized_image)
         #.logo_image = tk.PhotoImage(file=self.logo_path)
-        self.logo_label = ttk.Label(self, image=self.photo)
-        self.logo_label.pack(side=tk.BOTTOM, padx=1, pady=1)
+        #self.logo_label = ttk.Label(self.constraint_editor_frame, image=self.photo)
+        #self.logo_label.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=False, padx=1, pady=5)
+
+        self.eval_update_frame.pack(side=tk.BOTTOM, padx=1, pady=5, fill=tk.X, expand=True)
+        self.add(self.expression_editor_frame)
+        self.add(self.constraint_editor_frame)
         #self.top_level_app.update_idletasks()
 
         #Add expression and constraint editor widgets
@@ -421,7 +406,6 @@ class CIDOptimizerSettings(ttk.Frame):
         print("Evaluating Expressions")
         self_control_notebook = self.master
         self_optimizer_settings = self_control_notebook.master
-        self_graph_controller = self_optimizer_settings.master
         #solver = CIDEquationSolver(lookup_vals=None, graph_controller=self_graph_controller, test=False)
         solver = EquationSolver(top_level_app=self.top_level_app)
         corners_to_eval = self.get_selected_corners()
