@@ -9,6 +9,7 @@ from tkinter import filedialog
 from tkinter import simpledialog
 import sys
 import os
+import signal
 
 ROAR_HOME = os.environ["ROAR_HOME"]
 ROAR_LIB = os.environ["ROAR_LIB"]
@@ -101,6 +102,98 @@ class CIDPythonIDE(ttk.PanedWindow):
 
     def close(self):
         print("Closing")
+
+class CIDTechBrowser2(ttk.Frame):
+    def __init__(self, parent, top_level_app):
+        super().__init__(parent)
+        self.parent = parent
+        self.top_level_app = top_level_app
+        self.graphing_widget = None
+        self.columnconfigure(index=0, weight=1)
+        self.rowconfigure(index=0, weight=3)
+        self.columnconfigure(index=1, weight=8)
+        self.rowconfigure(index=1, weight=8)
+        self.columnconfigure(index=2, weight=1)
+        self.rowconfigure(index=2, weight=1)
+        self.scrollbar = ttk.Scrollbar(self)
+        #self.graph_controller = graph_controller
+        self.scrollbar.pack(side="right", fill="y")
+        self.tree = CheckboxTreeview(
+            self,
+            #self.pane_1,
+            yscrollcommand=self.scrollbar.set
+        )
+
+        self.tree_item_counter = 0
+        self.tree.pack(expand=True, fill=tk.BOTH, side=tk.TOP)
+        self.tree.insert('', str(self.tree_item_counter), 'PDK', text='PDK')
+        self.tree_item_counter += 1
+        self.tree.bind('<Button 1>', self.select_item)
+        self.tech_dict = {}
+
+    def select_item(self, event):
+        self.tree._box_click(event)
+        #clicked_items = self.tree.get_checked()
+        self.parent.update_graph_from_tech_browser()
+
+    def set_graphing_widget(self, graphing_widget):
+        self.graphing_widget = graphing_widget
+
+    def add_tech_luts(self, dirname=None, pdk_name=None):
+        lut_dir = ""
+        pdk = ""
+        if dirname == None:
+            lut_dir = filedialog.askdirectory()
+            pdk = simpledialog.askstring("Technology Process Name", "Enter name of process i.e. sky130, process_soi_22")
+        else:
+            lut_dir = dirname
+            pdk = pdk_name
+        #self.add_tech_from_dir(dir=lut_dir, pdk_name=pdk)
+        #pdk_dict = self.tech_dict[pdk]
+        self.tree.insert('PDK', str(self.tree_item_counter), pdk, text=pdk)
+        #tech_dict = self.graph_controller.graph_control_notebook.tech_dict
+        pdk_dict = self.top_level_app.tech_dict[pdk_name]
+        delim = ">"
+        for model in pdk_dict:
+            model_dict = pdk_dict[model]
+            item_str = pdk + delim + model
+            self.tree.insert(pdk, str(self.tree_item_counter), item_str, text=model)
+            self.tree_item_counter += 1
+            for length in model_dict:
+                device = model_dict[length]["device"]
+                item_str_i = pdk + delim + model + delim + length
+                self.tree.insert(item_str, str(self.tree_item_counter), item_str_i, text=length)
+                self.tree_item_counter += 1
+                for corner in device.corners:
+                    item_str_j = pdk + delim + model + delim + length + delim + corner.corner_name
+                    self.tree.insert(item_str_i, str(self.tree_item_counter), item_str_j, text=corner.corner_name)
+                    self.tree_item_counter += 1
+        return(0)
+
+    def add_tech_from_dir(self, dir, pdk_name):
+        self.tech_dict[pdk_name] = {}
+        for filename in os.listdir(dir):
+            f = os.path.join(dir,filename)
+            if os.path.isdir(f):
+                model_name = filename
+                self.create_devices_from_model_dir(pdk_name=pdk_name, model_name=model_name, model_dir=f)
+        self.add_tech_luts(dirname=dir, pdk_name=pdk_name)
+        return(self.tech_dict)
+
+    def create_devices_from_model_dir(self, pdk_name, model_name, model_dir):
+        self.tech_dict[pdk_name][model_name] = {}
+        for filename in os.listdir(model_dir):
+            length_dir = os.path.join(model_dir, filename)
+            tokens = filename.split('_')
+            length = tokens[-1]
+            device = CIDDevice(device_name=model_name, vdd=0.0, lut_directory=length_dir, corner_list=None)
+            self.tech_dict[pdk_name][model_name][length] = {}
+            self.tech_dict[pdk_name][model_name][length]["device"] = device
+            self.tech_dict[pdk_name][model_name][length]["corners"] = {}
+            for corner in device.corners:
+                corner_name = corner.corner_name
+                self.tech_dict[pdk_name][model_name][length]["corners"][corner_name] = corner
+        return(self.tech_dict)
 
 
 class CIDTechBrowser(ttk.Frame):
@@ -216,16 +309,71 @@ class CIDNavigationToolbar(NavigationToolbar2Tk):
         self.expand_button.pack(side=tk.LEFT, padx=5, pady=5)
 
 
-
-
     def on_custom_button_click(self):
         print("Custom button clicked")
 
+
+class CIDLookupWindow(ttk.Frame):
+    def __init__(self, parent, expand_callback, top_level_app):
+        super().__init__(parent)
+        self.expand_callback = expand_callback
+        self.top_level_app = top_level_app
+        self.top_level_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
+        self.top_level_pane.pack(fill=tk.BOTH, expand=True)
+        self.tech_browser = CIDTechBrowser2(self, top_level_app=self.top_level_app)
+        self.graphing_window = CIDGraphingWindow(self, expand_callback=expand_callback, lookup_window=self,
+                                                        top_level_app=self.top_level_app)
+        self.top_level_pane.add(self.tech_browser, weight=1)
+        self.top_level_pane.add(self.graphing_window, weight=4)
+        self.toolbar = self.graphing_window.toolbar
+        self.default_sashpos = 200
+        self.after(2500, lambda: self.top_level_pane.sashpos(0, 0))
+
+
+    def update_graph_from_tech_browser(self, equation_eval=None):
+        models_selected = self.tech_browser.tree.get_checked()
+        self.graphing_window.ax.cla()
+        self.graphing_window.canvas.draw()
+        color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
+                      'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
+                      'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
+        color_index = 0
+
+        for model in models_selected:
+            model_tokens = model.split(">")
+            pdk = model_tokens[0]
+            model_name = model_tokens[1]
+            length = model_tokens[2]
+            corner = model_tokens[3]
+            cid_corner = self.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
+            if equation_eval != None:
+                print("TODO")
+                return 0
+            #cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
+            param1 = self.graphing_window.x_dropdown.get()
+            param2 = self.graphing_window.y_dropdown.get()
+            legend_str = pdk + " " + model_name + " " + length + " " + corner
+            color = color_list[color_index]
+            #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+            #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
+            cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
+            self.graphing_window.ax.grid(True, which="both")
+
+            color_index += 1
+            if color_index >= len(color_list):
+                color_index = 0
+            #self.graphing_window.canvas.draw()
+            self.graphing_window.canvas.draw()
+
+    def add_tech_luts(self, dirname, pdk_name):
+        self.tech_browser.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
+
 class CIDGraphingWindow(ttk.Frame):
-    def __init__(self, parent, expand_callback, graph_controller, top_level_app):
+    def __init__(self, parent, expand_callback, lookup_window, top_level_app):
         super().__init__(parent)
         self.top_level_app = top_level_app
-        self.graph_controller = graph_controller
+        self.lookup_window = lookup_window
         self.update_button_width = 10
         self.spinbox_width = 5
         self.padx = 2
@@ -235,6 +383,7 @@ class CIDGraphingWindow(ttk.Frame):
         self.lookup_label_val.set(str(self.lookup_val))
         self.graphing_widget = None
         self.expand_callback = expand_callback
+        self.browser_state = "contract"
         self.fig, self.ax = plt.subplots()
         self.t = np.arange(0, 3, .01)
         self.ax.plot(self.t, 2 * np.sin(2 * np.pi * self.t))
@@ -242,6 +391,9 @@ class CIDGraphingWindow(ttk.Frame):
         self.toolbar = CIDNavigationToolbar(self.canvas, self, pack_toolbar=False, expand_callback=self.expand_callback,
                                             graph_settings_callback=self.settings_callback, top_level_app=self.top_level_app)
         self.custom_frame = ttk.Frame(self)
+        self.toggle_browser_button = ttk.Button(self.custom_frame, text=">", width=3, command=self.toggle_browser)
+        self.toggle_browser_button.pack(side=tk.LEFT, padx=3)
+
         self.x_label = ttk.Label(self.custom_frame, text="X:")
         self.x_label.pack(side=tk.LEFT, padx=self.padx, pady=self.pady)
 
@@ -374,18 +526,28 @@ class CIDGraphingWindow(ttk.Frame):
             #self.graphing_window.canvas.draw()
             self.canvas.draw()
 
+    def toggle_browser(self):
+        if self.browser_state == "expand":
+            self.browser_state = "contract"
+            self.toggle_browser_button.config(text=">")
+            self.lookup_window.top_level_pane.sashpos(0, 0)
+        else:
+            self.browser_state = "expand"
+            self.toggle_browser_button.config(text="<")
+            self.lookup_window.top_level_pane.sashpos(0, self.lookup_window.default_sashpos)
 
 # Graph Controller is the left pane of the top level application
 class CIDGraphController(ttk.PanedWindow):
     def __init__(self, parent, graph_control_notebook, top_level_app, test=False):
         super().__init__(parent, orient=tk.VERTICAL)
-        self.tech_browser = CIDTechBrowser(self, graph_controller=self, theme=theme)
+        #self.tech_browser = CIDTechBrowser(self, graph_controller=self, theme=theme)
+        self.tech_browser = None
         self.top_level_app = top_level_app
         self.graph_control_notebook = graph_control_notebook
         self.graph_settings = CIDOptimizerSettings(self, graph_controller=self, tech_browser=self.tech_browser, top_level_app=self.top_level_app, test=test)
         self.graph_settings.pack(fill=tk.BOTH, expand=True)
         self.graph_settings.rowconfigure(0, weight=1)
-        self.add(self.tech_browser)
+        #self.add(self.tech_browser)
         self.add(self.graph_settings)
         self.graphing_widget = None
         #self.pack(fill=tk.BOTH, expand=True)
@@ -408,17 +570,21 @@ class CIDApp(ThemedTk):
                                      'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
                                      'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
 
+        #self.tech_dict contains all lookup data
+        self.tech_dict = {}
         self.top_level_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         self.top_level_pane.pack(fill=tk.BOTH, expand=True)
 
         # Left Pane
-        self.left_pane = CIDGraphControlNotebook(self.top_level_pane, top_level_app=self, test=test, width=450)
-        self.graph_control_notebook = self.left_pane
+        #self.left_pane = CIDGraphControlNotebook(self.top_level_pane, top_level_app=self, test=test, width=450)
+        self.left_pane = CIDGraphController(self.top_level_pane, graph_control_notebook=None, top_level_app=self, test=False)
+        self.graph_controller = self.left_pane
+        #self.graph_control_notebook = self.left_pane
 
         # Center Pane
         self.center_pane = ttk.PanedWindow(self.top_level_pane, orient=tk.VERTICAL)
-        self.grid_button_widget = CIDGraphGrid(self.center_pane, graph_controllers=self.graph_control_notebook.graph_controllers, top_level_app=self)
-        self.center_pane.add(self.grid_button_widget)
+        self.graph_grid = CIDGraphGrid(self.center_pane, graph_controller=self.graph_controller, top_level_app=self)
+        self.center_pane.add(self.graph_grid)
 
         # Right Pane
         self.right_pane = CIDPythonIDE(self.top_level_pane)
@@ -438,14 +604,14 @@ class CIDApp(ThemedTk):
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
         #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
-        self.left_pane.add_tech_luts(dirname=sky130_luts, pdk_name="sky130")
+        #self.left_pane.add_tech_luts(dirname=sky130_luts, pdk_name="sky130")
+        self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
+        #self.graph_grid.add_tech_luts(dirname=sky130_luts, pdk_name="sky130")
         # Add a tiny button to mimic being on the handle of the sash
         #self.toggle_button = ttk.Button(self, text="<<", command=self.toggle_right_pane, width=5)
         #self.toggle_button.place(x=405, y=20)  # Place button near the sash handle (adjust as necessary)
 
-        # Track the state of the right pane
-        self.is_right_pane_collapsed = False
-
+        # Track the state of the right pan
         print("Window Initialized")
 
         print("Window Initialized")
@@ -475,6 +641,13 @@ class CIDApp(ThemedTk):
         #self.paned_window.add(self.bottom_frame)
 
         #self.create_table()
+
+
+    def on_closing(self):
+        self.destroy()
+
+    def signal_handler(self, sig, frame):
+        self.on_closing()
 
     def toggle_right_pane(self):
         """Toggle the visibility of the right pane."""
@@ -556,15 +729,42 @@ class CIDApp(ThemedTk):
         lookup_name = (lookup_name,)
         self.lookups = self.lookups + lookup_name
 
+    def add_tech_luts(self, dir, pdk_name):
+        self.tech_dict[pdk_name] = {}
+        for filename in os.listdir(dir):
+            f = os.path.join(dir, filename)
+            if os.path.isdir(f):
+                model_name = filename
+                self.create_devices_from_model_dir(pdk_name=pdk_name, model_name=model_name, model_dir=f)
+        self.graph_grid.add_tech_luts(dirname=dir, pdk_name=pdk_name)
+        return (self.tech_dict)
+
+
+    def create_devices_from_model_dir(self, pdk_name, model_name, model_dir):
+        self.tech_dict[pdk_name][model_name] = {}
+        for filename in os.listdir(model_dir):
+            length_dir = os.path.join(model_dir, filename)
+            tokens = filename.split('_')
+            length = tokens[-1]
+            device = CIDDevice(device_name=model_name, vdd=0.0, lut_directory=length_dir, corner_list=None)
+            self.tech_dict[pdk_name][model_name][length] = {}
+            self.tech_dict[pdk_name][model_name][length]["device"] = device
+            self.tech_dict[pdk_name][model_name][length]["corners"] = {}
+            for corner in device.corners:
+                corner_name = corner.corner_name
+                self.tech_dict[pdk_name][model_name][length]["corners"][corner_name] = corner
+        return(self.tech_dict)
+
 
 class CIDGraphGrid(ttk.Frame):
-    def __init__(self, master, graph_controllers, top_level_app, **kwargs):
+    def __init__(self, master, graph_controller, top_level_app, **kwargs):
         super().__init__(master, **kwargs)
 
         # Initialize the grid
         self.graphing_windows = []
         self.graph_positions = []
-        self.graph_controllers = graph_controllers
+        self.lookup_windows = []
+        self.graph_controller = graph_controller
         self.top_level_app = top_level_app
 
         graph_counter = 0
@@ -572,12 +772,16 @@ class CIDGraphGrid(ttk.Frame):
             self.grid_rowconfigure(i, weight=1)
             for j in range(2):
                 self.grid_columnconfigure(j, weight=1)
-                graph = CIDGraphingWindow(self, expand_callback=lambda x=i, y=j: self.toggle_expand(x, y),
-                                          graph_controller=self.graph_controllers[graph_counter], top_level_app=self.top_level_app)
-                graph_controllers[graph_counter].set_graphing_widget(graph)
+                #graph = CIDGraphingWindow(self, expand_callback=lambda x=i, y=j: self.toggle_expand(x, y),
+                #                          graph_controller=self.graph_controllers[graph_counter], top_level_app=self.top_level_app)
+                graph = CIDLookupWindow(self, expand_callback=lambda x=i, y=j: self.toggle_expand(x, y), top_level_app=self.top_level_app)
+                self.lookup_windows.append(graph)
+                #graph_controller.set_graphing_widget(graph)
                 graph.grid(row=i,column=j,sticky="nsew")
                 self.graphing_windows.append(graph)
                 self.graph_positions.append((i, j))
+                graph.top_level_pane.sashpos(0, 0)
+
                 graph_counter = graph_counter + 1
         self.expanded = False
         self.expanded_window = None
@@ -598,16 +802,10 @@ class CIDGraphGrid(ttk.Frame):
                 win.grid(row=original_row, column=original_column, sticky="nsew")
             self.expanded = False
 
-
-
-class CIDGraphingGrid(tk.Tk):
-    def __init__(self, top_level_app):
-        super().__init__()
-        self.title("Grid Button Widget")
-        self.geometry("1000x1000")
-        self.top_level_app = top_level_app
-        self.grid_button_widget = CIDGraphGrid(self, top_level_app=top_level_app)
-        self.grid_button_widget.pack(fill=tk.BOTH, expand=True)
+    def add_tech_luts(self, dirname, pdk_name):
+        #self.add_tech_from_dir(dir=dirname, pdk_name=pdk_name)
+        for lookup_window in self.lookup_windows:
+            lookup_window.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
 
 
 # Graft Control Notebook is the top left widget of the top level application
@@ -803,6 +1001,11 @@ if __name__ == "__main__":
         theme = "arc"
         app = CIDApp(theme, test=False)
         app.title("ROAR")
+        app.protocol("WM_DELETE_WINDOW", app.on_closing)
+        signal.signal(signal.SIGINT, app.signal_handler)
+        signal.signal(signal.SIGTERM, app.signal_handler)
+        signal.signal(signal.SIGQUIT, app.signal_handler)
+
         # Load the icon image using PIL and set it to the Toplevel window
         icon_path = ROAR_HOME + "/images/png/ROAR_ICON.png"
         icon_image = Image.open(icon_path)
@@ -857,6 +1060,8 @@ if __name__ == "__main__":
         help_menu.add_command(label="About", command=on_help_about)
         menu_bar.add_cascade(label="Help", menu=help_menu)
         app.config(menu=menu_bar)
+        app.left_pane.update()
+        app.left_pane.update_idletasks()
         # Configure the style to use the theme
         #style.theme_use(theme)  # You can choose different themes here
         #ttk.Style().theme_use('clam')

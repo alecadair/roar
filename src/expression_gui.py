@@ -336,42 +336,47 @@ class CIDOptimizerSettings(ttk.Frame):
         self.drop_down_frame = ttk.Frame(self)
         self.drop_down_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)  # Ensures it stays at the top and uses horizontal space
 
+        self.expression_editor_frame = ttk.Frame(self)
+        self.expression_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Allows dynamic resizing
+
+        self.constraint_editor_frame = ttk.Frame(self)
+        self.constraint_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Similar to expression editor
+
+
         self.eval_update_frame = ttk.Frame(self)
         self.eval_update_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)
 
         # Expression editor frame
-        self.expression_editor_frame = ttk.Frame(self)
-        self.expression_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Allows dynamic resizing
+
 
         # Constraint editor frame
-        self.constraint_editor_frame = ttk.Frame(self)
-        self.constraint_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Similar to expression editor
 
         # Add the widgets for X and Y dropdowns and buttons
         self.button_width = 10
         self.bigger_button_width = 30
-        self.x_label = ttk.Label(self.drop_down_frame, text="X:")
-        self.x_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.x_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
+        #self.x_label = ttk.Label(self.drop_down_frame, text="X:")
+        #self.x_label.pack(side=tk.LEFT, padx=5, pady=5)
+
+        #self.x_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
         #self.x_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
         #                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
         #                             'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
 
-        self.x_dropdown["values"] = self.top_level_app.lookups
-        self.x_dropdown.current(21)
-        self.x_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
+        #self.x_dropdown["values"] = self.top_level_app.lookups
+        #self.x_dropdown.current(21)
+        #self.x_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.y_label = ttk.Label(self.drop_down_frame, text="Y:")
-        self.y_label.pack(side=tk.LEFT, padx=5, pady=2)
+        #self.y_label = ttk.Label(self.drop_down_frame, text="Y:")
+        #self.y_label.pack(side=tk.LEFT, padx=5, pady=2)
 
-        self.y_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
+        #self.y_dropdown = ttk.Combobox(self.drop_down_frame, width=self.button_width)
         #self.y_dropdown["values"] = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
         #                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
         #                             'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
-        self.y_dropdown["values"] = self.top_level_app.lookups
-        self.y_dropdown.current(8)
-        self.y_dropdown.pack(side=tk.LEFT, padx=5, pady=2)
+        #self.y_dropdown["values"] = self.top_level_app.lookups
+        #self.y_dropdown.current(8)
+        #self.y_dropdown.pack(side=tk.LEFT, padx=5, pady=2)
 
         self.eval_button = ttk.Button(self.eval_update_frame, width=self.bigger_button_width, text="Evaluate",
                                       command=self.evaluate_expressions)
@@ -379,17 +384,12 @@ class CIDOptimizerSettings(ttk.Frame):
         self.space_craft_button = ttk.Button(self.eval_update_frame, width=self.bigger_button_width, text="Open SpaceCraft",
                                              command=self.open_eq_window)
         self.space_craft_button.pack(side=tk.RIGHT,padx=5, fill=tk.X)
-        self.update_button = ttk.Button(self.drop_down_frame, width=self.bigger_button_width, text="Update",
-                                        command=self.update_graphs)
-        self.update_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
+        #self.update_button = ttk.Button(self.drop_down_frame, width=self.bigger_button_width, text="Update",
+        #                                command=self.update_graphs)
+        #self.update_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
 
         self.space_craft = EquationBuilder(self.expression_editor_frame)
         self.space_craft.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
-
-
-        self.space_craft.update_scroll_region()
-        print("update scroll region")
-        self.master.master.master.master.master.update_idletasks()
         self.space_craft_label = self.space_craft.get_builder()
         self.space_craft_label.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
         self.space_craft.update_scroll_region()
@@ -404,6 +404,8 @@ class CIDOptimizerSettings(ttk.Frame):
         #.logo_image = tk.PhotoImage(file=self.logo_path)
         self.logo_label = ttk.Label(self, image=self.photo)
         self.logo_label.pack(side=tk.BOTTOM, padx=1, pady=1)
+        #self.top_level_app.update_idletasks()
+
         #Add expression and constraint editor widgets
         #self.cid_expression_widget = CIDExpressionWidget(expression_editor_frame, test=test)
         #self.cid_expression_widget.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
@@ -460,7 +462,8 @@ class CIDOptimizerSettings(ttk.Frame):
         print(results)
 
     def update_graphs(self):
-        self.top_level_app.update_graph_from_tech_browser()
+        #self.top_level_app.update_graph_from_tech_browser()
+        print("legacy")
 
     def open_eq_window(self):
         builder_window = EquationBuilderWindow(master=self, builder_label=self.space_craft)

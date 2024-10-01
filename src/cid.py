@@ -404,6 +404,16 @@ class CIDCorner():
             self.df["gm/gds"] = gmro_array
             self.df["gds/gm"] = gds_gm_array
             self.df["kgds"] = kgds_array
+        if not self.check_if_param_exists("kgds"):
+            kgds_array = []
+            gds_col = self.df["gds"]
+            i_col = self.df["ids"]
+            for i in range(len(i_col)):
+                gds = gds_col[i]
+                ids = i_col[i]
+                kgds = gds/ids
+                kgds_array.append(kgds)
+            self.df["kgds"] = kgds_array
         if not self.check_if_param_exists("iden"):
             iden_array = []
             ids_col = self.df["ids"]

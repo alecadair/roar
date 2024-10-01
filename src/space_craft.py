@@ -175,8 +175,7 @@ class EquationBuilder(ttk.LabelFrame):
 
         # Button to delete the row
         delete_button = ttk.Button(self.options_frame, image=self.delete_icon_image,
-                                   command=lambda: self.delete_row(symbol_entry, function_entry, options_combobox,
-                                                                   enable_checkbox, delete_button, graph_button))
+                                   command=lambda: self.delete_row(symbol_entry, function_entry, enable_checkbox, delete_button, graph_button))
         enable_graphing = tk.IntVar(value=0)
         graph_button = ttk.Button(self.options_frame, image=self.graph_icon_image,
                                   command=lambda: self.graph_callback(symbol_entry, function_entry, graph_button, enable_graphing))
@@ -188,8 +187,8 @@ class EquationBuilder(ttk.LabelFrame):
         #delete_button.config(bd=0, highlightthickness=0, relief="flat")
 
         # Place the widgets in the grid within their respective columns
-        symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=3, sticky="ew")
-        function_entry.grid(row=self.current_row, column=0, padx=1, pady=3, sticky="ew")  # Sticky for full width
+        symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")
+        function_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")  # Sticky for full width
         #options_combobox.grid(row=self.current_row, column=0, padx=1, pady=1, sticky="ew")
         enable_checkbox.grid(row=self.current_row, column=0, padx=0, pady=1, sticky="ew")
         graph_button.grid(row=self.current_row, column=1, padx=0, pady=1, sticky="ew")
@@ -241,9 +240,9 @@ class EquationBuilder(ttk.LabelFrame):
 
     def bind_mouse_scroll(self):
         """Bind mouse wheel scrolling to the canvas."""
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)  # For Windows and Mac
-        self.canvas.bind_all("<Button-4>", self._on_mousewheel)    # For Linux scrolling up
-        self.canvas.bind_all("<Button-5>", self._on_mousewheel)     # For Linux scrolling down
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)  # For Windows and Mac
+        self.canvas.bind("<Button-4>", self._on_mousewheel)    # For Linux scrolling up
+        self.canvas.bind("<Button-5>", self._on_mousewheel)     # For Linux scrolling down
 
     def _on_mousewheel(self, event):
         """Handle mouse wheel scrolling."""
