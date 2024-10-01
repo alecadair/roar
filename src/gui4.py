@@ -129,7 +129,7 @@ class CIDTechBrowser2(ttk.Frame):
         self.tree.insert('', str(self.tree_item_counter), 'PDK', text='PDK')
         self.tree_item_counter += 1
         self.tree.bind('<Button 1>', self.select_item)
-        self.tech_dict = {}
+        self.tech_dict = top_level_app.tech_dict
 
     def select_item(self, event):
         self.tree._box_click(event)
@@ -569,15 +569,30 @@ class CIDApp(ThemedTk):
         self.lookups = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
                                      'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
                                      'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
-
-        #self.tech_dict contains all lookup data
         self.tech_dict = {}
+
+        self.roar_teal = '#1C8091'
+        #self.tech_dict contains all lookup data
+        self.logo_and_buttons_frame = tk.Frame(self, height=68, bg=self.roar_teal)
+        self.logo_and_buttons_frame.pack(side=tk.TOP, fill=tk.X)
+        self.logo_image_path = ROAR_HOME + "/images/png/ROAR_LOGO_W100_H282_px.png"
+        self.graph_calc_icon_path = ROAR_HOME + "/images/png/graph_icon_big.png"
+        self.graph_calc_icon_image = PhotoImage(file=self.graph_calc_icon_path)
+        self.calculator_button = tk.Button(self.logo_and_buttons_frame, image=self.graph_calc_icon_image, borderwidth=0,
+                                            highlightthickness=0, relief='flat', bg=self.roar_teal)
+        self.calculator_button.pack(side=tk.LEFT)
+        self.logo_image = PhotoImage(file=self.logo_image_path)
+        self.logo_label = tk.Label(self.logo_and_buttons_frame, image=self.logo_image, bg=self.roar_teal)
+        self.logo_label.pack(side=tk.RIGHT, padx=0, pady=0)
+
+
         self.top_level_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        self.top_level_pane.pack(fill=tk.BOTH, expand=True)
+        self.top_level_pane.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         # Left Pane
         #self.left_pane = CIDGraphControlNotebook(self.top_level_pane, top_level_app=self, test=test, width=450)
-        self.left_pane = CIDGraphController(self.top_level_pane, graph_control_notebook=None, top_level_app=self, test=False)
+        #self.left_pane = CIDGraphController(self.top_level_pane, graph_control_notebook=None, top_level_app=self, test=False)
+        self.left_pane = CIDOptimizerSettings(self, graph_controller=None, tech_browser=None, top_level_app=self, test=test)
         self.graph_controller = self.left_pane
         #self.graph_control_notebook = self.left_pane
 
