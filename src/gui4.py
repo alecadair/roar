@@ -320,10 +320,67 @@ class CIDLookupWindow(ttk.Frame):
         self.top_level_app = top_level_app
         self.top_level_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         self.top_level_pane.pack(fill=tk.BOTH, expand=True)
-        self.tech_browser = CIDTechBrowser2(self, top_level_app=self.top_level_app)
+        self.left_pane = ttk.Frame(self)
+        self.tech_browser = CIDTechBrowser2(self.left_pane, top_level_app=self.top_level_app)
         self.graphing_window = CIDGraphingWindow(self, expand_callback=expand_callback, lookup_window=self,
                                                         top_level_app=self.top_level_app)
-        self.top_level_pane.add(self.tech_browser, weight=1)
+
+        self.lookup_val = 1e-6
+
+        self.custom_frame = ttk.Frame(self.left_pane)
+        self.padx = 3
+        self.pady = 3
+        self.spinbox_width = 8
+        self.update_button_width = 10
+
+        self.x_label = ttk.Label(self.custom_frame, text="X:")
+        self.x_label.grid(row=0, column=0, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.x_dropdown = ttk.Combobox(self.custom_frame, width=7)
+        self.x_dropdown["values"] = self.top_level_app.lookups
+        self.x_dropdown.current(21)
+        self.x_dropdown.grid(row=0, column=1, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.x_value_lookup = tk.DoubleVar()
+        self.x_value_lookup.set(15)
+        self.x_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.x_value_lookup, increment=0.1, width=self.spinbox_width)
+        self.x_spinbox.grid(row=0, column=2, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.y_label = ttk.Label(self.custom_frame, text="Y:")
+        self.y_label.grid(row=1, column=0, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.y_dropdown = ttk.Combobox(self.custom_frame, width=7)
+        self.y_dropdown["values"] = self.top_level_app.lookups
+        self.y_dropdown.current(8)
+        self.y_dropdown.grid(row=1, column=1, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.y_value_lookup = tk.DoubleVar()
+        self.y_value_lookup.set(15)
+        self.y_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.y_value_lookup, increment=0.1, width=self.spinbox_width)
+        self.y_spinbox.grid(row=1, column=2, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.z_label = ttk.Label(self.custom_frame, text="Z:")
+        self.z_label.grid(row=2, column=0, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.z_value_lookup = tk.DoubleVar()
+        self.z_value_lookup.set(15)
+        self.z_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.y_value_lookup, increment=0.1, width=self.spinbox_width)
+        self.z_spinbox.grid(row=2, column=1, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.lookup_label_val = tk.StringVar()
+        self.lookup_label_val.set(str(self.lookup_val))
+        self.lookup_label = ttk.Label(self.custom_frame, textvariable=self.lookup_label_val)
+        self.lookup_label.grid(row=2, column=2, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.update_button = ttk.Button(self.custom_frame, width=self.update_button_width, text="Update",
+                                command=self.update_graph_from_tech_browser)
+        self.update_button.grid(row=3, column=0, columnspan=2, padx=self.padx, pady=self.pady, sticky="nsew")
+
+        self.tech_browser.pack(side=tk.TOP, fill=tk.BOTH)
+        self.custom_frame.pack(side=tk.BOTTOM, fill=tk.BOTH)
+
+
+        self.top_level_pane.add(self.left_pane, weight=1)
         self.top_level_pane.add(self.graphing_window, weight=4)
         self.toolbar = self.graphing_window.toolbar
         self.default_sashpos = 200
@@ -567,8 +624,8 @@ class CIDApp(ThemedTk):
         ThemedTk.__init__(self, theme=theme)
         # Create the top-level horizontal paned window
         self.lookups = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
-                                     'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds',
-                                     'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth', 'kgds')
+                                     'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm', 'kgmft', 'n','rds',
+                                     'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth')
         self.tech_dict = {}
 
         self.roar_teal = '#1C8091'
@@ -577,10 +634,15 @@ class CIDApp(ThemedTk):
         self.logo_and_buttons_frame.pack(side=tk.TOP, fill=tk.X)
         self.logo_image_path = ROAR_HOME + "/images/png/ROAR_LOGO_W100_H282_px.png"
         self.graph_calc_icon_path = ROAR_HOME + "/images/png/graph_icon_big.png"
+        self.layout_icon_path = ROAR_HOME + "/images/png/layout_icon.png"
         self.graph_calc_icon_image = PhotoImage(file=self.graph_calc_icon_path)
+        self.layout_icon_image = PhotoImage(file=self.layout_icon_path)
         self.calculator_button = tk.Button(self.logo_and_buttons_frame, image=self.graph_calc_icon_image, borderwidth=0,
                                             highlightthickness=0, relief='flat', bg=self.roar_teal)
+        self.layout_button = tk.Button(self.logo_and_buttons_frame, image=self.layout_icon_image, borderwidth=0,
+                                            highlightthickness=0, relief='flat', bg=self.roar_teal)
         self.calculator_button.pack(side=tk.LEFT)
+        self.layout_button.pack(side=tk.LEFT, padx=5)
         self.logo_image = PhotoImage(file=self.logo_image_path)
         self.logo_label = tk.Label(self.logo_and_buttons_frame, image=self.logo_image, bg=self.roar_teal)
         self.logo_label.pack(side=tk.RIGHT, padx=0, pady=0)
