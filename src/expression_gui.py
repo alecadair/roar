@@ -337,10 +337,10 @@ class CIDOptimizerSettings(ttk.PanedWindow):
         #self.drop_down_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)  # Ensures it stays at the top and uses horizontal space
 
         self.expression_editor_frame = ttk.Frame(self)
-        self.expression_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Allows dynamic resizing
+        self.expression_editor_frame.pack(side=tk.TOP, padx=10, pady=10, fill=tk.BOTH, expand=True)  # Allows dynamic resizing
 
         self.constraint_editor_frame = ttk.Frame(self)
-        self.constraint_editor_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)  # Similar to expression editor
+        self.constraint_editor_frame.pack(side=tk.TOP, padx=10, pady=10, fill=tk.BOTH, expand=True)  # Similar to expression editor
 
 
         self.eval_update_frame = ttk.Frame(self.constraint_editor_frame)
@@ -375,13 +375,13 @@ class CIDOptimizerSettings(ttk.PanedWindow):
         self.constraint_editor.update()
         #self.constraint_editor.update_scroll_region()
 
-        self.logo_path = ROAR_HOME + "/images/png/ROAR_LOGO.png"
-        self.logo_image = Image.open(self.logo_path)
-        self.logo_width, self.logo_height = self.logo_image.size
-        self.new_width = int(self.logo_width * 0.8)
-        self.new_height = int(self.logo_height * 0.75)
-        self.resized_image = self.logo_image.resize((self.new_width, self.new_height), Image.Resampling.LANCZOS)
-        self.photo = ImageTk.PhotoImage(self.resized_image)
+        #self.logo_path = ROAR_HOME + "/images/png/ROAR_LOGO.png"
+        #self.logo_image = Image.open(self.logo_path)
+        #self.logo_width, self.logo_height = self.logo_image.size
+        #self.new_width = int(self.logo_width * 0.8)
+        #self.new_height = int(self.logo_height * 0.75)
+        #self.resized_image = self.logo_image.resize((self.new_width, self.new_height), Image.Resampling.LANCZOS)
+        #self.photo = ImageTk.PhotoImage(self.resized_image)
         #.logo_image = tk.PhotoImage(file=self.logo_path)
         #self.logo_label = ttk.Label(self.constraint_editor_frame, image=self.photo)
         #self.logo_label.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=False, padx=1, pady=5)

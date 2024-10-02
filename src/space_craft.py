@@ -377,10 +377,6 @@ class ConstraintBuilder(ttk.LabelFrame):
         self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
         self.canvas_window = self.canvas.create_window((0, 0), window=self.internal_frame, anchor="nw")
-        # self.internal_frame.bind("<Configure>", self.update_scroll_region)
-
-        # self.internal_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        # self.internal_frame.grid_rowconfigure(0, weight=1)
         self.bind("<Configure>", self.resize_internal_frame)
         #self.internal_frame.bind("<Configure>", self.on_frame_configure)
         self.bind_mouse_scroll()
@@ -416,27 +412,8 @@ class ConstraintBuilder(ttk.LabelFrame):
         self.current_row = 1  # Start at 1 because row 0 is for titles
         self.num_entries = 0
         self.entries = []
-
-        # Add a button to add new rows (place outside the PanedWindow)
-        # Ensure the button is placed below the paned window
-        # self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        # self.h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        # self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
-
-        # self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        # self.canvas.pack(fill=tk.BOTH, expand=True)
-        # self.internal_frame.pack(fill=tk.X, expand=False)
-        # self.internal_frame.grid()
-        # self.paned_window.pack(fill=tk.BOTH, expand=True)
-        # self.bind("<Configure>", self.on_resize)
-
-        # Add column titles
         self.create_titles()
-        # Add initial row
         self.add_row()
-        #self.update_scroll_region()
-        # self.bind("<Configure>", self.on_resize)
 
     def create_titles(self):
         """Create the title row for the grid in each column."""
