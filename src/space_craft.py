@@ -20,11 +20,12 @@ class EquationBuilderWindow(tk.Toplevel):
     def __init__(self, master=None, exit_callback=None, builder_label=None):
         super().__init__(master)
         self.title("Equation Builder")
-        self.geometry("800x400")
+        self.geometry("1000x600")
         #self.exit_callback = exit_callback
-        self.builder_label = None
-        self.builder_label = EquationBuilder(self)
-        self.builder_label.pack(fill=tk.BOTH, expand=True, pady=3, padx=3)
+        self.builder_label = CIDEquationBuilder(self, top_level_app=self)
+        self.constraint_label = CIDConstraintBuilder(self, top_level_app=self)
+        self.builder_label.pack(fill=tk.BOTH, side=tk.LEFT, expand=True, pady=3, padx=3)
+        self.constraint_label.pack(fill=tk.BOTH, side=tk.RIGHT, expand=True,pady=3)
         self.update_idletasks()
         self.builder_label.update_scroll_region()
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
@@ -81,7 +82,7 @@ class CIDEquationBuilder(ttk.LabelFrame):
 
         self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, padx=0, pady=0, expand=True)
 
         self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
@@ -153,7 +154,7 @@ class CIDEquationBuilder(ttk.LabelFrame):
         ttk.Label(self.symbol_frame, text="Symbol").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
         ttk.Label(self.function_frame, text="Expression").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
         #ttk.Label(self.options_frame, text="Options").grid(row=0, column=0, columnspan=3, padx=1, pady=1, sticky="ew")
-        ttk.Label(self.options_frame, text="").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
+        ttk.Label(self.options_frame, text="Enable Graph Delete").grid(row=0, column=0, columnspan=3,padx=1, pady=1, sticky="e")
 
 
     def get_builder(self):
@@ -165,8 +166,7 @@ class CIDEquationBuilder(ttk.LabelFrame):
         # Create entries for symbol, function, and options in their respective panes
         symbol_entry = ttk.Entry(self.symbol_frame, width=15)
         function_entry = ttk.Entry(self.function_frame)
-        options_combobox = ttk.Combobox(self.options_frame, width=8,
-                                        values=["Constant","Equality", "Inequality", "Function", "Lookup"])
+        options_combobox = ttk.Combobox(self.options_frame, values=["Constant","Equality", "Inequality", "Function", "Lookup"])
         options_combobox.current(0)  # Set default to "Maximize"
 
         # Initialize the checkbox with a default checked state
@@ -189,9 +189,9 @@ class CIDEquationBuilder(ttk.LabelFrame):
 
         # Place the widgets in the grid within their respective columns
         symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")
-        function_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")  # Sticky for full width
+        function_entry.grid(row=self.current_row, column=0, padx=0, pady=3.5, sticky="ew")  # Sticky for full width
         #options_combobox.grid(row=self.current_row, column=0, padx=1, pady=1, sticky="ew")
-        enable_checkbox.grid(row=self.current_row, column=0, padx=0, pady=1, sticky="ew")
+        enable_checkbox.grid(row=self.current_row, column=0, padx=0, pady=1, sticky="e")
         graph_button.grid(row=self.current_row, column=1, padx=0, pady=1, sticky="ew")
         delete_button.grid(row=self.current_row, column=2, padx=0, pady=1, sticky="ew")
 
@@ -253,7 +253,7 @@ class CIDEquationBuilder(ttk.LabelFrame):
             self.canvas.yview_scroll(1, "units")   # Scroll down
 
     def resize_internal_frame(self, event):
-        canvas_width = event.width - 10
+        canvas_width = event.width - 18
         #canvas_width = self.canvas.winfo_width()
         self.canvas.itemconfig(self.canvas_window, width=canvas_width)
 
@@ -335,7 +335,6 @@ class CIDEquationBuilder(ttk.LabelFrame):
         else:
             button.config(image=self.green_graph_icon_image)
             enable_graphing.set(1)
-
 
 class CIDConstraintBuilder(ttk.LabelFrame):
     def __init__(self, master, top_level_app):
@@ -372,7 +371,7 @@ class CIDConstraintBuilder(ttk.LabelFrame):
 
         self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, padx=0, pady=0, expand=True)
 
         self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
@@ -441,10 +440,10 @@ class CIDConstraintBuilder(ttk.LabelFrame):
 
     def create_titles(self):
         """Create the title row for the grid in each column."""
-        ttk.Label(self.symbol_frame, text="Symbol").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
-        ttk.Label(self.function_frame, text="Expression").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
+        ttk.Label(self.symbol_frame, text="Constraint Name").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
+        ttk.Label(self.function_frame, text="Constraint Expression").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
         #ttk.Label(self.options_frame, text="Options").grid(row=0, column=0, columnspan=3, padx=1, pady=1, sticky="ew")
-        ttk.Label(self.options_frame, text="").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
+        ttk.Label(self.options_frame, text="Enable Graph Delete").grid(row=0, column=0, columnspan=3,padx=1, pady=1, sticky="e")
 
 
     def get_builder(self):
@@ -456,8 +455,7 @@ class CIDConstraintBuilder(ttk.LabelFrame):
         # Create entries for symbol, function, and options in their respective panes
         symbol_entry = ttk.Entry(self.symbol_frame, width=15)
         function_entry = ttk.Entry(self.function_frame)
-        options_combobox = ttk.Combobox(self.options_frame, width=8,
-                                        values=["Constant","Equality", "Inequality", "Function", "Lookup"])
+        options_combobox = ttk.Combobox(self.options_frame, values=["Constant","Equality", "Inequality", "Function", "Lookup"])
         options_combobox.current(0)  # Set default to "Maximize"
 
         # Initialize the checkbox with a default checked state
@@ -480,9 +478,9 @@ class CIDConstraintBuilder(ttk.LabelFrame):
 
         # Place the widgets in the grid within their respective columns
         symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")
-        function_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")  # Sticky for full width
+        function_entry.grid(row=self.current_row, column=0, padx=0, pady=3.5, sticky="ew")  # Sticky for full width
         #options_combobox.grid(row=self.current_row, column=0, padx=1, pady=1, sticky="ew")
-        enable_checkbox.grid(row=self.current_row, column=0, padx=0, pady=1, sticky="ew")
+        enable_checkbox.grid(row=self.current_row, column=0, padx=0, pady=1, sticky="e")
         graph_button.grid(row=self.current_row, column=1, padx=0, pady=1, sticky="ew")
         delete_button.grid(row=self.current_row, column=2, padx=0, pady=1, sticky="ew")
 
@@ -544,7 +542,7 @@ class CIDConstraintBuilder(ttk.LabelFrame):
             self.canvas.yview_scroll(1, "units")   # Scroll down
 
     def resize_internal_frame(self, event):
-        canvas_width = event.width - 10
+        canvas_width = event.width - 18
         #canvas_width = self.canvas.winfo_width()
         self.canvas.itemconfig(self.canvas_window, width=canvas_width)
 
@@ -627,306 +625,16 @@ class CIDConstraintBuilder(ttk.LabelFrame):
             button.config(image=self.green_graph_icon_image)
             enable_graphing.set(1)
 
-
-class CIDEquationBuilder(ttk.LabelFrame):
-    def __init__(self, master, top_level_app):
-        super().__init__(master, text="Expression Editor")
-        #self.title("Equation Builder")
-        #self.geometry("800x400")
-        self.top_level_app = top_level_app
-        # Main frame to hold buttons
-        self.buttons_frame = ttk.Frame(self)
-        # Main frame to hold buttons (spans the full width of the window)
-        self.buttons_frame = ttk.Frame(self)
-
-        # Add Row button on the left
-        self.add_row_button = ttk.Button(self.buttons_frame, text="Add Row", command=self.add_row)
-        self.add_row_button.pack(pady=0, side=tk.LEFT)  # Aligns to the left
-
-        # Save and Load buttons
-        self.save_state_button = ttk.Button(self.buttons_frame, text="Save", command=self.save_state)
-        self.load_state_button = ttk.Button(self.buttons_frame, text="Load", command=self.load_state)
-
-        # Pack Save and Load buttons on the right
-        self.load_state_button.pack(pady=0, side=tk.RIGHT)  # Align to the right
-        self.save_state_button.pack(pady=0, side=tk.RIGHT)  # Align to the right
-
-        # Pack the buttons_frame to fill the entire width of the window
-        self.buttons_frame.pack(pady=0, fill=tk.X, side=tk.BOTTOM)
-
-        self.top_frame = ttk.Frame(self)
-        self.canvas = tk.Canvas(self.top_frame)
-        self.internal_frame = ttk.Frame(self.canvas)
-        self.v_scrollbar = ttk.Scrollbar(self.top_frame, orient=tk.VERTICAL, command=self.canvas.yview)
-        self.h_scrollbar = ttk.Scrollbar(self.top_frame, orient=tk.HORIZONTAL, command=self.canvas.xview)
-        self.canvas.configure(yscrollcommand=self.v_scrollbar.set, xscrollcommand=self.h_scrollbar.set)
-
-        self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
-
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.internal_frame, anchor="nw")
-        # self.internal_frame.bind("<Configure>", self.update_scroll_region)
-
-        # self.internal_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        # self.internal_frame.grid_rowconfigure(0, weight=1)
-        #self.internal_frame.bind("<Configure>", self.on_frame_configure)
-        self.bind_mouse_scroll()
-        # Create a PanedWindow for the entire app with horizontal layout
-        self.paned_window = ttk.PanedWindow(self.internal_frame, orient=tk.HORIZONTAL)
-        # self.paned_window.pack(fill=tk.BOTH, expand=True)
-
-        # Create separate frames for each column in the PanedWindow
-        self.symbol_frame = ttk.Frame(self.paned_window)
-        self.function_frame = ttk.Frame(self.paned_window)
-        self.options_frame = ttk.Frame(self.paned_window)
-
-        # Add frames to the PanedWindow
-        self.paned_window.add(self.symbol_frame, weight=1)  # Symbol frame stretches
-        self.paned_window.add(self.function_frame, weight=3)  # Function frame stretches more
-        self.paned_window.add(self.options_frame, weight=1)  # Options frame does not stretch
-        self.paned_window.pack(fill=tk.BOTH, expand=True)
-        # Configure column resizing in function_frame
-        self.symbol_frame.grid_columnconfigure(0, weight=1)
-        self.function_frame.grid_columnconfigure(0, weight=1)
-        self.options_frame.grid_columnconfigure(0, weight=1)
-
-        self.delete_icon_path = ROAR_PNG + "delete_icon.png"
-        self.delete_icon_image = tk.PhotoImage(file=self.delete_icon_path)
-        self.graph_icon_path = ROAR_PNG + "graph_icon.png"
-        self.graph_icon_image = tk.PhotoImage(file=self.graph_icon_path)
-        self.graph_icon_image_pil = Image.open(self.graph_icon_path)
-        self.green = (52, 235, 152, 255)
-        self.green_icon_background = Image.new("RGBA", self.graph_icon_image_pil.size, (52, 235, 152, 255))
-        self.blended_image = Image.alpha_composite(self.green_icon_background, self.graph_icon_image_pil)
-        self.green_graph_icon_image = ImageTk.PhotoImage(self.blended_image)
-        # Keep track of grid rows
-        self.current_row = 1  # Start at 1 because row 0 is for titles
-        self.num_entries = 0
-        self.entries = []
-
-        # Add a button to add new rows (place outside the PanedWindow)
-        # Ensure the button is placed below the paned window
-        # self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        # self.h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        # self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
-
-        # self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        # self.canvas.pack(fill=tk.BOTH, expand=True)
-        # self.internal_frame.pack(fill=tk.X, expand=False)
-        # self.internal_frame.grid()
-        # self.paned_window.pack(fill=tk.BOTH, expand=True)
-        # self.bind("<Configure>", self.on_resize)
-        self.bind("<Configure>", self.resize_internal_frame)
-
-        # Add column titles
-        self.create_titles()
-        # Add initial row
-        self.add_row()
-        self.top_level_app.update_idletasks()
-        #self.update_scroll_region()
-        # self.bind("<Configure>", self.on_resize)
-
-    def create_titles(self):
-        """Create the title row for the grid in each column."""
-        ttk.Label(self.symbol_frame, text="Symbol").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
-        ttk.Label(self.function_frame, text="Expression").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
-        #ttk.Label(self.options_frame, text="Options").grid(row=0, column=0, columnspan=3, padx=1, pady=1, sticky="ew")
-        ttk.Label(self.options_frame, text="").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
-
-
-    def get_builder(self):
-        return(self)
-
-    def add_row(self):
-        """Add a new row to the grid for symbol, function, and options."""
-
-        # Create entries for symbol, function, and options in their respective panes
-        symbol_entry = ttk.Entry(self.symbol_frame, width=15)
-        function_entry = ttk.Entry(self.function_frame)
-        options_combobox = ttk.Combobox(self.options_frame, width=8,
-                                        values=["Constant","Equality", "Inequality", "Function", "Lookup"])
-        options_combobox.current(0)  # Set default to "Maximize"
-
-        # Initialize the checkbox with a default checked state
-        enable_row_var = tk.IntVar(value=1)  # Use IntVar to track checkbox state
-        enable_checkbox = ttk.Checkbutton(self.options_frame, variable=enable_row_var,
-                                         command=lambda: self.toggle_edit(enable_row_var, symbol_entry, function_entry))
-
-        # Button to delete the row
-        delete_button = ttk.Button(self.options_frame, image=self.delete_icon_image,
-                                   command=lambda: self.delete_row(symbol_entry, function_entry, enable_checkbox, delete_button, graph_button))
-        enable_graphing = tk.IntVar(value=0)
-        graph_button = ttk.Button(self.options_frame, image=self.graph_icon_image,
-                                  command=lambda: self.graph_callback(symbol_entry, function_entry, graph_button, enable_graphing))
-        #delete_button = ttk.Button(self.options_frame, text="X",
-        #                          command=lambda: self.delete_row(symbol_entry, function_entry, options_combobox,
-        #                                                          enable_checkbox, delete_button))
-        # Adjust button size to fit the image
-        #delete_button.config(width=self.delete_icon_image.width(), height=self.delete_icon_image.height())
-        #delete_button.config(bd=0, highlightthickness=0, relief="flat")
-
-        # Place the widgets in the grid within their respective columns
-        symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")
-        function_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")  # Sticky for full width
-        #options_combobox.grid(row=self.current_row, column=0, padx=1, pady=1, sticky="ew")
-        enable_checkbox.grid(row=self.current_row, column=0, padx=0, pady=1, sticky="ew")
-        graph_button.grid(row=self.current_row, column=1, padx=0, pady=1, sticky="ew")
-        delete_button.grid(row=self.current_row, column=2, padx=0, pady=1, sticky="ew")
-
-        # Store the row entries for later access or deletion, including the IntVar for the checkbox
-        self.entries.append((symbol_entry, function_entry, delete_button,
-                             enable_checkbox, enable_row_var, graph_button, enable_graphing))
-
-        # Increment row counter
-        self.current_row += 1
-        self.num_entries += 1
-        self.update_scroll_region()
-
-
-    def update_scroll_region(self, event=None):
-        self.update_idletasks()
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def delete_row(self, symbol_entry, function_entry, enable_checkbox, delete_button, graph_button):
-        """Delete the specific row."""
-        if self.num_entries == 0:
-            return 0
-        # Remove widgets from the grid
-        symbol_entry.grid_forget()
-        function_entry.grid_forget()
-        #options_combobox.grid_forget()
-        enable_checkbox.grid_forget()  # Remove the checkbox widget
-        delete_button.grid_forget()
-        graph_button.grid_forget()
-        # Remove the row from the list, excluding the IntVar (enable_row_var)
-        self.entries = [(s, f, d, e, ev, g, gv) for s, f, d, e, ev, g, gv in self.entries if s != symbol_entry]
-        self.num_entries -= 1
-        self.update_scroll_region()
-
-    #def on_resize(self, event):
-    #    right_pane_width = self.winfo_width() - self.paned_window.sashpos(1)
-    #    if right_pane_width > self.options_width:
-    #        new_sash_position = self.winfo_width() - self.options_width
-    #        self.paned_window.sashpos(1, new_sash_position)
-    #    self.internal_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-    def on_frame_configure(self, event):
-        """Adjust the canvas scroll region whenever the internal frame changes size."""
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def on_canvas_resize(self, event):
-        canvas_width = event.width
-        self.canvas.itemconfig(self.canvas_window, width=canvas_width)
-
-    def bind_mouse_scroll(self):
-        """Bind mouse wheel scrolling to the canvas."""
-        self.canvas.bind("<MouseWheel>", self._on_mousewheel)  # For Windows and Mac
-        self.canvas.bind("<Button-4>", self._on_mousewheel)    # For Linux scrolling up
-        self.canvas.bind("<Button-5>", self._on_mousewheel)     # For Linux scrolling down
-
-    def _on_mousewheel(self, event):
-        """Handle mouse wheel scrolling."""
-        if event.num == 4 or event.delta > 0:
-            self.canvas.yview_scroll(-1, "units")  # Scroll up
-        elif event.num == 5 or event.delta < 0:
-            self.canvas.yview_scroll(1, "units")   # Scroll down
-
-    def resize_internal_frame(self, event):
-        canvas_width = event.width - 10
-        #canvas_width = self.canvas.winfo_width()
-        self.canvas.itemconfig(self.canvas_window, width=canvas_width)
-
-    def save_state(self):
-        """Save the current state of the EquationBuilder to a user-selected JSON file."""
-        file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
-        if not file_path:
-            return  # User canceled the dialog
-
-        state_data = []
-        for entry in self.entries:
-            symbol_entry, function_entry, delete_button, enable_box, enable_row_var, graph_button, graph_var = entry
-            symbol = symbol_entry.get()
-            function = function_entry.get()
-            #option = options_combobox.get()
-            enable = enable_row_var.get() # Use .get() on the IntVar to get the checkbox state
-            graph = graph_var.get()
-            state_data.append({
-                "symbol": symbol,
-                "function": function,
-                "graph_var": graph,
-                "enable": enable
-            })
-        # Save the data to the selected file
-        with open(file_path, "w") as f:
-            json.dump(state_data, f)
-
-
-    def load_state(self):
-        """Load the state from a user-selected JSON file and populate the EquationBuilder."""
-        file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
-        if not file_path:
-            return  # User canceled the dialog
-        try:
-            with open(file_path, "r") as f:
-                state_data = json.load(f)
-            # Clear current entries
-            for entry in self.entries:
-                symbol_entry, function_entry, delete_button, enable_checkbox, enable_row_var, graph_button, graph_var = entry
-                self.delete_row(symbol_entry, function_entry, enable_checkbox, delete_button, graph_button)
-            # Add rows from loaded state
-            for row in state_data:
-                self.add_row()
-                symbol_entry, function_entry, delete_button, enable_checkbox, enable_row_var, graph_button, graph_var = self.entries[-1]
-                symbol_entry.insert(0, row["symbol"])
-                function_entry.insert(0, row["function"])
-                #options_combobox.set(row["option"])
-                row_enable = row["enable"]
-                enable_row_var.set(row["enable"])
-                graph_var.set(row["graph_var"])
-                self.toggle_edit(enable_row_var, symbol_entry, function_entry)
-                self.graph_load_set(graph_button, graph_var)
-        except FileNotFoundError:
-            print("No saved state found.")
-
-    def toggle_edit(self, enable_row, symbol_entry, function_entry):
-        """Enable or disable editing of the entries based on the checkbox state."""
-        if enable_row.get() == 1:
-            # Enable editing when checkbox is checked (default)
-            symbol_entry.config(state="normal")
-            function_entry.config(state="normal")
-        else:
-            # Disable editing when checkbox is unchecked
-            symbol_entry.config(state="disabled")
-            function_entry.config(state="disabled")
-
-    def graph_load_set(self, graph_button, graph_var):
-        if graph_var.get() == 1:
-            graph_button.config(image=self.green_graph_icon_image)
-        else:
-            graph_button.config(image=self.graph_icon_image)
-
-    def graph_callback(self, symbol=None, expression=None, button=None, enable_graphing=None):
-        style = ttk.Style(button)
-        style.configure('Green.TButton', background='green', foreground='green')
-        if enable_graphing.get() == 1:
-            button.config(image=self.graph_icon_image)
-            enable_graphing.set(0)
-        else:
-            button.config(image=self.green_graph_icon_image)
-            enable_graphing.set(1)
 
 
 class CIDColumnResults(ttk.LabelFrame):
     def __init__(self, master, top_level_app):
         super().__init__(master, text="Expression Results")
-        #self.title("Equation Builder")
-        #self.geometry("800x400")
         self.top_level_app = top_level_app
+        self.width = 20
+        self.height = 40
         self.top_frame = ttk.Frame(self)
-        self.canvas = tk.Canvas(self.top_frame)
+        self.canvas = tk.Canvas(self.top_frame, width=25, height=50)
         self.internal_frame = ttk.Frame(self.canvas)
         self.v_scrollbar = ttk.Scrollbar(self.top_frame, orient=tk.VERTICAL, command=self.canvas.yview)
         self.h_scrollbar = ttk.Scrollbar(self.top_frame, orient=tk.HORIZONTAL, command=self.canvas.xview)
@@ -934,86 +642,57 @@ class CIDColumnResults(ttk.LabelFrame):
 
         self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, padx=2, expand=True)
 
         self.top_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
         self.canvas_window = self.canvas.create_window((0, 0), window=self.internal_frame, anchor="nw")
         self.bind_mouse_scroll()
         self.paned_window = ttk.PanedWindow(self.internal_frame, orient=tk.HORIZONTAL)
-        # self.paned_window.pack(fill=tk.BOTH, expand=True)
 
-        # Create separate frames for each column in the PanedWindow
         self.symbol_frame = ttk.Frame(self.paned_window)
         self.function_frame = ttk.Frame(self.paned_window)
-        #self.options_frame = ttk.Frame(self.paned_window)
 
-        # Add frames to the PanedWindow
         self.paned_window.add(self.symbol_frame, weight=1)  # Symbol frame stretches
-        self.paned_window.add(self.function_frame, weight=3)  # Function frame stretches more
-        #self.paned_window.add(self.options_frame, weight=1)  # Options frame does not stretch
+        self.paned_window.add(self.function_frame, weight=1)  # Function frame stretches more
+
         self.paned_window.pack(fill=tk.BOTH, expand=True)
-        # Configure column resizing in function_frame
         self.symbol_frame.grid_columnconfigure(0, weight=1)
         self.function_frame.grid_columnconfigure(0, weight=1)
-        # Keep track of grid rows
+
         self.current_row = 1  # Start at 1 because row 0 is for titles
         self.num_entries = 0
         self.entries = []
         self.bind("<Configure>", self.resize_internal_frame)
-        # Add column titles
+
         self.create_titles()
-        # Add initial row
         self.add_row()
-        self.top_level_app.update_idletasks()
 
     def create_titles(self):
         """Create the title row for the grid in each column."""
         ttk.Label(self.symbol_frame, text="").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
         ttk.Label(self.function_frame, text="").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
 
-    def get_builder(self):
-        return(self)
-
     def add_row(self):
         """Add a new row to the grid for symbol, function, and options."""
-        # Create entries for symbol, function, and options in their respective panes
         symbol_entry = ttk.Entry(self.symbol_frame, width=6)
         function_entry = ttk.Entry(self.function_frame, width=6)
-        # Place the widgets in the grid within their respective columns
+
         symbol_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")
-        function_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")  # Sticky for full width
+        function_entry.grid(row=self.current_row, column=0, padx=1, pady=3.5, sticky="ew")
+
         self.entries.append((symbol_entry, function_entry))
 
-        # Increment row counter
         self.current_row += 1
         self.num_entries += 1
         self.update_scroll_region()
-
 
     def update_scroll_region(self, event=None):
         self.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-    def delete_row(self, symbol_entry, function_entry):
-        """Delete the specific row."""
-        if self.num_entries == 0:
-            return 0
-        # Remove widgets from the grid
-        symbol_entry.grid_forget()
-        function_entry.grid_forget()
-
-        # Remove the row from the list, excluding the IntVar (enable_row_var)
-        self.entries = [(s, f) for s, f in self.entries if s != symbol_entry]
-        self.num_entries -= 1
-        self.update_scroll_region()
-
-    def on_frame_configure(self, event):
-        """Adjust the canvas scroll region whenever the internal frame changes size."""
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def on_canvas_resize(self, event):
-        canvas_width = event.width
+    def resize_internal_frame(self, event):
+        canvas_width = event.width - 0
         self.canvas.itemconfig(self.canvas_window, width=canvas_width)
 
     def bind_mouse_scroll(self):
@@ -1028,76 +707,3 @@ class CIDColumnResults(ttk.LabelFrame):
             self.canvas.yview_scroll(-1, "units")  # Scroll up
         elif event.num == 5 or event.delta < 0:
             self.canvas.yview_scroll(1, "units")   # Scroll down
-
-    def resize_internal_frame(self, event):
-        canvas_width = event.width - 10
-        #canvas_width = self.canvas.winfo_width()
-        self.canvas.itemconfig(self.canvas_window, width=canvas_width)
-
-    def save_state(self):
-        """Save the current state of the EquationBuilder to a user-selected JSON file."""
-        file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
-        if not file_path:
-            return  # User canceled the dialog
-
-        state_data = []
-        for entry in self.entries:
-            symbol_entry, function_entry = entry
-            symbol = symbol_entry.get()
-            function = function_entry.get()
-            state_data.append({
-                "symbol": symbol,
-                "function": function
-            })
-        # Save the data to the selected file
-        with open(file_path, "w") as f:
-            json.dump(state_data, f)
-
-
-    def load_state(self):
-        """Load the state from a user-selected JSON file and populate the EquationBuilder."""
-        file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
-        if not file_path:
-            return  # User canceled the dialog
-        try:
-            with open(file_path, "r") as f:
-                state_data = json.load(f)
-            # Clear current entries
-            for entry in self.entries:
-                symbol_entry, function_entry = entry
-                self.delete_row(symbol_entry, function_entry)
-            # Add rows from loaded state
-            for row in state_data:
-                self.add_row()
-                symbol_entry, function_entry = self.entries[-1]
-                symbol_entry.insert(0, row["symbol"])
-                function_entry.insert(0, row["function"])
-        except FileNotFoundError:
-            print("No saved state found.")
-
-    def toggle_edit(self, enable_row, symbol_entry, function_entry):
-        """Enable or disable editing of the entries based on the checkbox state."""
-        if enable_row.get() == 1:
-            # Enable editing when checkbox is checked (default)
-            symbol_entry.config(state="normal")
-            function_entry.config(state="normal")
-        else:
-            # Disable editing when checkbox is unchecked
-            symbol_entry.config(state="disabled")
-            function_entry.config(state="disabled")
-
-    def graph_load_set(self, graph_button, graph_var):
-        if graph_var.get() == 1:
-            graph_button.config(image=self.green_graph_icon_image)
-        else:
-            graph_button.config(image=self.graph_icon_image)
-
-    def graph_callback(self, symbol=None, expression=None, button=None, enable_graphing=None):
-        style = ttk.Style(button)
-        style.configure('Green.TButton', background='green', foreground='green')
-        if enable_graphing.get() == 1:
-            button.config(image=self.graph_icon_image)
-            enable_graphing.set(0)
-        else:
-            button.config(image=self.green_graph_icon_image)
-            enable_graphing.set(1)
