@@ -334,47 +334,50 @@ class CIDLookupWindow(ttk.Frame):
         self.update_button_width = 10
 
         self.x_label = ttk.Label(self.custom_frame, text="X:")
-        self.x_label.grid(row=0, column=0, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.x_label.grid(row=0, column=0, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.x_dropdown = ttk.Combobox(self.custom_frame, width=7)
         self.x_dropdown["values"] = self.top_level_app.lookups
         self.x_dropdown.current(21)
-        self.x_dropdown.grid(row=0, column=1, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.x_dropdown.grid(row=0, column=1, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.x_value_lookup = tk.DoubleVar()
         self.x_value_lookup.set(15)
         self.x_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.x_value_lookup, increment=0.1, width=self.spinbox_width)
-        self.x_spinbox.grid(row=0, column=2, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.x_spinbox.grid(row=0, column=2, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.y_label = ttk.Label(self.custom_frame, text="Y:")
-        self.y_label.grid(row=1, column=0, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.y_label.grid(row=1, column=0, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.y_dropdown = ttk.Combobox(self.custom_frame, width=7)
         self.y_dropdown["values"] = self.top_level_app.lookups
         self.y_dropdown.current(8)
-        self.y_dropdown.grid(row=1, column=1, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.y_dropdown.grid(row=1, column=1, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.y_value_lookup = tk.DoubleVar()
         self.y_value_lookup.set(15)
         self.y_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.y_value_lookup, increment=0.1, width=self.spinbox_width)
-        self.y_spinbox.grid(row=1, column=2, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.y_spinbox.grid(row=1, column=2, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.z_label = ttk.Label(self.custom_frame, text="Z:")
-        self.z_label.grid(row=2, column=0, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.z_label.grid(row=2, column=0, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.z_value_lookup = tk.DoubleVar()
         self.z_value_lookup.set(15)
         self.z_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.y_value_lookup, increment=0.1, width=self.spinbox_width)
-        self.z_spinbox.grid(row=2, column=1, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.z_spinbox.grid(row=2, column=1, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.lookup_label_val = tk.StringVar()
         self.lookup_label_val.set(str(self.lookup_val))
         self.lookup_label = ttk.Label(self.custom_frame, textvariable=self.lookup_label_val)
-        self.lookup_label.grid(row=2, column=2, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.lookup_label.grid(row=2, column=2, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.update_button = ttk.Button(self.custom_frame, width=self.update_button_width, text="Update",
                                 command=self.update_graph_from_tech_browser)
-        self.update_button.grid(row=3, column=0, columnspan=2, padx=self.padx, pady=self.pady, sticky="nsew")
+        self.update_button.grid(row=3, column=0, columnspan=2, padx=self.padx, pady=self.pady, sticky="ew")
+
+        self.results = CIDColumnResults(self.custom_frame, top_level_app=self.top_level_app)
+        self.results.grid(row=0, column=3, columnspan=3, rowspan=6, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.tech_browser.pack(side=tk.TOP, fill=tk.BOTH)
         self.custom_frame.pack(side=tk.BOTTOM, fill=tk.BOTH)

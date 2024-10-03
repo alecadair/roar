@@ -364,13 +364,13 @@ class CIDOptimizerSettings(ttk.PanedWindow):
         #                                command=self.update_graphs)
         #self.update_button.pack(side=tk.LEFT, padx=5, fill=tk.X)
 
-        self.space_craft = EquationBuilder(self.expression_editor_frame,top_level_app=self.top_level_app)
+        self.space_craft = CIDEquationBuilder(self.expression_editor_frame,top_level_app=self.top_level_app)
         self.space_craft.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
         self.space_craft_label = self.space_craft.get_builder()
         self.space_craft_label.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
         #self.space_craft.update_scroll_region()
 
-        self.constraint_editor = ConstraintBuilder(self.constraint_editor_frame)
+        self.constraint_editor = CIDConstraintBuilder(self.constraint_editor_frame, top_level_app=self.top_level_app)
         self.constraint_editor.pack(side=tk.TOP, padx=1, pady=1, fill=tk.BOTH, expand=True)
         self.constraint_editor.update()
         #self.constraint_editor.update_scroll_region()
