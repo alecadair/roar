@@ -341,24 +341,24 @@ class CIDLookupWindow(ttk.Frame):
         self.update_button.grid(row=0, column=0, columnspan=3, padx=self.padx, pady=self.pady, sticky="nsew")
 
         self.x_label = ttk.Label(self.custom_frame, text="X:")
-        self.x_label.grid(row=1, column=0, padx=self.padx, pady=self.pady, sticky="w")
+        self.x_label.grid(row=3, column=0, padx=self.padx, pady=self.pady, sticky="w")
 
         self.x_dropdown = ttk.Combobox(self.custom_frame, width=7)
         self.x_dropdown["values"] = self.top_level_app.lookups
-        self.x_dropdown.current(21)
-        self.x_dropdown.grid(row=1, column=1, padx=self.padx, pady=self.pady, sticky="ew")
+        self.x_dropdown.current(23)
+        self.x_dropdown.grid(row=3, column=1, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.x_value_lookup = tk.DoubleVar()
         self.x_value_lookup.set(15)
         self.x_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.x_value_lookup, increment=0.1, width=self.spinbox_width)
-        self.x_spinbox.grid(row=1, column=2, padx=self.padx, pady=self.pady, sticky="ew")
+        self.x_spinbox.grid(row=3, column=2, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.y_label = ttk.Label(self.custom_frame, text="Y:")
         self.y_label.grid(row=2, column=0, padx=self.padx, pady=self.pady, sticky="w")
 
         self.y_dropdown = ttk.Combobox(self.custom_frame, width=7)
         self.y_dropdown["values"] = self.top_level_app.lookups
-        self.y_dropdown.current(8)
+        self.y_dropdown.current(23)
         self.y_dropdown.grid(row=2, column=1, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.y_value_lookup = tk.DoubleVar()
@@ -367,30 +367,30 @@ class CIDLookupWindow(ttk.Frame):
         self.y_spinbox.grid(row=2, column=2, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.z_label = ttk.Label(self.custom_frame, text="Z:")
-        self.z_label.grid(row=3, column=0, padx=self.padx, pady=self.pady, sticky="w")
+        self.z_label.grid(row=1, column=0, padx=self.padx, pady=self.pady, sticky="w")
 
         self.z_value_lookup = tk.DoubleVar()
-        self.z_value_lookup.set(15)
+        self.z_value_lookup.set(23)
         self.z_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.y_value_lookup, increment=0.1, width=self.spinbox_width)
-        self.z_spinbox.grid(row=3, column=1, padx=self.padx, pady=self.pady, sticky="ew")
+        self.z_spinbox.grid(row=1, column=1, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.lookup_label_val = tk.StringVar()
         self.lookup_label_val.set(str(self.lookup_val))
         self.lookup_label = ttk.Label(self.custom_frame, textvariable=self.lookup_label_val)
-        self.lookup_label.grid(row=3, column=2, padx=self.padx, pady=self.pady, sticky="ew")
+        self.lookup_label.grid(row=1, column=2, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.three_d_var = tk.IntVar()
         self.contour_var = tk.IntVar()
-        self.legend_var = tk.IntVar()
+        self.legend_var = tk.IntVar(value=True)
 
 
-        self.three_d_checkbox = ttk.Checkbutton(self.custom_frame, text="3-D", variable=self.three_d_var)
+        self.three_d_checkbox = ttk.Checkbutton(self.custom_frame, text="3-D", variable=self.three_d_var, command=self.toggle_3d)
         self.three_d_checkbox.grid(row=4, column=1, sticky="ew")
 
         self.contour_checkbox = ttk.Checkbutton(self.custom_frame, text="Contour", variable=self.contour_var)
         self.contour_checkbox.grid(row=4, column=2, sticky="ew")
 
-        self.legend_checkbox = ttk.Checkbutton(self.custom_frame, text="Legend", variable=self.legend_var)
+        self.legend_checkbox = ttk.Checkbutton(self.custom_frame, text="Legend", variable=self.legend_var, command=self.toggle_legend)
         self.legend_checkbox.grid(row=5, column=2, sticky="ew")
 
 
@@ -404,6 +404,11 @@ class CIDLookupWindow(ttk.Frame):
         self.default_sashpos = 200
         self.after(2500, lambda: self.top_level_pane.sashpos(0, 0))
 
+    def toggle_3d(self):
+        self.graphing_window.toggle_3d(self.three_d_var.get())
+
+    def toggle_legend(self):
+        self.update_graph_from_tech_browser()
 
     def update_graph_from_tech_browser(self, equation_eval=None):
         models_selected = self.tech_browser.tree.get_checked()
@@ -432,7 +437,7 @@ class CIDLookupWindow(ttk.Frame):
             #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
             #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
             cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
-                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
+                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str, show_legend=self.legend_var.get())
             self.graphing_window.ax.grid(True, which="both")
 
             color_index += 1
@@ -461,7 +466,8 @@ class CIDGraphingWindow(ttk.Frame):
         self.browser_state = "contract"
         self.fig, self.ax = plt.subplots()
         self.t = np.arange(0, 3, .01)
-        self.ax.plot(self.t, 2 * np.sin(2 * np.pi * self.t))
+        self.ax.plot(self.t, 2 * np.sin(2 * np.pi * self.t), label="SinWave")
+        #self.legend = self.ax.legend()
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.toolbar = CIDNavigationToolbar(self.canvas, self, pack_toolbar=False, expand_callback=self.expand_callback,
                                             graph_settings_callback=self.settings_callback, top_level_app=self.top_level_app)
@@ -518,8 +524,12 @@ class CIDGraphingWindow(ttk.Frame):
         self.colormap_3d = None
         self.set_legend = False
 
+    def toggle_3d(self, enable):
+        self.ax.cla()
+        if enable:
+            self. ax = self.fig.add_subplot(111, projection='3d')
 
-
+            print("TODO")
     def settings_callback(self):
         print("TODO")
 
@@ -640,9 +650,9 @@ class CIDGraphController(ttk.PanedWindow):
 class CIDApp(ThemedTk):
     def __init__(self, theme, test=False):
         ThemedTk.__init__(self, theme=theme)
-        self.geometry("1500x927")
+        self.geometry("1750x1100")
         # Create the top-level horizontal paned window
-        self.lookups = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
+        self.lookups = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'csb', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
                                      'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm', 'kgmft', 'n','rds',
                                      'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth')
         self.tech_dict = {}

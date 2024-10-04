@@ -703,25 +703,35 @@ class CIDCorner():
         return ids
 
 
-    def plot_processes_params(self, param1, param2, norm_type="", show_plot=True, new_plot=True, fig1=None, ax1=None, color=None, legend_str=None):
+    def plot_processes_params(self, param1, param2, param3=None, norm_type="", show_plot=True, new_plot=True, fig1=None, ax1=None, color=None,
+                              legend_str=None, show_legend=True, enable_3d=False):
         color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-']
         color_list_length = len(color_list)
         color_index = 0
         if new_plot == True:
             fig1, ax1 = plt.subplots()
         lines = []
+        params3_all = []
+        if enable_3d and param3 != None:
+            params3_all = self.df[param3]
+        else:
+            params3_all = self.df[param1]
         params1_all = self.df[param1]
         params2_all = self.df[param2]
+
         kgm_col = self.df["kgm"]
         params1 = []
         params2 = []
+        params3 = []
         for i in range(len(params1_all)):
             kgm_col_i = kgm_col[i]
             if kgm_col_i > 0.5 and kgm_col_i < 40:
                 params1.append(params1_all[i])
                 params2.append(params2_all[i])
+                params3.append(params3_all[i])
         params1_normalized = []
         params2_normalized = []
+        params3_normalized = []
         params1_max = 0
         for num in params1:
             if num >= params1_max:
@@ -738,11 +748,22 @@ class CIDCorner():
         for num in params2:
             if num <= params2_min:
                 params2_min = num
+        params3_max = 0
+        for num in params3:
+            if num >= params3_max:
+                params3_max = num
+        params3_min = params3_max
+        for num in params3:
+            if num <= params3_min:
+                params3_min = num
+
 
         for num in params1:
             params1_normalized.append((num - params1_min) / (params1_max - params1_min))
         for num in params2:
             params2_normalized.append((num - params2_min) / (params2_max - params2_min))
+        for num in params3:
+            params3_normalized.append((num - params3_min) / (params3_max - params3_min))
         color_string = ""
         if color == None:
             color = color_list[color_index]
@@ -759,9 +780,12 @@ class CIDCorner():
             lines.append(params1_normalized)
             lines.append(params2_normalized)
         else:
-            ax1.plot(params1, params2, color, label=legend_str)
-            lines.append(params1)
-            lines.append(params2)
+            if enable_3d == False:
+                ax1.plot(params1, params2, color, label=legend_str)
+                lines.append(params1)
+                lines.append(params2)
+            else:
+                print("TODO")
         if(color_index == color_list_length - 1):
             color_index = 0
         else:
@@ -774,11 +798,12 @@ class CIDCorner():
         if show_plot == True:
             plt.grid(True)
         #legend = ax1.legend(bbox_to_anchor=(1.0, 0.5), loc="center left", fontsize='small')
-        legend = ax1.legend()
-        lined = {}
-        for legline, origline in zip(legend.get_lines(), lines):
-            legline.set_picker(True)
-            lined[legline] = origline
+        if show_legend:
+            legend = ax1.legend()
+            lined = {}
+            for legline, origline in zip(legend.get_lines(), lines):
+                legline.set_picker(True)
+                lined[legline] = origline
         #fig1.canvas.mpl_connect('pick_event', self.on_pick)
         if show_plot == True:
             plt.subplots_adjust(right=0.7)
