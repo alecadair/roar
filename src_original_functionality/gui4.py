@@ -37,7 +37,6 @@ from expression_editor import *
 from expression_gui import *
 from checkbox_list import *
 from generator import *
-from table_test import *
 from sympy import symbols, sympify
 
 #from gui2 import CIDTechBrowser
@@ -588,9 +587,7 @@ class CIDApp(ThemedTk):
         # Left Pane
         #self.left_pane = CIDGraphControlNotebook(self.top_level_pane, top_level_app=self, test=test, width=450)
         #self.left_pane = CIDGraphController(self.top_level_pane, graph_control_notebook=None, top_level_app=self, test=False)
-        #self.left_pane = CIDOptimizerSettings(self, graph_controllear=None, tech_browser=None, top_level_app=self, test=test)
-        self.left_pane = EditorPanedWindow(self.top_level_pane)
-       # self.top_level_pane.add(self.left_pane, weight=1)
+        self.left_pane = CIDOptimizerSettings(self, graph_controller=None, tech_browser=None, top_level_app=self, test=test)
         self.graph_controller = self.left_pane
         #self.graph_control_notebook = self.left_pane
 
