@@ -1,0 +1,1 @@
+[{"symbol": "kco", "function": "kcs6 + kcs8", "graph_var": 0, "enable": 1}, {"symbol": "kcs8", "function": "kdg8*(1 + 1/Av) + kcds8", "graph_var": 0, "enable": 1}, {"symbol": "kcds1", "function": "kcds:M1", "graph_var": 0, "enable": 1}, {"symbol": "kgd1", "function": "kgd1:M1", "graph_var": 0, "enable": 1}]
