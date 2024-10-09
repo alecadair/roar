@@ -2,11 +2,16 @@
 from cid import *
 
 
-class ROARTransistor:
+class ROARDevice:
+    def __init__(self, model_name=None):
+        self.model_name = model_name
+
+
+class ROARTransistor(ROARDevice):
     def __init__(self, instance_name=None, model_name=None, ideal_width=0, ideal_length=0,
                  multiplier=1, kgm=1, id=1, corner_collection=None, lookup_corner=None, constraints=[]):
+        super().__init__(model_name=model_name)
         self.instance_name = instance_name
-        self.model_name = model_name
         self.ideal_width = ideal_width
         self.ideal_length = ideal_length
         self.phys_width = 0
@@ -22,14 +27,21 @@ class ROARTransistor:
     def physical_sizes(self, roar_pdk_primitives):
         print("TODO")
 
+
 class ROARPDKPrimitives:
     def __init__(self):
         self.min_fingers = 0
         self.min_width = 0
         self.min_length = 0
 
+
 class ROARConstraint:
     def __init__(self):
         self.constraints = []
 
 
+class ROARDesign:
+    def __init__(self, devices=[]):
+        self.device_list = []
+        for device in devices:
+            self.device_list.append(device)
