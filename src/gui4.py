@@ -39,6 +39,7 @@ from checkbox_list import *
 from generator import *
 from table_test import *
 from sympy import symbols, sympify
+from generator import *
 
 #from gui2 import CIDTechBrowser
 #from gui2 import CIDGraphingWindow
@@ -133,11 +134,40 @@ class CIDTechBrowser(ttk.Frame):
         self.tree_item_counter += 1
         self.tree.bind('<Button 1>', self.select_item)
         self.tech_dict = top_level_app.tech_dict
+        
+
+    def get_selected_corners(self):
+        """Return the paths of all checked root nodes (omitting sublevels)."""
+        checked_items = self.tree.get_checked()  # Get the list of checked items
+        selected_corners = set()  # Use a set to avoid duplicates
+
+        # Process each checked item
+        for item in checked_items:
+            if not self.tree.get_children(item):  # Only include leaf nodes (those without children)
+                # If it's a root node (leaf), add its full path to the result
+                selected_corners.add(self.build_full_path(item))
+
+        return list(selected_corners)  # Convert the set back to a list to return
+
+    def build_full_path(self, item):
+        """Recursively build the full path from the root to the given node."""
+        path = []
+        current_item = item
+
+        # Traverse upwards to collect the full path to the node
+        while current_item:
+            item_text = self.tree.item(current_item, 'text')  # Get the node's text
+            path.insert(0, item_text)  # Insert at the start of the path to maintain order
+            current_item = self.tree.parent(current_item)  # Move to the parent node
+
+        # Join the path elements with '>' to form the full path
+        return ">".join(path)
 
     def select_item(self, event):
         self.tree._box_click(event)
         #clicked_items = self.tree.get_checked()
-        self.lookup_window.update_graph_from_tech_browser()
+        if self.lookup_window != None:
+            self.lookup_window.update_graph_from_tech_browser()
 
     def set_graphing_widget(self, graphing_widget):
         self.graphing_widget = graphing_widget
@@ -556,6 +586,7 @@ class CIDApp(ThemedTk):
     def __init__(self, theme, test=False):
         ThemedTk.__init__(self, theme=theme)
         self.geometry("1750x1100")
+        self.roar_design = ROARDesign()
         # Create the top-level horizontal paned window
         self.lookups = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'csb', 'css', 'ft', 'gds', 'gm', 'gmb', 'gmidft',
                                      'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm', 'kgmft', 'n','rds',
@@ -589,7 +620,9 @@ class CIDApp(ThemedTk):
         #self.left_pane = CIDGraphControlNotebook(self.top_level_pane, top_level_app=self, test=test, width=450)
         #self.left_pane = CIDGraphController(self.top_level_pane, graph_control_notebook=None, top_level_app=self, test=False)
         #self.left_pane = CIDOptimizerSettings(self, graph_controllear=None, tech_browser=None, top_level_app=self, test=test)
-        self.left_pane = EditorPanedWindow(self.top_level_pane)
+        self.left_pane = EditorPanedWindow(self.top_level_pane, top_level_app=self)
+        #self.left_pane = EditorPanedWindow(self.top_level_pane)
+
        # self.top_level_pane.add(self.left_pane, weight=1)
         self.graph_controller = self.left_pane
         #self.graph_control_notebook = self.left_pane

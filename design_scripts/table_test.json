@@ -87,13 +87,19 @@
     ],
     "constraint_editor": [
         {
-            "Symbol": "",
-            "Constraint Expression": "",
+            "Symbol": "minimum_gain",
+            "Constraint Expression": "gain > 50",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "miminum_phase_margin",
+            "Constraint Expression": "pm > 60",
             "disabled": false,
             "plot": false
         }
     ],
-    "instance_table_editor": [
+    "instance_table": [
         {
             "Instance Name": "M1",
             "kgm": "",
