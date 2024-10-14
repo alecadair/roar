@@ -1,12 +1,12 @@
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import json
 from equation_solver import *
 from gui4 import *
 
 class BaseEditor(ttk.LabelFrame):
     def __init__(self, parent, title, columns, left_justify_columns=None, column_ratios=None,
-                 plot_button_text="Add LUT", plot_command=None):
+                 plot_button_text="Add LUT", plot_command=None, add_command=None):
         super().__init__(parent, text=title)
         self.columns = columns
         self.left_justify_columns = left_justify_columns if left_justify_columns else []
@@ -15,9 +15,9 @@ class BaseEditor(ttk.LabelFrame):
         self.disabled_rows = set()
         self.enabled_plot_rows = set()
         self.plot_command = plot_command
-        self.setup_widgets()
+        self.setup_widgets(add_command=add_command)
 
-    def setup_widgets(self):
+    def setup_widgets(self, add_command):
         """Set up the Treeview, buttons, and layout."""
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
@@ -47,7 +47,9 @@ class BaseEditor(ttk.LabelFrame):
         button_frame_1.grid(row=1, column=0, sticky="ew", pady=5)
 
         # Row 1: Add Row, Delete Row, Enable/Disable, Add LUT/Set LUTs
-        self.add_button = ttk.Button(button_frame_1, text="+", command=self.add_row)
+        if add_command == None:
+            add_command = self.add_row
+        self.add_button = ttk.Button(button_frame_1, text="+", command=add_command)
         self.add_button.pack(side="left", padx=2, fill=tk.BOTH, expand=True)
 
         self.delete_button = ttk.Button(button_frame_1, text="-", command=self.delete_row)
@@ -61,6 +63,14 @@ class BaseEditor(ttk.LabelFrame):
 
         # Enable editing functionality
         self.tree.bind("<Double-1>", self.on_double_click)
+
+    def get_selected_entry(self):
+        """Retrieve the currently selected entry in the treeview as a list of text entries."""
+        selected_item = self.tree.selection()  # Get the selected row(s)
+        if selected_item:
+            row_values = self.tree.item(selected_item[0], 'values')  # Get the values of the first selected row
+            return list(row_values)  # Convert the tuple to a list
+        return []  # Return an empty list if no row is selected
 
     def add_row(self):
         """Add an empty row to the treeview and apply alternating row colors."""
@@ -214,11 +224,95 @@ class CIDInstanceTable(BaseEditor):
         # Evenly distribute the width of the columns and change button text to "Set LUTs"
         super().__init__(parent, title="Instance Table",
                          columns=["Instance Name", "kgm", "ID", "W", "L"],
-                         column_ratios=[2, 1, 1, 1, 1], plot_button_text="Set LUTs", plot_command=self.set_device_luts_from_tech_browser)
+                         column_ratios=[2, 1, 1, 1, 1], plot_button_text="Set LUTs", plot_command=self.set_device_luts_from_tech_browser,
+                         add_command=self.add_instance)
         self.top_level_app = top_level_app
         self.set_column_widths()
         #self.plot_command = plot_command
         #self.bind("<Configure>", self.enforce_minimum_width)
+
+    def add_instance(self):
+        """Prompt the user to enter an instance name, and confirm LUT setup."""
+        instance_name = self.get_instance_name_popup()
+
+        if instance_name:
+            # Ask if the user wants to set LUTs
+            set_luts = self.confirm_set_luts_popup(instance_name)
+
+            """Add an empty row to the treeview and apply alternating row colors."""
+            children = self.tree.get_children()
+            new_tag = "oddrow" if len(children) % 2 == 0 else "evenrow"
+            self.tree.insert("", "end", values=(instance_name, "", "", "", ""), tags=(new_tag,))
+            self.apply_row_color_scheme()
+            new_device = ROARTransistor(instance_name=instance_name)
+            self.top_level_app.roar_design.add_device(new_device)
+            if set_luts == 'yes':
+                # Handle the logic to set LUTs for the instance
+                self.set_device_luts_from_tech_browser(instance_name)
+                print(f"Setting LUTs for instance: {instance_name}")
+            else:
+                print(f"LUTs will not be set for instance: {instance_name}")
+
+    def get_instance_name_popup(self):
+        """Create a custom dialog to ask for instance name."""
+        dialog = tk.Toplevel(self)
+        dialog.title("Enter Instance Name")
+        dialog.grab_set()  # Disable interactions with other windows until this one is closed
+        dialog_frame = ttk.Frame(dialog)
+        dialog_frame.pack(padx=0, pady=0, expand=True, fill=tk.BOTH)
+        ttk.Label(dialog_frame, text="Enter Instance Name:").pack(padx=10, pady=10, expand=True, fill=tk.X)
+
+        instance_name_var = tk.StringVar()
+        entry = ttk.Entry(dialog_frame, textvariable=instance_name_var)
+        entry.pack(padx=10, pady=10, expand=True, fill=tk.X)
+        entry.focus()  # Focus on the entry widget
+
+        # Frame for buttons
+        button_frame = ttk.Frame(dialog_frame)
+        button_frame.pack(padx=10, pady=10, expand=True, fill=tk.X)
+
+        def on_ok():
+            dialog.destroy()
+
+        def on_cancel():
+            instance_name_var.set("")  # Reset the value
+            dialog.destroy()
+
+        ttk.Button(button_frame, text="OK", command=on_ok).pack(side="left", padx=5, expand=True, fill=tk.X)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side="left", padx=5, expand=True, fill=tk.X)
+
+        dialog.wait_window()  # Wait until this window is closed
+
+        return instance_name_var.get() if instance_name_var.get() else None
+
+    def confirm_set_luts_popup(self, instance_name):
+        """Create a custom Yes/No dialog to confirm setting LUTs."""
+        dialog = tk.Toplevel(self)
+        dialog.title("Set Look Up Tables")
+        dialog.grab_set()  # Disable interactions with other windows until this one is closed
+        dialog_frame = ttk.Frame(dialog)
+        dialog_frame.pack(padx=0, pady=0, expand=True, fill=tk.BOTH)
+        ttk.Label(dialog_frame, text=f"Would you like to set the Look Up Tables for instance '{instance_name}'?").pack(padx=10, pady=10)
+
+        response_var = tk.StringVar(value="no")
+
+        # Frame for buttons
+        button_frame = ttk.Frame(dialog_frame)
+        button_frame.pack(padx=10, pady=10)
+
+        def on_yes():
+            response_var.set("yes")
+            dialog.destroy()
+
+        def on_no():
+            dialog.destroy()
+
+        ttk.Button(button_frame, text="Yes", command=on_yes).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="No", command=on_no).pack(side="left", padx=5)
+
+        dialog.wait_window()  # Wait until this window is closed
+
+        return response_var.get()
 
     def get_instance_names(self):
         """Retrieve all instance names from the Instance Table Editor."""
@@ -232,9 +326,13 @@ class CIDInstanceTable(BaseEditor):
 
         return instance_names
 
-    def set_device_luts_from_tech_browser(self):
+    def set_device_luts_from_tech_browser(self, instance_name=None):
         """Open a new window with a CIDTechBrowser and a Select button, populated with the same tree structure."""
-
+        if instance_name == None:
+            selected_entry = self.get_selected_entry()
+            if len(selected_entry) == 0:
+                return 0
+            instance_name = selected_entry[0]
         # Step 1: Open a new window
         tech_window = tk.Toplevel(self)
         tech_window.title("LUT Selection")
@@ -253,7 +351,7 @@ class CIDInstanceTable(BaseEditor):
         self.copy_tech_browser_tree(original_tech_browser, tech_browser)
 
         # Step 5: Add a Select button
-        select_button = ttk.Button(tech_window, text="Select", command=lambda: self.get_corners_from_tech_browser(tech_browser, tech_window))
+        select_button = ttk.Button(tech_window, text="Select", command=lambda: self.get_corners_from_tech_browser(tech_browser, tech_window, instance_name))
         select_button.pack(side="top", pady=3, expand=True, fill=tk.X)
 
         # Configure the new window to stretch with content
@@ -286,7 +384,7 @@ class CIDInstanceTable(BaseEditor):
         for child_node in original_tree.get_children(node):
             self.copy_tree_node(original_tree, new_tree, child_node, new_node)
 
-    def get_corners_from_tech_browser(self, tech_browser, tech_window):
+    def get_corners_from_tech_browser(self, tech_browser, tech_window, instance_name=None):
         """Retrieve the selected corners from the TechBrowser."""
         # Call the get_selected_corners method to retrieve the CIDCorners list
         #cid_corners = tech_browser.get_selected_corners()
@@ -303,8 +401,11 @@ class CIDInstanceTable(BaseEditor):
         #return corner_list
         # Close the tech window after selection
         tech_window.destroy()
+        corner_collection = CIDCornerCollection(corner_list=corner_list)
+        self.top_level_app.roar_design.set_corners_for_device(instance_name=instance_name,
+                                                              corner_collection=corner_collection)
         # Now process the CIDCorners list as required
-        print("Selected Corners:", models_selected)
+        return models_selected
         # Continue working with the CIDCorners list as needed
 
 
@@ -359,6 +460,7 @@ class EditorPanedWindow(ttk.Frame):
 
         self.load_button = ttk.Button(button_frame, text="Load", command=self.load_all_data)
         self.load_button.pack(side="right", padx=3)
+
         self.evaluate_button =ttk.Button(button_frame, text="Evaluate", command=self.evaluate_expressions)
         self.evaluate_button.pack(side="left", fill=tk.X)
         # Add the "Open Editor" button
@@ -381,22 +483,28 @@ class EditorPanedWindow(ttk.Frame):
         self_optimizer_settings = self_control_notebook.master
         #solver = CIDEquationSolver(lookup_vals=None, graph_controller=self_graph_controller, test=False)
         solver = EquationSolver(top_level_app=self.top_level_app)
-        corners_to_eval = self.get_selected_corners()
-        df_array = []
+        #corners_to_eval = self.get_selected_corners()
+        #df_array = []
         symbols_to_add = []
-        for corner in corners_to_eval:
-            df = corner.df
-            df_array.append(df)
-        solver.corners = corners_to_eval
+        #for corner in corners_to_eval:
+        #    df = corner.df
+        #    df_array.append(df)
+        #solver.corners = corners_to_eval
         default_frame = None
-        for entry in self.space_craft.entries:
-            symbol_entry, function_entry, delete_button, enable_box, enable_row_var, graph_button, graph_var = entry
-            expr_enable_var = enable_row_var.get()
-            plot_enable = graph_var.get()
-            if expr_enable_var == False:
+        symbol_entries = self.expression_editor.get_table_data()
+        for entry in symbol_entries:
+            if entry["disabled"] == True:
                 continue
-            variable_name = symbol_entry.get()
-            expression = function_entry.get()
+            variable_name = entry["Symbol"]
+            expression = entry["Expression"]
+            plot_enable = entry["plot"]
+            #symbol_entry, function_entry, delete_button, enable_box, enable_row_var, graph_button, graph_var = entry
+            #expr_enable_var = enable_row_var.get()
+            #plot_enable = graph_var.get()
+            #if expr_enable_var == False:
+            #    continue
+            #variable_name = symbol_entry.get()
+            #expression = function_entry.get()
             expression = expression.replace("pi", "3.141592653589793")
             var_white_space = variable_name.replace(" ", "")
             expression_white_space = expression.replace(" ", "")
@@ -404,9 +512,9 @@ class EditorPanedWindow(ttk.Frame):
                 continue
             solver.add_equation(variable_name, expression)
             if plot_enable:
-                symbols_to_add.append(symbol_entry)
-                if symbol_entry not in self.top_level_app.lookups:
-                    self.top_level_app.lookups = self.top_level_app.lookups + (symbol_entry.get(),)
+                symbols_to_add.append(variable_name)
+                if variable_name not in self.top_level_app.lookups:
+                    self.top_level_app.lookups = self.top_level_app.lookups + (variable_name,)
             print("processed expression " + variable_name)
         results = solver.evaluate_equations(symbols_to_add)
         self.x_dropdown["values"] = self.top_level_app.lookups
@@ -469,7 +577,7 @@ class EditorPanedWindow(ttk.Frame):
         self.instance_table.load_table_data(instance_table.get_table_data())
 
     def save_all_data(self):
-        """Save the state of all tables into a JSON file."""
+        """Save the state of all tables and ROARDesign into a JSON file."""
         file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
         if file_path:
             # Gather data from all editors
@@ -477,6 +585,7 @@ class EditorPanedWindow(ttk.Frame):
                 "expression_editor": self.expression_editor.get_table_data(),
                 "constraint_editor": self.constraint_editor.get_table_data(),
                 "instance_table": self.instance_table.get_table_data(),
+                "roar_design": self.top_level_app.roar_design.serialize()  # Save ROARDesign state
             }
 
             # Save to JSON
@@ -484,8 +593,9 @@ class EditorPanedWindow(ttk.Frame):
                 json.dump(data, json_file, indent=4)
             print(f"All data saved to {file_path}")
 
+
     def load_all_data(self):
-        """Load the state of all tables from a JSON file."""
+        """Load the state of all tables and ROARDesign from a JSON file."""
         file_path = filedialog.askopenfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
         if file_path:
             with open(file_path, 'r') as json_file:
@@ -495,6 +605,11 @@ class EditorPanedWindow(ttk.Frame):
             self.expression_editor.load_table_data(data.get("expression_editor", []))
             self.constraint_editor.load_table_data(data.get("constraint_editor", []))
             self.instance_table.load_table_data(data.get("instance_table", []))
+
+            # Load ROARDesign state
+            if "roar_design" in data:
+                self.top_level_app.roar_design.deserialize(data["roar_design"])
+            print("Loaded Design " + file_path)
 
 # Create main window and instantiate the EditorPanedWindow
 if __name__ == "__main__":
