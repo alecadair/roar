@@ -83,7 +83,7 @@ class CIDTech:
         return ids_bucket
 
 class CIDCornerCollection:
-    def __init__(self, collection_name, file_list=None, corner_list=None):
+    def __init__(self, collection_name="", file_list=None, corner_list=None):
         self.collection_name = collection_name
         self.corners = []
         if corner_list != None:
