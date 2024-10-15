@@ -76,7 +76,7 @@ class EquationSolver:
                 column_vectors.append(df[lookup_var].values)
         # Stack the column vectors horizontally to form a 2D matrix
         matrix = np.column_stack(column_vectors)
-        return matrix
+        return matrix, corner_collection
 
     def add_variable_from_dataframe(self, dataframe):
         for column in dataframe.columns:
@@ -85,8 +85,9 @@ class EquationSolver:
     @staticmethod
     def is_number(s):
         pattern = r'^-?\d+(\.\d+)?$'
+        s_str = str(s)
         # Check if the string matches the pattern
-        is_number = bool(re.match(pattern, s))
+        is_number = bool(re.match(pattern, s_str))
         return is_number
         """
         try:
@@ -103,16 +104,19 @@ class EquationSolver:
             return None
         # Topological sort
         sorted_equations = self.topological_sort(dependency_graph)
-        symbols_to_add_string = []
+        symbols_to_add_strings = []
         for sym in symbols_to_add:
-            symbols_to_add_string.append(sym)
+            symbols_to_add_strings.append(sym)
         if sorted_equations is None:
             return None
         sorted_equations.reverse()  # Process from the bottom up
         results = {}
         for equation in sorted_equations:
             if equation in self.lookup_vals or ":" in equation:
-                result = self.create_matrix_from_lookup(equation)
+                result, corner_collection = self.create_matrix_from_lookup(equation)
+                if equation in symbols_to_add_strings:
+                    for corner in corner_collection:
+                        print("TODO")
                 results[equation] = result
                 continue
             equation_to_evaluate = self.equations[equation]
@@ -121,15 +125,16 @@ class EquationSolver:
                 continue
             result = self.evaluate_equation(equation_to_evaluate, results)
             if result is not None:
-                if equation in symbols_to_add_string:
+                if equation in symbols_to_add_strings:
                     corner_count = 0
-                    for corner in self.corners:
-                        result_column = result[:, corner_count]
-                        corner.df[equation] = result_column
+                    for device in self.top_level_app.roar_design.devices:
+                        for corner in self.top_level_app.roar_design.devices[device].corner_collection.corners:
+                            result_column = result[:, corner_count]
+                            corner.df[equation] = result_column
+                            corner_count += 1
                     #if equation not in self.top_level_app.lookups:
                     #    self.top_level_app.lookups = self.top_level_app.lookups + (equation,)
                 results[equation] = result
-                print("add to data frames")
             else:
                 return None
         return results
@@ -144,6 +149,9 @@ class EquationSolver:
 
             return evaluated_equation
         except Exception as e:
+            if symbolic_equation in results:
+                result = results[symbolic_equation]
+                return result
             print("Error:", e)
             return None
 

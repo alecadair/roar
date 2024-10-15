@@ -496,7 +496,7 @@ class EditorPanedWindow(ttk.Frame):
             if entry["disabled"] == True:
                 continue
             variable_name = entry["Symbol"]
-            expression = entry["Expression"]
+            expression = str(entry["Expression"])
             plot_enable = entry["plot"]
             #symbol_entry, function_entry, delete_button, enable_box, enable_row_var, graph_button, graph_var = entry
             #expr_enable_var = enable_row_var.get()
@@ -515,12 +515,15 @@ class EditorPanedWindow(ttk.Frame):
                 symbols_to_add.append(variable_name)
                 if variable_name not in self.top_level_app.lookups:
                     self.top_level_app.lookups = self.top_level_app.lookups + (variable_name,)
+
             print("processed expression " + variable_name)
         results = solver.evaluate_equations(symbols_to_add)
-        self.x_dropdown["values"] = self.top_level_app.lookups
+        lookups_list = list(self.top_level_app.lookups).append(symbols_to_add)
+        #self.top_level_app.lookups = tuple(lookups_list)
+        #self.x_dropdown["values"] = self.top_level_app.lookups
         #self.x_dropdown.current(self.x_dropdown.get())
 
-        self.y_dropdown["values"] = self.top_level_app.lookups
+        #self.y_dropdown["values"] = self.top_level_app.lookups
         #self.y_dropdown.current(self.y_dropdown.get())
 
         print("")
