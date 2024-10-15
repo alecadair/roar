@@ -74,6 +74,7 @@ class ROARTransistor(ROARDevice):
         roar_device.multiplier = data.get("multiplier", 1)
         roar_device.kgm = data.get("kgm", 1)
         roar_device.id = data.get("id", 1)
+        roar_lookups = {}
         #roar_device.corner_collection = data.get("corner_collection", None)
         #roar_device.lookup_corner = data.get("lookup_corner", None)
         #roar_device.constraints = data.get("constraints", [])
