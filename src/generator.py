@@ -7,20 +7,20 @@ class ROARDevice:
         self.model_name = model_name
         self.instance_name = instance_name
 
-    def serialize(self):
-        # Convert ROARDevice attributes to a dictionary
-        return {
-            "model_name": self.model_name,
-            "instance_name": self.instance_name
-        }
+    #def serialize(self):
+    #    # Convert ROARDevice attributes to a dictionary
+    #    return {
+    #        "model_name": self.model_name,
+    #        "instance_name": self.instance_name
+    #    }
 
-    @classmethod
-    def deserialize(cls, data):
-        # Create a new ROARDevice object from the dictionary
-        return cls(
-            model_name=data.get("model_name"),
-            instance_name=data.get("instance_name")
-        )
+    #@classmethod
+    #def deserialize(cls, data):
+    #    # Create a new ROARDevice object from the dictionary
+    #    return cls(
+    #        model_name=data.get("model_name"),
+    #        instance_name=data.get("instance_name")
+    #    )
 
 class ROARTransistor(ROARDevice):
     def __init__(self, instance_name=None, model_name=None, ideal_width=0, ideal_length=0,
@@ -45,6 +45,8 @@ class ROARTransistor(ROARDevice):
         # Serialize the attributes of the base class (ROARDevice) and then add the attributes of ROARTransistor
         base_data = super().serialize()  # Get ROARDevice data
         transistor_data = {
+            "model_name": self.model_name,
+            "instance_name": self.instance_name,
             "ideal_width": self.ideal_width,
             "ideal_length": self.ideal_length,
             "phys_width": self.phys_width,
@@ -64,7 +66,8 @@ class ROARTransistor(ROARDevice):
     def deserialize(cls, data):
         # Deserialize the base class (ROARDevice) attributes first
         roar_device = super(ROARTransistor, cls).deserialize(data)
-
+        roar_device.model_name = data.get("model_name", 0)
+        roar_device.instance_name = data.get("instance_name", 0)
         # Deserialize the ROARTransistor specific attributes
         roar_device.ideal_width = data.get("ideal_width", 0)
         roar_device.ideal_length = data.get("ideal_length", 0)
