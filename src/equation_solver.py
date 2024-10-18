@@ -126,8 +126,8 @@ class EquationSolver:
             result = self.evaluate_equation(equation_to_evaluate, results)
             if result is not None:
                 if equation in symbols_to_add_strings:
-                    corner_count = 0
                     for device in self.top_level_app.roar_design.devices:
+                        corner_count = 0
                         for corner in self.top_level_app.roar_design.devices[device].corner_collection.corners:
                             result_column = result[:, corner_count]
                             corner.df[equation] = result_column

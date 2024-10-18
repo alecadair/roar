@@ -304,15 +304,18 @@ class CIDLookupWindow(ttk.Frame):
         self.z_label = ttk.Label(self.custom_frame, text="Z:")
         self.z_label.grid(row=1, column=0, padx=self.padx, pady=self.pady, sticky="w")
 
-        self.z_value_lookup = tk.DoubleVar()
-        self.z_value_lookup.set(23)
-        self.z_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.y_value_lookup, increment=0.1, width=self.spinbox_width)
-        self.z_spinbox.grid(row=1, column=1, padx=self.padx, pady=self.pady, sticky="ew")
+        self.z_dropdown = ttk.Combobox(self.custom_frame, width=7)
+        self.z_dropdown["values"] = self.top_level_app.lookups
+        self.z_dropdown.current(23)
+        self.z_dropdown.grid(row=1, column=1, padx=self.padx, pady=self.pady, sticky="ew")
 
-        self.lookup_label_val = tk.StringVar()
-        self.lookup_label_val.set(str(self.lookup_val))
-        self.lookup_label = ttk.Label(self.custom_frame, textvariable=self.lookup_label_val)
-        self.lookup_label.grid(row=1, column=2, padx=self.padx, pady=self.pady, sticky="ew")
+        self.z_spinbox = ttk.Spinbox(self.custom_frame, from_=0, to=100, textvariable=self.y_value_lookup, increment=0.1, width=self.spinbox_width)
+        self.z_spinbox.grid(row=1, column=2, padx=self.padx, pady=self.pady, sticky="ew")
+
+        #self.lookup_label_val = tk.StringVar()
+        #self.lookup_label_val.set(str(self.lookup_val))
+        #self.lookup_label = ttk.Label(self.custom_frame, textvariable=self.lookup_label_val)
+        #self.lookup_label.grid(row=1, column=2, padx=self.padx, pady=self.pady, sticky="ew")
 
         self.three_d_var = tk.IntVar()
         self.contour_var = tk.IntVar()
@@ -856,6 +859,19 @@ class CIDGraphGrid(ttk.Frame):
         #self.add_tech_from_dir(dir=dirname, pdk_name=pdk_name)
         for lookup_window in self.lookup_windows:
             lookup_window.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
+
+    def update_lookups_from_top_level(self):
+        for graphing_window in self.graphing_windows:
+            x = graphing_window.x_dropdown.current()
+            y = graphing_window.y_dropdown.current()
+            z = graphing_window.z_dropdown.current()
+            graphing_window.x_dropdown["values"] = self.top_level_app.lookups
+            graphing_window.y_dropdown["values"] = self.top_level_app.lookups
+            graphing_window.z_dropdown["values"] = self.top_level_app.lookups
+            graphing_window.x_dropdown.current(x)
+            graphing_window.y_dropdown.current(y)
+            graphing_window.z_dropdown.current(z)
+            print("Updated Lookups")
 
 
 # Graft Control Notebook is the top left widget of the top level application

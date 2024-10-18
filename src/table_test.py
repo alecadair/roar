@@ -518,7 +518,7 @@ class EditorPanedWindow(ttk.Frame):
 
             print("processed expression " + variable_name)
         results = solver.evaluate_equations(symbols_to_add)
-        lookups_list = list(self.top_level_app.lookups).append(symbols_to_add)
+        self.top_level_app.graph_grid.update_lookups_from_top_level()
         #self.top_level_app.lookups = tuple(lookups_list)
         #self.x_dropdown["values"] = self.top_level_app.lookups
         #self.x_dropdown.current(self.x_dropdown.get())
