@@ -7,20 +7,20 @@ class ROARDevice:
         self.model_name = model_name
         self.instance_name = instance_name
 
-    #def serialize(self):
-    #    # Convert ROARDevice attributes to a dictionary
-    #    return {
-    #        "model_name": self.model_name,
-    #        "instance_name": self.instance_name
-    #    }
+    def serialize(self):
+        # Convert ROARDevice attributes to a dictionary
+        return {
+            "model_name": self.model_name,
+            "instance_name": self.instance_name
+        }
 
-    #@classmethod
-    #def deserialize(cls, data):
-    #    # Create a new ROARDevice object from the dictionary
-    #    return cls(
-    #        model_name=data.get("model_name"),
-    #        instance_name=data.get("instance_name")
-    #    )
+    @classmethod
+    def deserialize(cls, data):
+        # Create a new ROARDevice object from the dictionary
+        return cls(
+            model_name=data.get("model_name"),
+            instance_name=data.get("instance_name")
+        )
 
 class ROARTransistor(ROARDevice):
     def __init__(self, instance_name=None, model_name=None, ideal_width=0, ideal_length=0,
@@ -45,8 +45,8 @@ class ROARTransistor(ROARDevice):
         # Serialize the attributes of the base class (ROARDevice) and then add the attributes of ROARTransistor
         base_data = super().serialize()  # Get ROARDevice data
         transistor_data = {
-            "model_name": self.model_name,
-            "instance_name": self.instance_name,
+            #"model_name": self.model_name,
+            #"instance_name": self.instance_name,
             "ideal_width": self.ideal_width,
             "ideal_length": self.ideal_length,
             "phys_width": self.phys_width,
@@ -54,8 +54,8 @@ class ROARTransistor(ROARDevice):
             "num_fingers": self.num_fingers,
             "multiplier": self.multiplier,
             "kgm": self.kgm,
-            "id": self.id
-            #"corner_collection": self.corner_collection,  # Assuming corner_collection is serializable
+            "id": self.id,
+            "corner_collection": self.corner_collection.serialize() if self.corner_collection else None  #  # Assuming corner_collection is serializable
             #"lookup_corner": self.lookup_corner,          # Assuming lookup_corner is serializable
             #"constraints": self.constraints               # Assuming constraints are serializable
         }
@@ -66,8 +66,8 @@ class ROARTransistor(ROARDevice):
     def deserialize(cls, data):
         # Deserialize the base class (ROARDevice) attributes first
         roar_device = super(ROARTransistor, cls).deserialize(data)
-        roar_device.model_name = data.get("model_name", 0)
-        roar_device.instance_name = data.get("instance_name", 0)
+        #roar_device.model_name = data.get("model_name", 0)
+        #roar_device.instance_name = data.get("instance_name", 0)
         # Deserialize the ROARTransistor specific attributes
         roar_device.ideal_width = data.get("ideal_width", 0)
         roar_device.ideal_length = data.get("ideal_length", 0)
@@ -77,10 +77,11 @@ class ROARTransistor(ROARDevice):
         roar_device.multiplier = data.get("multiplier", 1)
         roar_device.kgm = data.get("kgm", 1)
         roar_device.id = data.get("id", 1)
-        roar_lookups = {}
-        #roar_device.corner_collection = data.get("corner_collection", None)
-        #roar_device.lookup_corner = data.get("lookup_corner", None)
-        #roar_device.constraints = data.get("constraints", [])
+        #roar_lookups = {}
+        corner_collection_data = data.get("corner_collection", None)
+        roar_device.corner_collection = CIDCornerCollection.deserialize(corner_collection_data) if corner_collection_data else None
+        roar_device.lookup_corner = data.get("lookup_corner", None)
+        roar_device.constraints = data.get("constraints", [])
 
         return roar_device
 class ROARPDKPrimitives:
