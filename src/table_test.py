@@ -611,7 +611,9 @@ class EditorPanedWindow(ttk.Frame):
 
             # Load ROARDesign state
             if "roar_design" in data:
-                self.top_level_app.roar_design.deserialize(data["roar_design"])
+                roar_dict = data.get("roar_design")
+                roar_design = self.top_level_app.roar_design.deserialize(data["roar_design"])
+                self.top_level_app.roar_design = roar_design
             print("Loaded Design " + file_path)
 
 # Create main window and instantiate the EditorPanedWindow
