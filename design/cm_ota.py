@@ -1,8 +1,8 @@
 import sys, os, getpass, shutil, operator, collections, copy, re, math
 import matplotlib.ticker as mticker
-#sys.path.append("/pri/ala1/Documents/CAD/roar/src")
 from cid import *
 from matplotlib.ticker import LogLocator
+from matplotlib.colors import LogNorm
 #from pyfonts import load_font
 # load font
 #font = load_font(
@@ -11,31 +11,39 @@ from matplotlib.ticker import LogLocator
 
 from matplotlib.font_manager import FontProperties
 plt.rcParams['svg.fonttype'] = 'none'
+
+ROAR_HOME = os.environ["ROAR_HOME"]
+ROAR_LIB = os.environ["ROAR_LIB"]
+ROAR_SRC = os.environ["ROAR_SRC"]
+ROAR_CHARACTERIZATION = os.environ["ROAR_CHARACTERIZATION"]
+ROAR_DESIGN = os.environ["ROAR_DESIGN"]
+
+
 def parallel(x1, x2):
     return 1/((1/x1) + 1/x2)
 
 def create_spice_netlist_for_place_and_route(nf1_2, nf3_4, nf5_6, nf7_8):
     print("TODO")
 
-def total_current_ota_v2(ncorner, pcorner, alpha, gbw, cload, kgm1, kgm2, gain_spec, thermal_noise_spec):
+def total_current_ota_v3(ncorner, pcorner, alpha, gbw, cload, kgm1, kgm2, gain_spec, thermal_noise_spec):
     f1 = 2*math.pi*gbw
     p_factor = 1
     k = 1.380649e-23
     T = 300.15
     gamma = 2/3
     gamma = 8/3
-    kcgs_1 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val = kgm1)
-    kcds_1 = ncorner.lookup(param1="kgm", param2="kcds", param1_val = kgm1)
-
+    kcgs_1 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm1)
+    kcds_1 = ncorner.lookup(param1="kgm", param2="kcds", param1_val=kgm1)
     kcgs_8 = pcorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm2*p_factor)
     kcgd_8 = pcorner.lookup(param1="kgm", param2="kcgd", param1_val=kgm2*p_factor)
     kcds_8 = pcorner.lookup(param1="kgm", param2="kcds", param1_val=kgm2*p_factor)
-    kcgs_6 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm2)
-    kcds_6 = ncorner.lookup(param1="kgm", param2="kcds", param1_val=kgm2)
-    kcgs_4 = pcorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm1*p_factor)
-    kcds_4 = pcorner.lookup(param1="kgm", param2="kcds", param1_val=kgm1*p_factor)
-    kgds_6 = ncorner.lookup(param1="kgm", param2="kgds", param1_val=kgm2)
-    kgds_8 = ncorner.lookup(param1="kgm", param2="kgds", param1_val=kgm2)
+    kcgs_6 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm1)
+    kcds_6 = ncorner.lookup(param1="kgm", param2="kcds", param1_val=kgm1)
+    kcgs_4 = pcorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm2*p_factor)
+    kcds_4 = pcorner.lookup(param1="kgm", param2="kcds", param1_val=kgm2*p_factor)
+    kgds_6 = ncorner.lookup(param1="kgm", param2="kgds", param1_val=kgm1)
+    kgds_8 = ncorner.lookup(param1="kgm", param2="kgds", param1_val=kgm1)
+
     gain = kgm1/(kgds_6 + kgds_8)
     kcout = kcgs_8 + kcds_8 + kcgs_6 + kcds_6
     beta_num = kgm1 - 2*math.pi*alpha*gbw*kcgs_4
@@ -82,6 +90,79 @@ def total_current_ota_v2(ncorner, pcorner, alpha, gbw, cload, kgm1, kgm2, gain_s
     return total_current, beta, thermal_rms_noise, beta_valid, gain_valid, thermal_noise_valid, kcout
 
 
+def total_current_ota_v2(ncorner, pcorner, alpha, gbw, cload, kgm_n, kgm_p, gain_spec, thermal_noise_spec):
+    f1 = 2*math.pi*gbw
+    p_factor = 1
+    k = 1.380649e-23
+    T = 300.15
+    gamma = 2/3
+    gamma = 8/3
+    kgm1 = kgm_n
+    kgm2 = kgm_n
+    kgm5 = kgm_n
+    kgm6 = kgm_n
+    kgm3 = kgm_p
+    kgm4 = kgm_p
+    kgm7 = kgm_p
+    kgm8 = kgm_p
+    kcgs_1 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val = kgm1)
+    kcds_1 = ncorner.lookup(param1="kgm", param2="kcds", param1_val = kgm1)
+    kcgs_8 = pcorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm8)
+    kcgd_8 = pcorner.lookup(param1="kgm", param2="kcgd", param1_val=kgm8)
+    kcds_8 = pcorner.lookup(param1="kgm", param2="kcds", param1_val=kgm8)
+    kcgs_6 = ncorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm6)
+    kcgd_6 = ncorner.lookup(param1="kgm", param2="kcgd", param1_val=kgm6)
+    kcds_6 = ncorner.lookup(param1="kgm", param2="kcds", param1_val=kgm6)
+    kcgs_4 = pcorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm4)
+    kcds_4 = pcorner.lookup(param1="kgm", param2="kcds", param1_val=kgm4)
+    kgds_6 = ncorner.lookup(param1="kgm", param2="kgds", param1_val=kgm6)
+    kgds_8 = ncorner.lookup(param1="kgm", param2="kgds", param1_val=kgm8)
+    gain = kgm1/(kgds_6 + kgds_8)
+    kcout = kcgd_8 + kcds_8 + kcgd_6 + kcds_6
+    beta_num = kgm4 - 2*math.pi*alpha*gbw*kcgs_4
+    beta_denom = (2*math.pi*alpha*gbw*(kcgs_8 + kcgd_8))
+    beta = beta_num/beta_denom
+    #m1_current_term1 = 2*math.pi*gbw*cload/(beta*kgm1)
+    #m1_current_term2 = 1/(1 - 2*math.pi*gbw*kcout/kgm1)
+    #m1_current = m1_current_term1*m1_current_term2
+    #total_current = m1_current + beta*m1_current
+    kcs_8 = kcgs_8 + kcgd_8
+    kcs_6 = kcds_6 + kcgs_6
+    total_current_num = alpha*cload*f1*f1*(kcs_8 - kcgs_4) + f1*cload*kgm4
+    total_current_denom = (kgm4 - alpha*f1*kcgs_4)*(kgm1 - f1*kcout)
+    total_current = total_current_num/total_current_denom
+    m1_current = total_current/(1 + beta)
+    m8_current = total_current - m1_current
+    m6_current = m8_current
+    m4_current = m1_current
+    m2_cload = (kcgs_1 + kcds_1)*m1_current + kcs_8*m8_current + kcds_4*m1_current
+    m4_cload = m2_cload
+    m6_cload = ((kcs_6 + kcds_8 + kcgs_8)*m6_current) + cload
+    m8_cload = m6_cload
+    m1_gm = kgm1*m1_current
+    m6_gm = kgm2*m6_current
+    m8_gm = m6_gm
+    m4_gm = m1_gm
+    ft_m8 = m8_gm/(2*math.pi*m8_cload)
+    ft_m2 = m1_gm/(2*math.pi*m2_cload)
+    ft_m4 = m4_gm/(2*math.pi*m4_cload)
+    ft_m6 = m6_gm/(2*math.pi*m6_cload)
+
+    thermal_rms_noise = k*T*(ft_m2/(kgm1*m1_current) + ft_m4/(kgm1*m1_current) + ft_m6/(kgm2*m6_current) + ft_m8/(kgm2*m6_current))
+    #thermal_rms_noise = (gamma*k*T*ft_m1)/(m1_current*kgm1)
+    #thermal_rms_noise = 2*((8/3)*k*T)*(1/m1_gm)*(1 + 1 + 1/beta + m6_gm/(beta*beta + m1_gm))
+    beta_valid = True
+    gain_valid = True
+    thermal_noise_valid = True
+    if beta < 1:
+        beta_valid = False
+    if gain < gain_spec:
+        gain_valid = False
+    if thermal_rms_noise < thermal_noise_spec:
+        thermal_noise_valid = False
+    return total_current, beta, kcout, thermal_rms_noise, beta_valid, gain_valid, thermal_noise_valid, kcout
+
+
 def total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1, kgm2, gain_spec):
     p_factor = 1
     kcgs_8 = nom_ncorner.lookup(param1="kgm", param2="kcgs", param1_val=kgm2*p_factor)
@@ -110,11 +191,8 @@ def total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1, kgm2, g
     return total_current, beta, beta_valid, gain_valid
 
 
-
-
-
 def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, bw, cload, therm_noise, fig, ax1, ax2, ax3, ax4,
-                                         color_map, beta_color, gain_color, alpha_graph, marker_size, line_style):
+                                         color_map, beta_color, gain_color, alpha_graph, marker_size, line_style, kgm_n_max, kgm_p_max, map_label, edge_color):
     gbw = gain*bw
     kgm_n_v = nom_ncorner.df["kgm"]
     kgm_p_v = nom_pcorner.df["kgm"]
@@ -125,15 +203,23 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     kgm_min = min(min_n, min_p)
     kgm_max = max(max_n, max_p)
     #kgm_max = 18
-    kgm_max = 20
+    current_max = 7000
+    #current_max = 1000
+    current_min = 120
+    #current_min = 20
+    #kgm_max = 30
+    #kgm_n_max = 30
+    #kgm_p_max = 19.75
     kgm_min = 0.1
-    num_samples = 300
+    num_samples = 50
     if kgm_min < 0:
         kgm_min = 0.001
-    kgm1_vals = np.linspace(kgm_min, kgm_max, num_samples)
-    kgm2_vals = np.linspace(kgm_min, kgm_max, num_samples)
-    kgm1_grid, kgm2_grid = np.meshgrid(kgm1_vals, kgm2_vals)
+    kgm_vals = np.linspace(kgm_min, kgm_max, num_samples)
+    kgm1_grid, kgm2_grid = np.meshgrid(kgm_vals, kgm_vals)
     z = np.zeros_like(kgm1_grid)
+    z_log = np.zeros_like(kgm1_grid)
+    kcout = np.zeros_like(kgm1_grid)
+    kcout_log = np.zeros_like(kgm1_grid)
     beta = np.zeros_like(kgm1_grid)
     beta_valid_grid = np.zeros_like(kgm1_grid)
     gain_valid_grid = np.zeros_like(kgm1_grid)
@@ -147,19 +233,37 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     therm_rms_noise_max = 1e-6
     therm_rms_noise_min = 0
     kcout_vector = []
-    for i in range(len(kgm1_vals)):
-        #for j in range(len(kgm2_vals)):
+    corner_count = 0
+    for i in range(len(kgm_vals)):
+        for j in range(len(kgm_vals)):
             #total_current, beta1, beta_valid, gain_valid = total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_vals[i], kgm2_vals[j], gain_spec=gain)
 
 
-        total_current, beta_i_j, thermal_rms_noise_i_j, beta_valid, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
-                                                                                                                           kgm1_vals[i], kgm1_vals[i], gain_spec=gain,
+            total_current, beta_i_j, kcout_i_j, thermal_rms_noise_i_j, beta_valid, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
+                                                                                                                           kgm_vals[i], kgm_vals[j], gain_spec=gain,
                                                                                                                            thermal_noise_spec=therm_noise)
+            if kgm_vals[j] > kgm_p_max:
+                total_current = -1
+                kcout_i_j = np.nan
+            if kgm_vals[i] > kgm_n_max:
+                total_current = -1
+                kcout_i_j = np.nan
+            total_current = total_current * 1e6
+            if total_current < 0 or total_current > current_max or total_current < current_min:
+                total_current = np.nan
+
+
+            z[i, j] = total_current
+            z_log[i, j] = math.log10(total_current)
+            kcout[i, j] = kcout_i_j
+            kcout_log[i, j] = math.log10(kcout_i_j)
+
         """
         total_current, beta_i_j, thermal_rms_noise_i_j, beta_valid, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
                                                                                                                    9.4825, 9.4845, gain_spec=gain,
                                                                                                                    thermal_noise_spec=therm_noise)
         """
+
         total_current = total_current*1e6
         if total_current < 0 or beta_valid == False:
             total_current = np.nan
@@ -173,8 +277,8 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
         #if beta_i_j > beta_max:
         #    beta_i_j = beta_max
         #total_current = np.log10(total_current*1e6)
-        thermal_rms_noise_i_j = np.log10(thermal_rms_noise_i_j*1e9)
-        i_total_vector.append(total_current)
+        #thermal_rms_noise_i_j = np.log10(thermal_rms_noise_i_j*1e9)
+        #i_total_vector.append(total_current)
         #if beta_valid == False:
         #    total_current = np.nan
         #if gain_valid == False:
@@ -195,31 +299,62 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
 
     #plot where kgm1 = kgm2
     #surf = ax.plot_surface(kgm1_grid, kgm2_grid, z, cmap=color_map, lw=0.5, edgecolor='k', rstride=3, cstride=3, alpha=alpha_graph)
-    #surf_i_total = ax1.plot_surface(kgm1_grid, kgm2_grid, z, lw=0.5, cmap=color_map, edgecolor='royalblue', rstride=3, cstride=3, alpha=alpha_graph)
+    #surf_i_total = ax1.plot_surface(kgm1_grid, kgm2_grid, z_log, lw=0.5, cmap=color_map, edgecolor='royalblue', rstride=3, cstride=3, alpha=alpha_graph)
+    surf_i_total = ax1.plot_surface(kgm1_grid, kgm2_grid, z_log, lw=0.5, cmap=color_map, edgecolor=edge_color, rstride=3, cstride=3, alpha=alpha_graph)
+
     #surf_beta = ax3.plot_surface(kgm1_grid, kgm2_grid, beta, lw=0.5, cmap=color_map, edgecolor="royalblue", rstride=3, cstride=3, alpha=alpha_graph)
     #surf_therm_noise = ax3.plot_surface(kgm1_grid, kgm2_grid, therm_noise_rms, lw=0.5, cmap=color_map, edgecolor="royalblue", rstride=3, cstride=3, alpha=alpha_graph)
 
-    #ax1.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], z[diagonal_mask]+0.5, color='k', linewidth=4, label="kgm1 = kgm2")
-    arial_bold = FontProperties(fname="/home/adair/Documents/CAD/roar/fonts/ArialNarrow/arialnarrow_bold.ttf")
+    #ax1.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], z_log[diagonal_mask], color='k', linewidth=2, label="kgm1 = kgm2")
+    arial_bold = FontProperties(fname=ROAR_HOME + "/fonts/ArialNarrow/arialnarrow_bold.ttf")
     font_size = 12
-    ax1.plot(kgm1_vals, i_total_vector, line_style, linewidth=2)
+
+    #ORIGINAL SCRIPT
+    #ax1.plot(kgm1_vals, i_total_vector, line_style, linewidth=2)
+
     #ax3.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], beta[diagonal_mask]+0.5, color='k', linewidth=4, label="kgm1 = kgm2")
-    #ax1.set_xlabel(r'$\mathrm{\mathcal{G}_{m_{1 \rightarrow 4}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
-    #ax1.set_ylabel(r'$\mathrm{\mathcal{G}_{m_{5 \rightarrow 8}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
-    #ax1.set_zlabel("Total Current [uA]", font=arial_bold, fontsize=font_size)
+    ax1.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax1.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax1.set_zlabel("Total Current [uA]", font=arial_bold, fontsize=font_size)
+    ax1.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax1.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax1.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    current_ticks = np.array([100, 250, 500, 750, 1000, 2500, 5000, 7500])
+    #current_ticks = np.array([10, 100, 1000])
+    ax1.set_zticks(np.log10(current_ticks))
+    #ax1.set_zticks(current_ticks)
+    ax1.set_zticklabels(current_ticks)
+    ax1.set_xlim(kgm_min, kgm_p_max)
+    ax1.set_ylim(kgm_min, kgm_n_max)
+    ax1.set_zlim(1.5, 3.9)
+    #ax1.set_zlim(1, 3)
+    #ax1.set_zlim(25, 100)
+    #ax1.legend()
 
-    return i_total_vector, kgm1_vals
-    ax2 = None
-    ax2 = ax1.twin()
+    #return i_total_vector, kgm1_vals
+    #ax2 = None
+    #ax2 = ax1.twin()
+    surf_kco_total = ax3.plot_surface(kgm1_grid, kgm2_grid, kcout_log, lw=0.5, cmap=color_map, edgecolor='royalblue', rstride=3, cstride=3, alpha=alpha_graph)
 
+    #ax2.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], kcout_log[diagonal_mask], color='k', linewidth=2, label="kgm1 = kgm2")
 
-    ax3.set_xlabel(r'$\mathrm{\mathcal{G}_{m_{1 \rightarrow 4}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax3.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax3.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax3.set_zlabel(r'$\mathrm{\mathcal{C}_{O}}}$ [$\mathrm{F/A}$]', font=arial_bold, fontsize=font_size)
+
+    ax3.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax3.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax3.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    kco_ticks = np.array([1e-11, 1e-9, 1e-7, 1e-5])
+    ax3.set_zticks(np.log10(kco_ticks))
+    #ax1.set_zticks(current_ticks)
+    ax3.set_zticklabels(kco_ticks)
+    #ax3.set_xlabel(r'$\mathrm{\mathcal{G}_{m_{1 \rightarrow 4}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
     ax3.set_ylabel(r'$\mathrm{\mathcal{G}_{m_{5 \rightarrow 8}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
-
-    ax2.set_xlabel(r'$\mathrm{\mathcal{G}_{m_{1 \rightarrow 4}}}$ [$\mathrm{V^{-1}}$]', fontdict=font_properties)
-    ax2.set_ylabel(r'$\mathrm{\mathcal{G}_{m_{1 \rightarrow 4}}}$ [$\mathrm{V^{-1}}$]', fontdict=font_properties)
-
     ax3.set_zlabel(r'RMS Thermal Noise [$\mathrm{[uV_{RMS}}$]')
+    ax3.set_xlim(kgm_min, 18.8)
+    ax3.set_ylim(kgm_min, 26)
+    ax3.set_zlim(-11, -6)
     #cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10)
     #cbar.set_label('Total Current [uA]', fontdict=font_properties)
     #surf.set_clim(zlim_min, zlim_max)  # Set the colorbar limits to match the z-axis limits
@@ -248,21 +383,9 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     #ax1.contour(kgm1_grid, kgm2_grid, z, zdir="y", offset=-8, cmap=color_map)
     #ax1.contour(kgm1_grid, kgm2_grid, z, zdir="z", offset=-2,  cmap=color_map)
 
-
-    z_ticks = np.array([1, 10, 100, 1000, 10000, 100000])
-    current_ticks = np.array([0.01, 0.1, 1, 10, 100, 1000, 10000])
-    ax1.set_zticks(np.log10(current_ticks))
-    ax1.set_zticklabels(current_ticks)
-
-    ax3.set_zticks(np.log10(z_ticks))
-    ax3.set_zticklabels(z_ticks)
     # Add a grid for better readability
-    ax1.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax1.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax1.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
 
-    ax1.set_xlim(kgm_min, kgm_max)
-    ax1.set_ylim(kgm_min, kgm_max)
+
     #ax1.set_zlim(zlim_min, zlim_max)
 
     def log_tick_formatter(val, pos=None):
@@ -272,7 +395,6 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     #ax1.zaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
     #ax1.zaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 
-    ax1.legend()
 
     ax3.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
     ax3.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
@@ -284,25 +406,33 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     ax3.legend()
 
     #ax2 = fig.add_subplot(122)
-    contour1 = ax2.contourf(kgm1_grid, kgm2_grid, z, levels=25,  alpha=alpha_graph, cmap=color_map)
-    contour2 = ax4.contourf(kgm1_grid, kgm2_grid, beta, levels=15, alpha=alpha_graph, cmap=color_map)
+    #contour1 = ax2.contourf(kgm1_grid, kgm2_grid, z, levels=25,  alpha=alpha_graph, cmap=color_map)
+    contour2 = ax2.contourf(kgm1_grid, kgm2_grid, z_log, levels=10, alpha=alpha_graph, cmap=color_map, nomr=LogNorm())
     #ax2.scatter(kgm1_grid[nan_mask], kgm2_grid[nan_mask], color='red', marker='x', s=50, label="Infeasible Region")
-    ax2.scatter(kgm1_grid[beta_mask], kgm2_grid[beta_mask], color=beta_color, marker='x', alpha=alpha_graph, s=marker_size, label="Beta < 1 Region")
-    ax2.scatter(kgm1_grid[gain_mask], kgm2_grid[gain_mask], color=gain_color, marker='o', alpha=alpha_graph, s=marker_size, label="Gain < 50")
-    cbar2 = fig.colorbar(contour1, ax=ax2)
-    cbar2.set_label('Total Current [uA]', fontdict=font_properties)
-    cbar4 = fig.colorbar(contour2, ax=ax4)
-    cbar4.set_label("Beta")
+    #ax2.scatter(kgm1_grid[beta_mask], kgm2_grid[beta_mask], color=beta_color, marker='x', alpha=alpha_graph, s=marker_size, label="Beta < 1 Region")
+    #ax2.scatter(kgm1_grid[gain_mask], kgm2_grid[gain_mask], color=gain_color, marker='o', alpha=alpha_graph, s=marker_size, label="Gain < 50")
+    #cbar2 = fig.colorbar(contour1, ax=ax2)
+
     # Set axis labels with custom font properties
 
-    ax4.set_xlabel("kgm1")
-    ax4.set_ylabel("kgm2")
+    ax1.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax1.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
     # Add gridlines for better readability
     ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
-    ax4.grid(True, which='both', linestyle='--', linewidth=0.5)
+    ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
+    cbar4 = fig.colorbar(contour2, ax=ax2)
+    cbar4.set_ticks(np.log10(current_ticks))
+    cbar4.set_ticklabels(current_ticks)
+    if map_label:
+        ax2.set_xlim(kgm_min, 18.75)
+        ax2.set_ylim(kgm_min, 26.3)
+        #cbar2.set_label('Total Current [uA]', font=arial_bold, fontsize=font_size)
+        #cbar4 = fig.colorbar(contour2, ax=ax2)
+        cbar4.set_label("Total Current Consumption [uA]", font=arial_bold, fontsize=font_size)
+        #ax1.set_zticks(current_ticks)
     # Show the legend for the contour plot
-    ax2.legend()
-    ax4.legend()
+    #ax2.legend()
+    #ax4.legend()
     """
     num_slices = 10
     kgm1_contour_vals = np.linspace(kgm_min, kgm_max, num_slices)
@@ -340,15 +470,17 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
 
     #plt.show()
     """
+    #fig.tight_layout()
     print("TODO")
 
 def cm_ota_plotting():
     av= 50
     #bw = 250e6
-    bw = 0.75e6
-    bw = 0.6e6
-    #bw = 500e5
-    #bw = 20e5
+    #bw = 0.75e6
+    #bw = 2e6
+    #bw = 600e3
+    #bw = 500e3
+    bw = 2e6
     gbw = bw * av
     #gbw = 37.5e6
     therm_noise = 500e-9
@@ -385,77 +517,94 @@ def cm_ota_plotting():
     """
 
     nfet_nominal = CIDCorner(corner_name="nfet_150n_nominal",
-                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt27.csv",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt25.csv",
                              vdd=1.8)
 
     pfet_nominal = CIDCorner(corner_name="pet_150n_nominal",
-                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt27.csv",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt25.csv",
                              vdd=1.8)
     nfet_hot = CIDCorner(corner_name="nfet_150n_nominal",
-                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt75.csv",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt75.csv",
                              vdd=1.8)
 
     pfet_hot = CIDCorner(corner_name="pet_150n_nominal",
-                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt75.csv",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt75.csv",
                              vdd=1.8)
     nfet_cold = CIDCorner(corner_name="nfet_150n_nominal",
-                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt-25.csv",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt-25.csv",
                              vdd=1.8)
 
     pfet_cold = CIDCorner(corner_name="pet_150n_nominal",
-                             lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt-25.csv",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt-25.csv",
                              vdd=1.8)
 
     nfet_device = CIDDevice(device_name="nfet_500n", vdd=1.8,
-                            lut_directory="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500",
+                            lut_directory=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500",
                             corner_list=None)
     pfet_device = CIDDevice(device_name="pfet_500n", vdd=1.8,
-                            lut_directory="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500",
+                            lut_directory=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500",
                             corner_list=None)
     n_list = [nfet_cold, nfet_nominal, nfet_hot]
     p_list = [pfet_cold, pfet_nominal, pfet_hot]
-    n_list = [nfet_nominal]
-    p_list = [pfet_nominal]
+    #n_list = [nfet_nominal]
+    #p_list = [pfet_nominal]
     #fig = plt.figure(figsize=(12,6))
     #fig = plt.figure(figsize=(7,5))
-    #fig = plt.figure(figsize=(10,8))
-    fig, ax1 = plt.subplots(figsize=(3.5, 2.8 * 2), dpi=300)
+    fig = plt.figure(figsize=(14, 10), tight_layout=True)
+    #fig, ax1 = plt.subplots(figsize=(3.5, 2.8 * 2), dpi=300)
     #ax1 = fig.add_subplot(2, 2, 1, projection='3d')
     #ax1 = fig.add_subplot(1, 1, 1)
-    #ax1 = fig.add_subplot(2, 2, 1)
-    #ax2 = fig.add_subplot(2, 2, 2)
-    #ax3 = fig.add_subplot(2, 2, 3, projection='3d')
-    #ax4 = fig.add_subplot(2, 2, 4)
-    ax2 = None
-    ax3 = None
-    ax4 = None
+    ax1 = fig.add_subplot(221, projection='3d')
+    #fig1 = plt.figure(figsize=(10, 8), dpi=300)
+    #ax1 = fig1.add_subplot(111, projection='3d')
+    ax2 = fig.add_subplot(222)
+    ax3 = fig.add_subplot(223, projection='3d')
+    ax4 = fig.add_subplot(224, projection='3d')
+    #ax2 = None
+    #ax3 = None
+    #ax4 = None
     color_map_list = ["Blues", "Greens", "Reds"]
     beta_color_list = ["b", "g", "r"]
     line_style_list = ["r-", "g-", "b-.", "m-", "c-.", "r--", "b--", "g--", "m--"]
-    alpha_graph = 0.6
+    alpha_graph = 0.77
     marker_size = 10
     current_vectors = []
     kgm_vectors = []
-    for i in range(len(nfet_device.corners)):
+    kgm_n_max = 30
+    kgm_p_max = 19.75
+    kgm_n = [29, 29, 29]
+    kgm_p = [19.75, 16.5, 15.25]
+    edge_colors = ['royalblue', 'green', 'red']
+    map_label = True
+    #for i in range(len(nfet_device.corners)):
+    for i in range(len(n_list)):
         #nfet_corner = n_list[i]
-        nfet_corner = nfet_device.corners[i]
-        #pfet_corner = p_list[i]
-        pfet_corner = pfet_device.corners[i]
-        color_map = color_map_list[0]
+        nfet_corner = n_list[i]
+        pfet_corner = p_list[i]
+        #pfet_corner = pfet_device.corners[i]
+        color_map = color_map_list[i]
         beta_color = beta_color_list[0]
-        gain_color= beta_color_list[0]
+        gain_color = beta_color_list[0]
+        edge_color = edge_colors[i]
         line_style = line_style_list[i]
-        currents, kgms = plot_results_krummenechar_ota_stage1(nom_ncorner=nfet_corner,nom_pcorner=pfet_corner, alpha=alpha,gain=av, bw=bw, cload=cload, therm_noise=therm_noise,
-                                             fig=fig, ax1=ax1, ax2=ax2, ax3=ax3, ax4=ax4, color_map=color_map, beta_color=beta_color,
-                                             gain_color=gain_color, alpha_graph=alpha_graph, marker_size=marker_size, line_style=line_style)
+        plot_results_krummenechar_ota_stage1(nom_ncorner=nfet_corner, nom_pcorner=pfet_corner, alpha=alpha,gain=av,
+                                                              bw=bw, cload=cload, therm_noise=therm_noise,
+                                                              fig=fig, ax1=ax1, ax2=ax2, ax3=ax3, ax4=ax4, color_map=color_map, beta_color=beta_color,
+                                                              gain_color=gain_color, alpha_graph=alpha_graph,
+                                                              marker_size=marker_size, line_style=line_style, kgm_n_max=kgm_n[i], kgm_p_max=kgm_p[i],
+                                                              map_label=map_label, edge_color=edge_color)
+        currents = 0
+        kgms = 0
         current_vectors.append(currents)
         kgm_vectors.append(kgms)
+        map_label = False
         #plt.tight_layout()
 
         #plt.show()
-        alpha_graph = alpha_graph - 0.35
-        marker_size = marker_size - 20
+        #alpha_graph = alpha_graph - 0.35
+        #marker_size = marker_size - 20
         print(nfet_corner.corner_name)
+
     arial_bold = FontProperties(fname="/home/adair/Documents/CAD/roar/fonts/ArialNarrow/arialnarrow_bold.ttf")
 
 
@@ -886,26 +1035,32 @@ def plot_spice_results():
     print("TODO")
 
 
-nfet_device = CIDDevice(device_name="nfet_150n", vdd=1.8,
-                        lut_directory="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500",
-                        corner_list=None)
-pfet_device = CIDDevice(device_name="pfet_150n", vdd=1.8,
-                        lut_directory="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500",
-                        corner_list=None)
-nfet_nominal = CIDCorner(corner_name="nfet_150n_nominal",
-                   lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt27.csv",
-                   vdd=1.8)
+def main():
 
-pfet_nominal = CIDCorner(corner_name="pet_150n_nominal",
-                   lut_csv="/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt27.csv",
-                   vdd=1.8)
+    lut_dir = ROAR_CHARACTERIZATION
 
-#av1 = math.sqrt(av)
-av1 = 100
-bw = 500e3
-cload1 = 50e-15
-cm_ota_plotting()
-#plot_spice_results()
-print("DONE")
-w1, gm1, kgm1, w2, gm2, kgm2 = krummenechar_ota_stage1(av=av1, bw=bw, cload=cload1, nfet_device=nfet_device,
-                                                       pfet_device=pfet_device, nom_ncorner=nfet_nominal, nom_pcorner=pfet_nominal)
+    nfet_device = CIDDevice(device_name="nfet_150n", vdd=1.8,
+                            lut_directory=lut_dir + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500",
+                            corner_list=None)
+    pfet_device = CIDDevice(device_name="pfet_150n", vdd=1.8,
+                            lut_directory=lut_dir + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500",
+                            corner_list=None)
+    nfet_nominal = CIDCorner(corner_name="nfet_150n_nominal",
+                               lut_csv=lut_dir + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt27.csv",
+                               vdd=1.8)
+
+    pfet_nominal = CIDCorner(corner_name="pet_150n_nominal",
+                               lut_csv=lut_dir + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt27.csv",
+                               vdd=1.8)
+
+    #av1 = math.sqrt(av)
+    av1 = 100
+    bw = 500e3
+    cload1 = 50e-15
+    cm_ota_plotting()
+    #plot_spice_results()
+    print("DONE")
+    w1, gm1, kgm1, w2, gm2, kgm2 = krummenechar_ota_stage1(av=av1, bw=bw, cload=cload1, nfet_device=nfet_device,
+                                                           pfet_device=pfet_device, nom_ncorner=nfet_nominal, nom_pcorner=pfet_nominal)
+if __name__ == "__main__":
+    main()
