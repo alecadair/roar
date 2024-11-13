@@ -160,7 +160,7 @@ def total_current_ota_v2(ncorner, pcorner, alpha, gbw, cload, kgm_n, kgm_p, gain
         gain_valid = False
     if thermal_rms_noise < thermal_noise_spec:
         thermal_noise_valid = False
-    return total_current, beta, kcout, thermal_rms_noise, beta_valid, gain_valid, thermal_noise_valid, kcout
+    return total_current, beta, kcout, gain, thermal_rms_noise, beta_valid, gain_valid, thermal_noise_valid, kcout
 
 
 def total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1, kgm2, gain_spec):
@@ -192,7 +192,8 @@ def total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1, kgm2, g
 
 
 def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, bw, cload, therm_noise, fig, ax1, ax2, ax3, ax4,
-                                         color_map, beta_color, gain_color, alpha_graph, marker_size, line_style, kgm_n_max, kgm_p_max, map_label, edge_color):
+                                         color_map, beta_color, gain_color, alpha_graph, marker_size, line_style,
+                                         kgm_n_max, kgm_p_max, map_label, edge_color, legend_str):
     gbw = gain*bw
     kgm_n_v = nom_ncorner.df["kgm"]
     kgm_p_v = nom_pcorner.df["kgm"]
@@ -203,7 +204,7 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     kgm_min = min(min_n, min_p)
     kgm_max = max(max_n, max_p)
     #kgm_max = 18
-    current_max = 7000
+    current_max = 5000
     #current_max = 1000
     current_min = 120
     #current_min = 20
@@ -220,6 +221,8 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     z_log = np.zeros_like(kgm1_grid)
     kcout = np.zeros_like(kgm1_grid)
     kcout_log = np.zeros_like(kgm1_grid)
+    gain_v_v = np.zeros_like(kgm1_grid)
+    gain_db = np.zeros_like(kgm1_grid)
     beta = np.zeros_like(kgm1_grid)
     beta_valid_grid = np.zeros_like(kgm1_grid)
     gain_valid_grid = np.zeros_like(kgm1_grid)
@@ -234,30 +237,42 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     therm_rms_noise_min = 0
     kcout_vector = []
     corner_count = 0
+    kco_max = 1e-05
+    if map_label:
+        kgm_init_n_max = kgm_n_max
+        kgm_init_p_max = kgm_p_max
+
     for i in range(len(kgm_vals)):
         for j in range(len(kgm_vals)):
             #total_current, beta1, beta_valid, gain_valid = total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_vals[i], kgm2_vals[j], gain_spec=gain)
 
 
-            total_current, beta_i_j, kcout_i_j, thermal_rms_noise_i_j, beta_valid, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
+            total_current, beta_i_j, kcout_i_j, gain_i_j, thermal_rms_noise_i_j, beta_valid, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
                                                                                                                            kgm_vals[i], kgm_vals[j], gain_spec=gain,
                                                                                                                            thermal_noise_spec=therm_noise)
             if kgm_vals[j] > kgm_p_max:
                 total_current = -1
-                kcout_i_j = np.nan
+                #kcout_i_j = np.nan
             if kgm_vals[i] > kgm_n_max:
                 total_current = -1
-                kcout_i_j = np.nan
+                #kcout_i_j = np.nan
             total_current = total_current * 1e6
-            if total_current < 0 or total_current > current_max or total_current < current_min:
+            gain_db_i_j = 20*math.log10(gain_i_j)
+            if total_current < current_min:
                 total_current = np.nan
-
+                gain_i_j = np.nan
+                gain_db_i_j = np.nan
+            if total_current > current_max:
+                total_current = current_max
+            if kcout_i_j > kco_max or kgm_vals[j] > 18.8 or kgm_vals[i] > 26.26:
+                kcout_i_j = np.nan
 
             z[i, j] = total_current
             z_log[i, j] = math.log10(total_current)
             kcout[i, j] = kcout_i_j
             kcout_log[i, j] = math.log10(kcout_i_j)
-
+            gain_v_v[i, j] = gain_i_j
+            gain_db[i, j] = gain_db_i_j
         """
         total_current, beta_i_j, thermal_rms_noise_i_j, beta_valid, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
                                                                                                                    9.4825, 9.4845, gain_spec=gain,
@@ -300,33 +315,38 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     #plot where kgm1 = kgm2
     #surf = ax.plot_surface(kgm1_grid, kgm2_grid, z, cmap=color_map, lw=0.5, edgecolor='k', rstride=3, cstride=3, alpha=alpha_graph)
     #surf_i_total = ax1.plot_surface(kgm1_grid, kgm2_grid, z_log, lw=0.5, cmap=color_map, edgecolor='royalblue', rstride=3, cstride=3, alpha=alpha_graph)
-    surf_i_total = ax1.plot_surface(kgm1_grid, kgm2_grid, z_log, lw=0.5, cmap=color_map, edgecolor=edge_color, rstride=3, cstride=3, alpha=alpha_graph)
+    surf_i_total = ax1.plot_surface(kgm1_grid, kgm2_grid, z_log, lw=0.5, cmap=color_map, edgecolor=edge_color, rstride=3, cstride=3, alpha=alpha_graph, label=legend_str)
 
     #surf_beta = ax3.plot_surface(kgm1_grid, kgm2_grid, beta, lw=0.5, cmap=color_map, edgecolor="royalblue", rstride=3, cstride=3, alpha=alpha_graph)
     #surf_therm_noise = ax3.plot_surface(kgm1_grid, kgm2_grid, therm_noise_rms, lw=0.5, cmap=color_map, edgecolor="royalblue", rstride=3, cstride=3, alpha=alpha_graph)
 
     #ax1.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], z_log[diagonal_mask], color='k', linewidth=2, label="kgm1 = kgm2")
     arial_bold = FontProperties(fname=ROAR_HOME + "/fonts/ArialNarrow/arialnarrow_bold.ttf")
+    arial_bold_12 = FontProperties(fname=ROAR_HOME + "/fonts/ArialNarrow/arialnarrow_bold.ttf", size=12)
     font_size = 12
-
+    current_vals = [kgm_vals, z]
+    gain_vals = [kgm_vals, gain_v_v]
+    kco_vals = [kgm_vals, kcout]
     #ORIGINAL SCRIPT
     #ax1.plot(kgm1_vals, i_total_vector, line_style, linewidth=2)
 
     #ax3.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], beta[diagonal_mask]+0.5, color='k', linewidth=4, label="kgm1 = kgm2")
-    ax1.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
-    ax1.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
-    ax1.set_zlabel("Total Current [uA]", font=arial_bold, fontsize=font_size)
-    ax1.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax1.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax1.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    current_ticks = np.array([100, 250, 500, 750, 1000, 2500, 5000, 7500])
-    #current_ticks = np.array([10, 100, 1000])
-    ax1.set_zticks(np.log10(current_ticks))
-    #ax1.set_zticks(current_ticks)
-    ax1.set_zticklabels(current_ticks)
-    ax1.set_xlim(kgm_min, kgm_p_max)
-    ax1.set_ylim(kgm_min, kgm_n_max)
-    ax1.set_zlim(1.5, 3.9)
+    current_ticks = np.array([100, 250, 500, 1000, 2500, 5000])
+    if map_label:
+        ax1.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+        ax1.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+        ax1.set_zlabel("Total Current [uA]", font=arial_bold, fontsize=font_size)
+        ax1.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+        ax1.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+        ax1.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+        #current_ticks = np.array([10, 100, 1000])
+        ax1.set_zticks(np.log10(current_ticks))
+        #ax1.set_zticks(current_ticks)
+        ax1.set_zticklabels(current_ticks)
+        ax1.set_xlim(kgm_min, kgm_p_max)
+        ax1.set_ylim(kgm_min, kgm_n_max)
+        ax1.set_zlim(2, 3.9)
+    #ax1.legend()
     #ax1.set_zlim(1, 3)
     #ax1.set_zlim(25, 100)
     #ax1.legend()
@@ -334,27 +354,61 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     #return i_total_vector, kgm1_vals
     #ax2 = None
     #ax2 = ax1.twin()
-    surf_kco_total = ax3.plot_surface(kgm1_grid, kgm2_grid, kcout_log, lw=0.5, cmap=color_map, edgecolor='royalblue', rstride=3, cstride=3, alpha=alpha_graph)
-
+    surf_kco_total = ax3.plot_surface(kgm1_grid, kgm2_grid, kcout_log, lw=0.5, cmap=color_map, edgecolor=edge_color, rstride=3, cstride=3, alpha=alpha_graph)
+    def log_tick_formatter(val, pos=None):
+        exponent = int(np.log10(val))
+        return f"$10^{{{exponent}}}$" # remove int() if you don't use MaxNLocator
+        # return f"{10**val:.2e}"      # e-Notation
     #ax2.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], kcout_log[diagonal_mask], color='k', linewidth=2, label="kgm1 = kgm2")
 
+    ax3.zaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
     ax3.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
     ax3.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
     ax3.set_zlabel(r'$\mathrm{\mathcal{C}_{O}}}$ [$\mathrm{F/A}$]', font=arial_bold, fontsize=font_size)
 
-    ax3.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax3.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax3.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    kco_ticks = np.array([1e-11, 1e-9, 1e-7, 1e-5])
+    kco_ticks = np.array([1e-11, 1e-9, 1e-7, 1e-05])
     ax3.set_zticks(np.log10(kco_ticks))
     #ax1.set_zticks(current_ticks)
     ax3.set_zticklabels(kco_ticks)
-    #ax3.set_xlabel(r'$\mathrm{\mathcal{G}_{m_{1 \rightarrow 4}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
-    ax3.set_ylabel(r'$\mathrm{\mathcal{G}_{m_{5 \rightarrow 8}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
-    ax3.set_zlabel(r'RMS Thermal Noise [$\mathrm{[uV_{RMS}}$]')
-    ax3.set_xlim(kgm_min, 18.8)
-    ax3.set_ylim(kgm_min, 26)
-    ax3.set_zlim(-11, -6)
+    #ax3.set_zlabel(r'RMS Thermal Noise [$\mathrm{[uV_{RMS}}$]')
+    if map_label:
+        ax3.set_xlim(kgm_min, kgm_p_max)
+        ax3.set_ylim(kgm_min, kgm_n_max)
+    #ax3.set_xlim(kgm_min, 18.8)
+    #ax3.set_ylim(kgm_min, 26)
+    #ax3.set_zlim(-11, -6)
+    ax3.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax3.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax3.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+
+
+    surf_gain_total = ax4.plot_surface(kgm1_grid, kgm2_grid, gain_v_v, lw=0.5, cmap=color_map, edgecolor=edge_color, rstride=3, cstride=3, alpha=alpha_graph)
+    def log_tick_formatter(val, pos=None):
+        return f"$10^{{{int(val)}}}$"  # remove int() if you don't use MaxNLocator
+        # return f"{10**val:.2e}"      # e-Notation
+    #ax2.plot(kgm1_grid[diagonal_mask], kgm2_grid[diagonal_mask], kcout_log[diagonal_mask], color='k', linewidth=2, label="kgm1 = kgm2")
+
+    #ax4.zaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
+    ax4.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax4.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax4.set_zlabel(r'$\mathrm{A_{V}}}$ [$\mathrm{V/V}$]', font=arial_bold, fontsize=font_size)
+
+    ax4.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax4.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    ax4.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
+    #gain_ticks = np.array([1e-11, 1e-9, 1e-7, 1e-05])
+    #ax3.set_zticks(np.log10(kco_ticks))
+    #ax1.set_zticks(current_ticks)
+    #ax3.set_zticklabels(kco_ticks)
+    #ax3.set_zlabel(r'RMS Thermal Noise [$\mathrm{[uV_{RMS}}$]')
+    if map_label:
+        ax4.set_xlim(kgm_min, kgm_p_max)
+        ax4.set_ylim(kgm_min, kgm_n_max)
+    #ax3.set_xlim(kgm_min, 18.8)
+    #ax3.set_ylim(kgm_min, 26)
+    #ax3.set_zlim(-11, -6)
+    #ax3.legend()
+    #ax3.legend()
     #cbar = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10)
     #cbar.set_label('Total Current [uA]', fontdict=font_properties)
     #surf.set_clim(zlim_min, zlim_max)  # Set the colorbar limits to match the z-axis limits
@@ -388,26 +442,17 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
 
     #ax1.set_zlim(zlim_min, zlim_max)
 
-    def log_tick_formatter(val, pos=None):
-        return f"$10^{{{int(val)}}}$"  # remove int() if you don't use MaxNLocator
-        # return f"{10**val:.2e}"      # e-Notation
+
 
     #ax1.zaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
     #ax1.zaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 
 
-    ax3.xaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax3.yaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
-    ax3.zaxis._axinfo['grid'].update(color='gray', linestyle='--', linewidth=0.5)
 
-    ax3.set_xlim(kgm_min, kgm_max)
-    ax3.set_ylim(kgm_min, kgm_max)
-    #ax3.set_zlim(beta_min, beta_max)
-    ax3.legend()
 
     #ax2 = fig.add_subplot(122)
     #contour1 = ax2.contourf(kgm1_grid, kgm2_grid, z, levels=25,  alpha=alpha_graph, cmap=color_map)
-    contour2 = ax2.contourf(kgm1_grid, kgm2_grid, z_log, levels=10, alpha=alpha_graph, cmap=color_map, nomr=LogNorm())
+    contour2 = ax2.contourf(kgm1_grid, kgm2_grid, z_log, levels=10, alpha=alpha_graph, cmap=color_map)
     #ax2.scatter(kgm1_grid[nan_mask], kgm2_grid[nan_mask], color='red', marker='x', s=50, label="Infeasible Region")
     #ax2.scatter(kgm1_grid[beta_mask], kgm2_grid[beta_mask], color=beta_color, marker='x', alpha=alpha_graph, s=marker_size, label="Beta < 1 Region")
     #ax2.scatter(kgm1_grid[gain_mask], kgm2_grid[gain_mask], color=gain_color, marker='o', alpha=alpha_graph, s=marker_size, label="Gain < 50")
@@ -415,20 +460,22 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
 
     # Set axis labels with custom font properties
 
-    ax1.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
-    ax1.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax2.set_xlabel(r'$\mathrm{\mathcal{G}_{P}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
+    ax2.set_ylabel(r'$\mathrm{\mathcal{G}_{N}}}$ [$\mathrm{V^{-1}}$]', font=arial_bold, fontsize=font_size)
     # Add gridlines for better readability
     ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
     ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
-    cbar4 = fig.colorbar(contour2, ax=ax2)
+    cbar4 = fig.colorbar(contour2, ax=ax2, shrink=0.33)
     cbar4.set_ticks(np.log10(current_ticks))
     cbar4.set_ticklabels(current_ticks)
     if map_label:
-        ax2.set_xlim(kgm_min, 18.75)
-        ax2.set_ylim(kgm_min, 26.3)
+        ax2.set_ylim(kgm_min, kgm_n_max)
+        ax2.set_xlim(kgm_min, kgm_p_max)
+        #ax2.invert_xaxis()
+
         #cbar2.set_label('Total Current [uA]', font=arial_bold, fontsize=font_size)
         #cbar4 = fig.colorbar(contour2, ax=ax2)
-        cbar4.set_label("Total Current Consumption [uA]", font=arial_bold, fontsize=font_size)
+    cbar4.set_label(legend_str, font=arial_bold, fontsize=font_size)
         #ax1.set_zticks(current_ticks)
     # Show the legend for the contour plot
     #ax2.legend()
@@ -471,7 +518,7 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     #plt.show()
     """
     #fig.tight_layout()
-    print("TODO")
+    return current_vals, gain_vals, kco_vals
 
 def cm_ota_plotting():
     av= 50
@@ -572,10 +619,14 @@ def cm_ota_plotting():
     kgm_vectors = []
     kgm_n_max = 30
     kgm_p_max = 19.75
-    kgm_n = [29, 29, 29]
-    kgm_p = [19.75, 16.5, 15.25]
+    kgm_n = [26.26, 26.26, 26.26]
+    kgm_p = [18.8, 16.5, 15.25]
     edge_colors = ['royalblue', 'green', 'red']
+    legend_strs = ["-25°C", "25°C", "75°C"]
     map_label = True
+    current_arrays = []
+    gain_arrays = []
+    kco_arrays = []
     #for i in range(len(nfet_device.corners)):
     for i in range(len(n_list)):
         #nfet_corner = n_list[i]
@@ -587,12 +638,14 @@ def cm_ota_plotting():
         gain_color = beta_color_list[0]
         edge_color = edge_colors[i]
         line_style = line_style_list[i]
-        plot_results_krummenechar_ota_stage1(nom_ncorner=nfet_corner, nom_pcorner=pfet_corner, alpha=alpha,gain=av,
+        legend_str = legend_strs[i]
+        current, gain, kco = plot_results_krummenechar_ota_stage1(nom_ncorner=nfet_corner, nom_pcorner=pfet_corner, alpha=alpha,gain=av,
                                                               bw=bw, cload=cload, therm_noise=therm_noise,
                                                               fig=fig, ax1=ax1, ax2=ax2, ax3=ax3, ax4=ax4, color_map=color_map, beta_color=beta_color,
                                                               gain_color=gain_color, alpha_graph=alpha_graph,
                                                               marker_size=marker_size, line_style=line_style, kgm_n_max=kgm_n[i], kgm_p_max=kgm_p[i],
-                                                              map_label=map_label, edge_color=edge_color)
+                                                              map_label=map_label, edge_color=edge_color, legend_str=legend_str)
+
         currents = 0
         kgms = 0
         current_vectors.append(currents)
