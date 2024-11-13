@@ -15,7 +15,7 @@ ROAR_HOME = os.environ["ROAR_HOME"]
 ROAR_LIB = os.environ["ROAR_LIB"]
 ROAR_SRC = os.environ["ROAR_SRC"]
 ROAR_CHARACTERIZATION = os.environ["ROAR_CHARACTERIZATION"]
-ROAR_DESIGN_SCRIPTS = os.environ["ROAR_DESIGN_SCRIPTS"]
+ROAR_DESIGN_SCRIPTS = os.environ["ROAR_DESIGN"]
 
 
 sys.path.append(ROAR_LIB + "/python/sv_ttk-2.5.4/")
