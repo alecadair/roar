@@ -212,9 +212,11 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     #kgm_n_max = 30
     #kgm_p_max = 19.75
     kgm_min = 0.1
-    num_samples = 50
+    num_samples = 75
     if kgm_min < 0:
         kgm_min = 0.001
+    kgm_min = 0.1
+    kgm_max = 26.5
     kgm_vals = np.linspace(kgm_min, kgm_max, num_samples)
     kgm1_grid, kgm2_grid = np.meshgrid(kgm_vals, kgm_vals)
     z = np.zeros_like(kgm1_grid)
@@ -247,7 +249,7 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
             #total_current, beta1, beta_valid, gain_valid = total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_vals[i], kgm2_vals[j], gain_spec=gain)
 
 
-            total_current, beta_i_j, kcout_i_j, gain_i_j, thermal_rms_noise_i_j, beta_valid, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
+            total_current, beta_i_j, kcout_i_j, gain_i_j, thermal_rms_noise_i_j, beta_valid_i_j, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
                                                                                                                            kgm_vals[i], kgm_vals[j], gain_spec=gain,
                                                                                                                            thermal_noise_spec=therm_noise)
             if kgm_vals[j] > kgm_p_max:
@@ -262,6 +264,7 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
                 total_current = np.nan
                 gain_i_j = np.nan
                 gain_db_i_j = np.nan
+                gain_valid = False
             if total_current > current_max:
                 total_current = current_max
             if kcout_i_j > kco_max or kgm_vals[j] > 18.8 or kgm_vals[i] > 26.26:
@@ -271,8 +274,13 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
             z_log[i, j] = math.log10(total_current)
             kcout[i, j] = kcout_i_j
             kcout_log[i, j] = math.log10(kcout_i_j)
+
+            gain_valid_grid[i, j] = gain_valid
             gain_v_v[i, j] = gain_i_j
             gain_db[i, j] = gain_db_i_j
+            beta_valid_grid[i, j] = beta_valid_i_j
+
+
         """
         total_current, beta_i_j, thermal_rms_noise_i_j, beta_valid, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
                                                                                                                    9.4825, 9.4845, gain_spec=gain,
@@ -280,8 +288,8 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
         """
 
         total_current = total_current*1e6
-        if total_current < 0 or beta_valid == False:
-            total_current = np.nan
+        #if total_current < 0 or beta_valid == False:
+        #    total_current = np.nan
         #total_current2 = total_current2 * 1e6
         #if total_current < zlim_min:
         #    total_current = zlim_min
@@ -301,7 +309,6 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
         #z[i, j] = total_current
         #beta[i, j] = beta_i_j
         #beta_valid_grid[i, j] = beta_valid
-        #gain_valid_grid[i, j] = gain_valid
         #therm_noise_rms[i, j] = thermal_rms_noise_i_j
         #therm_rms_noise_valid_grid[i, j] = thermal_noise_valid
     #z = total_current_ota(nom_ncorner,nom_pcorner,alpha, gbw, cload, kgm1, kgm2)
@@ -430,7 +437,7 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     #ax.scatter(kgm1_grid[beta_false_mask], kgm2_grid[beta_false_mask], np.full_like(kgm1_grid[beta_false_mask], zlim_min), color=beta_color, marker='x', alpha=alpha_graph, s=marker_size, label="Beta < 1")
 
     # Overlay green X's for invalid gain values
-    gain_false_mask = gain_valid_grid == False
+    #gain_false_mask = gain_valid_grid == False
     #ax.scatter(kgm1_grid[gain_false_mask], kgm2_grid[gain_false_mask], np.full_like(kgm1_grid[gain_false_mask], zlim_min), color=gain_color, marker='o', s=marker_size, alpha=alpha_graph, label="Gain < 60 V/V")
 
     #ax1.contour(kgm1_grid, kgm2_grid, z, zdir="x", offset=kgm_max + 8, cmap=color_map)
@@ -449,13 +456,23 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
 
 
 
+    gain_false_mask = gain_valid_grid == False
+    beta_false_mask = beta_valid_grid == False
+    gain_true_mask = gain_valid_grid = True
+    #gain_false_mask = np.where(gain_false_mask)
+
+    # Plot the 'X' at positions where total_current_ota is NaN
+    #ax.scatter(kgm1_grid[beta_mask], kgm2_grid[beta_mask], np.full_like(kgm1_grid[beta_mask], zlim_min), color='r', marker='x', s=50, label="Beta < 1")
+    #ax.scatter(kgm1_grid[gain_mask], kgm2_grid[gain_mask], np.full_like(kgm1_grid[gain_mask], zlim_min), color='g', marker='x', s=50, label="Gain < 60")
 
     #ax2 = fig.add_subplot(122)
     #contour1 = ax2.contourf(kgm1_grid, kgm2_grid, z, levels=25,  alpha=alpha_graph, cmap=color_map)
     contour2 = ax2.contourf(kgm1_grid, kgm2_grid, z_log, levels=10, alpha=alpha_graph, cmap=color_map)
     #ax2.scatter(kgm1_grid[nan_mask], kgm2_grid[nan_mask], color='red', marker='x', s=50, label="Infeasible Region")
     #ax2.scatter(kgm1_grid[beta_mask], kgm2_grid[beta_mask], color=beta_color, marker='x', alpha=alpha_graph, s=marker_size, label="Beta < 1 Region")
-    #ax2.scatter(kgm1_grid[gain_mask], kgm2_grid[gain_mask], color=gain_color, marker='o', alpha=alpha_graph, s=marker_size, label="Gain < 50")
+    ax2.scatter(kgm1_grid[gain_false_mask], kgm2_grid[gain_false_mask], color=edge_color, marker='x', alpha=alpha_graph, s=marker_size, label="Gain < 50")
+    ax2.scatter(kgm1_grid[beta_false_mask], kgm2_grid[beta_false_mask], color=edge_color, marker='_', alpha=alpha_graph, s=marker_size, label="Beta < 1")
+
     #cbar2 = fig.colorbar(contour1, ax=ax2)
 
     # Set axis labels with custom font properties
@@ -472,13 +489,14 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
         ax2.set_ylim(kgm_min, kgm_n_max)
         ax2.set_xlim(kgm_min, kgm_p_max)
         #ax2.invert_xaxis()
-
+    ax2.set_ylim(0.1, 26.26)
+    ax2.set_xlim(0.1, 18.8)
         #cbar2.set_label('Total Current [uA]', font=arial_bold, fontsize=font_size)
         #cbar4 = fig.colorbar(contour2, ax=ax2)
     cbar4.set_label(legend_str, font=arial_bold, fontsize=font_size)
         #ax1.set_zticks(current_ticks)
     # Show the legend for the contour plot
-    #ax2.legend()
+    ax2.legend(prop=arial_bold)
     #ax4.legend()
     """
     num_slices = 10
@@ -521,6 +539,9 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     return current_vals, gain_vals, kco_vals
 
 def cm_ota_plotting():
+    arial_font = "/home/adair/Documents/CAD/roar/fonts/ArialNarrow/arialnarrow_bold.ttf"
+    font_size = 6
+    arial_bold = FontProperties(fname=arial_font, size=font_size)
     av= 50
     #bw = 250e6
     #bw = 0.75e6
@@ -614,7 +635,7 @@ def cm_ota_plotting():
     beta_color_list = ["b", "g", "r"]
     line_style_list = ["r-", "g-", "b-.", "m-", "c-.", "r--", "b--", "g--", "m--"]
     alpha_graph = 0.77
-    marker_size = 10
+    marker_size = 40
     current_vectors = []
     kgm_vectors = []
     kgm_n_max = 30
@@ -623,10 +644,12 @@ def cm_ota_plotting():
     kgm_p = [18.8, 16.5, 15.25]
     edge_colors = ['royalblue', 'green', 'red']
     legend_strs = ["-25°C", "25°C", "75°C"]
+
     map_label = True
     current_arrays = []
     gain_arrays = []
     kco_arrays = []
+    kgm_grids = []
     #for i in range(len(nfet_device.corners)):
     for i in range(len(n_list)):
         #nfet_corner = n_list[i]
@@ -651,15 +674,39 @@ def cm_ota_plotting():
         current_vectors.append(currents)
         kgm_vectors.append(kgms)
         map_label = False
+        kco_arrays.append(kco[1])
+        gain_arrays.append(gain[1])
+        current_arrays.append(current[1])
+        kgm_grids.append(current[0])
+        marker_size = marker_size - 10
         #plt.tight_layout()
 
         #plt.show()
         #alpha_graph = alpha_graph - 0.35
         #marker_size = marker_size - 20
         print(nfet_corner.corner_name)
+    kgm_grid = kgm_grids[0]
+    kgm_grid = np.meshgrid(kgm_grid, kgm_grid)
+    convergence_grid = np.zeros((len(kgm_grid[0]), len(kgm_grid[0])))
+    current0 = current_arrays[0]
+    current1 = current_arrays[1]
+    current2 = current_arrays[2]
+    for i in range(len(kgm_grid[0])):
+        for j in range(len(kgm_grid[0])):
+            i0 = current0[i, j]
+            i1 = current1[i, j]
+            i2 = current2[i, j]
+            convergence_grid[i, j] = number_convergence(i0, i1, i2, diff=0.10)
+    conv_false_mask = convergence_grid == False
+    #ax2.scatter(kgm_grid[0][conv_false_mask], kgm_grid[1][conv_false_mask], color="k", marker=',', alpha=0.6, s=12, label="Convergence < 10%")
+    ax2.contourf(kgm_grid[0], kgm_grid[1], conv_false_mask, levels=[0.5, 1], colors='k', alpha=0.3)
+    ax2.set_ylim(0.1, 26.26)
+    ax2.set_xlim(0.1, 18.8)
+    ax2.legend(prop=arial_bold)
+    #ax2.scatter(kgm1_grid[beta_false_mask], kgm2_grid[beta_false_mask], color=edge_color, marker='_', alpha=alpha_graph, s=marker_size, label="Beta < 0")
+    #arial_bold = FontProperties(fname="/home/adair/Documents/CAD/roar/fonts/ArialNarrow/arialnarrow_bold.ttf")
 
-    arial_bold = FontProperties(fname="/home/adair/Documents/CAD/roar/fonts/ArialNarrow/arialnarrow_bold.ttf")
-
+    return 0
 
     def find_curve_divergence(x, curves, tolerance=0.06):
         # Loop through each x position (assume all curves have the same length)
@@ -734,6 +781,24 @@ def cm_ota_plotting():
     plt.show()
     print("DONE")
     return 0
+
+
+def number_convergence(num1, num2, num3, diff=0.05):
+    #mean = (num1 + num2 + num3)/3
+    if num1 == np.nan or num2 == np.nan or num3 == np.nan:
+        return False
+    def within_diff(a, b):
+        ratio = abs(a - b) / max(abs(a), abs(b))
+        converge = ratio <= diff
+        return converge
+    converged = False
+    converged1 = within_diff(num1, num2)
+    converged2 = within_diff(num2, num3)
+    converged3 = within_diff(num1, num3)
+    if converged1 and converged2 and converged3:
+        converged = True
+    return converged
+
 
 def krummenechar_ota_stage1(av, bw, cload, nfet_device, pfet_device, nom_ncorner, nom_pcorner):
     av= 50
