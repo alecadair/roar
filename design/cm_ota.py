@@ -1,8 +1,17 @@
+
 import sys, os, getpass, shutil, operator, collections, copy, re, math
 import matplotlib.ticker as mticker
-from cid import *
 from matplotlib.ticker import LogLocator
 from matplotlib.colors import LogNorm
+ROAR_HOME = os.environ["ROAR_HOME"]
+ROAR_LIB = os.environ["ROAR_LIB"]
+ROAR_SRC = os.environ["ROAR_SRC"]
+ROAR_CHARACTERIZATION = os.environ["ROAR_CHARACTERIZATION"]
+ROAR_DESIGN = os.environ["ROAR_DESIGN"]
+sys.path.append(ROAR_SRC)
+from cid import *
+
+
 #from pyfonts import load_font
 # load font
 #font = load_font(
@@ -11,13 +20,6 @@ from matplotlib.colors import LogNorm
 
 from matplotlib.font_manager import FontProperties
 plt.rcParams['svg.fonttype'] = 'none'
-
-ROAR_HOME = os.environ["ROAR_HOME"]
-ROAR_LIB = os.environ["ROAR_LIB"]
-ROAR_SRC = os.environ["ROAR_SRC"]
-ROAR_CHARACTERIZATION = os.environ["ROAR_CHARACTERIZATION"]
-ROAR_DESIGN = os.environ["ROAR_DESIGN"]
-
 
 def parallel(x1, x2):
     return 1/((1/x1) + 1/x2)
@@ -192,7 +194,7 @@ def total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1, kgm2, g
 
 
 def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, bw, cload, therm_noise, fig, ax1, ax2, ax3, ax4,
-                                         color_map, beta_color, gain_color, alpha_graph, marker_size, line_style,
+                                         color_map, beta_color, gain_color, alpha_graph, alpha_region,hatch_mark, marker_size, line_style,
                                          kgm_n_max, kgm_p_max, map_label, edge_color, legend_str):
     gbw = gain*bw
     kgm_n_v = nom_ncorner.df["kgm"]
@@ -470,9 +472,12 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     contour2 = ax2.contourf(kgm1_grid, kgm2_grid, z_log, levels=10, alpha=alpha_graph, cmap=color_map)
     #ax2.scatter(kgm1_grid[nan_mask], kgm2_grid[nan_mask], color='red', marker='x', s=50, label="Infeasible Region")
     #ax2.scatter(kgm1_grid[beta_mask], kgm2_grid[beta_mask], color=beta_color, marker='x', alpha=alpha_graph, s=marker_size, label="Beta < 1 Region")
-    ax2.scatter(kgm1_grid[gain_false_mask], kgm2_grid[gain_false_mask], color=edge_color, marker='x', alpha=alpha_graph, s=marker_size, label="Gain < 50")
-    ax2.scatter(kgm1_grid[beta_false_mask], kgm2_grid[beta_false_mask], color=edge_color, marker='_', alpha=alpha_graph, s=marker_size, label="Beta < 1")
-
+    #ax2.scatter(kgm1_grid[gain_false_mask], kgm2_grid[gain_false_mask], color=edge_color, marker='x', alpha=alpha_graph, s=marker_size, label="Gain < 50")
+    #ax2.scatter(kgm1_grid[beta_false_mask], kgm2_grid[beta_false_mask], color=edge_color, marker='_', alpha=alpha_graph, s=marker_size, label="Beta < 1")
+    #ax2.contourf(kgm1_grid, kgm2_grid, gain_false_mask, levels=[0.5, 1], colors=edge_color, hatches=['.'], alpha=alpha_region)
+    #ax2.contourf(kgm1_grid, kgm2_grid, beta_false_mask, levels=[0.5, 1], colors=edge_color, hatches=['o'], alpha=alpha_region)
+    #ax2.contourf(kgm1_grid, kgm2_grid, gain_false_mask, levels=[0.5, 1], hatches=[hatch_mark],alpha=0)
+    #ax2.contourf(kgm1_grid, kgm2_grid, beta_false_mask, levels=[0.5, 1], hatches=['.'], alpha=0)
     #cbar2 = fig.colorbar(contour1, ax=ax2)
 
     # Set axis labels with custom font properties
@@ -536,7 +541,7 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
     #plt.show()
     """
     #fig.tight_layout()
-    return current_vals, gain_vals, kco_vals
+    return current_vals, gain_vals, kco_vals, gain_false_mask
 
 def cm_ota_plotting():
     arial_font = "/home/adair/Documents/CAD/roar/fonts/ArialNarrow/arialnarrow_bold.ttf"
@@ -650,6 +655,9 @@ def cm_ota_plotting():
     gain_arrays = []
     kco_arrays = []
     kgm_grids = []
+    gain_masks = []
+    alpha_region = 0.3
+    hatches = ['/', '\ ', '-']
     #for i in range(len(nfet_device.corners)):
     for i in range(len(n_list)):
         #nfet_corner = n_list[i]
@@ -662,10 +670,11 @@ def cm_ota_plotting():
         edge_color = edge_colors[i]
         line_style = line_style_list[i]
         legend_str = legend_strs[i]
-        current, gain, kco = plot_results_krummenechar_ota_stage1(nom_ncorner=nfet_corner, nom_pcorner=pfet_corner, alpha=alpha,gain=av,
+        hatch_mark = hatches[i]
+        current, gain, kco, gain_mask = plot_results_krummenechar_ota_stage1(nom_ncorner=nfet_corner, nom_pcorner=pfet_corner, alpha=alpha,gain=av,
                                                               bw=bw, cload=cload, therm_noise=therm_noise,
                                                               fig=fig, ax1=ax1, ax2=ax2, ax3=ax3, ax4=ax4, color_map=color_map, beta_color=beta_color,
-                                                              gain_color=gain_color, alpha_graph=alpha_graph,
+                                                              gain_color=gain_color, alpha_graph=alpha_graph, alpha_region=alpha_region, hatch_mark=hatch_mark,
                                                               marker_size=marker_size, line_style=line_style, kgm_n_max=kgm_n[i], kgm_p_max=kgm_p[i],
                                                               map_label=map_label, edge_color=edge_color, legend_str=legend_str)
 
@@ -678,7 +687,9 @@ def cm_ota_plotting():
         gain_arrays.append(gain[1])
         current_arrays.append(current[1])
         kgm_grids.append(current[0])
+        gain_masks.append(gain_mask)
         marker_size = marker_size - 10
+        alpha_region = alpha_region - 0.1
         #plt.tight_layout()
 
         #plt.show()
@@ -699,7 +710,12 @@ def cm_ota_plotting():
             convergence_grid[i, j] = number_convergence(i0, i1, i2, diff=0.10)
     conv_false_mask = convergence_grid == False
     #ax2.scatter(kgm_grid[0][conv_false_mask], kgm_grid[1][conv_false_mask], color="k", marker=',', alpha=0.6, s=12, label="Convergence < 10%")
-    ax2.contourf(kgm_grid[0], kgm_grid[1], conv_false_mask, levels=[0.5, 1], colors='k', alpha=0.3)
+    #ax2.contourf(kgm_grid[0], kgm_grid[1], conv_false_mask, levels=[0.5, 1], colors='k', alpha=0.1)
+    #ax2.contourf(kgm_grid[0], kgm_grid[1], conv_false_mask, levels=[0.5, 1], hatches=['x'], alpha=0.1)
+    ax2.contourf(kgm_grid[0], kgm_grid[1], gain_masks[0], levels=[0.5, 1], hatches=['/'], alpha=0)
+    ax2.contourf(kgm_grid[0], kgm_grid[1], gain_masks[1], levels=[0.5, 1], hatches=['\ '], alpha=0)
+    ax2.contourf(kgm_grid[0], kgm_grid[1], gain_masks[2], levels=[0.5, 1], hatches=['-'], alpha=0)
+    ax2.contour(kgm_grid[0], kgm_grid[1], conv_false_mask, levels=[0.5, 1], color='k', alpha=1)
     ax2.set_ylim(0.1, 26.26)
     ax2.set_xlim(0.1, 18.8)
     ax2.legend(prop=arial_bold)
