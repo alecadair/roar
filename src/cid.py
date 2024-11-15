@@ -83,7 +83,7 @@ class CIDTech:
         return ids_bucket
 
 class CIDCornerCollection:
-    def __init__(self, collection_name, file_list=None, corner_list=None):
+    def __init__(self, collection_name="", file_list=None, corner_list=None):
         self.collection_name = collection_name
         self.corners = []
         if corner_list != None:
@@ -92,6 +92,22 @@ class CIDCornerCollection:
         if file_list != None:
             for file in file_list:
                 self.add_corner_from_lut(corner_name=file, lut_csv=file, vdd=0)
+
+    def serialize(self):
+        # Serialize the CIDCornerCollection object to a dictionary
+        return {
+            "collection_name": self.collection_name,
+            "corners": [corner.serialize() for corner in self.corners]  # Serialize each corner
+        }
+
+    @classmethod
+    def deserialize(cls, data):
+        # Deserialize a CIDCornerCollection from the provided dictionary
+        corner_list = [CIDCorner.deserialize(corner_data) for corner_data in data.get("corners", [])]
+        return cls(
+            collection_name=data.get("collection_name", ""),
+            corner_list=corner_list
+        )
 
     def add_corner_from_lut(self, corner_name, lut_csv, vdd):
         if os.path.exists(lut_csv):
@@ -201,6 +217,7 @@ class CIDDevice:
             self.pdk = pdk_col[0]
             self.length = l_col[0]
 
+
     def add_corner_from_lut(self, corner_name, lut_csv, vdd=0.0):
         if os.path.exists(lut_csv):
             corner = CIDCorner(corner_name=corner_name, lut_csv=lut_csv, vdd=vdd)
@@ -294,8 +311,8 @@ class CIDCorner():
         self.lut_csv = lut_csv
         self.df = None
         self.length = 0
-        self.nfet_df = None
-        self.pfet_df = None
+        #self.nfet_df = None
+        #self.pfet_df = None
         self.pdk = pdk
 
         if lut_csv != "" and os.path.isfile(lut_csv):
@@ -303,6 +320,37 @@ class CIDCorner():
         else:
             print("LUT CSV File " + lut_csv + " does not exist")
             return None
+
+
+    def serialize(self):
+        # Convert the CIDCorner object into a dictionary
+        return {
+            "vdd": self.vdd,
+            "max_min_vals": self.max_min_vals,
+            "ic_consts": self.ic_consts,
+            "lut": self.lut,  # Could add more specific serialization logic if necessary
+            "corner_name": self.corner_name,
+            "lut_csv": self.lut_csv,
+            "length": self.length,
+            "pdk": self.pdk
+            # Skipping df for now unless you want to serialize that as well
+        }
+
+    @classmethod
+    def deserialize(cls, data):
+        # Create a CIDCorner object from the provided dictionary
+        corner = cls(
+            corner_name=data.get("corner_name", ""),
+            lut_csv=data.get("lut_csv", ""),
+            vdd=data.get("vdd", 0.0),
+            pdk=data.get("pdk", "")
+        )
+        corner.max_min_vals = data.get("max_min_vals", {})
+        corner.ic_consts = data.get("ic_consts", {})
+        corner.lut = data.get("lut", None)
+        corner.length = data.get("length", 0)
+        corner.import_lut(corner.lut_csv, vdd=corner.vdd, corner_name=corner.corner_name)
+        return corner
 
     def reset_df(self):
         self.df.reset_index()

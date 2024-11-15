@@ -1,0 +1,340 @@
+{
+    "expression_editor": [
+        {
+            "Symbol": "av",
+            "Expression": "50",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "bw",
+            "Expression": "500e6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "gbw",
+            "Expression": "av*bw",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcout",
+            "Expression": "kcds1 + kcds2 + (1 + 1/av)*kcgs1 + kcgs2",
+            "disabled": false,
+            "plot": true
+        },
+        {
+            "Symbol": "kcds1",
+            "Expression": "kcds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcds2",
+            "Expression": "kcds:M2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs1",
+            "Expression": "kcgs:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs2",
+            "Expression": "kcgs:M2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm1",
+            "Expression": "kgm:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgds1",
+            "Expression": "kgds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgds2",
+            "Expression": "kgds:M2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "gain",
+            "Expression": "kgds1/(kgds1 + kgds2)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "",
+            "Expression": "",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "",
+            "Expression": "",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "constraint_editor": [
+        {
+            "Symbol": "minimum_gain",
+            "Constraint Expression": "gain > 50",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "miminum_phase_margin",
+            "Constraint Expression": "pm > 60",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "instance_table": [
+        {
+            "Instance Name": "M1",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Instance Name": "M2",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "roar_design": {
+        "devices": {
+            "M1": {
+                "model_name": null,
+                "instance_name": "M1",
+                "ideal_width": 0,
+                "ideal_length": 0,
+                "phys_width": 0,
+                "phys_length": 0,
+                "num_fingers": 0,
+                "multiplier": 1,
+                "kgm": 1,
+                "id": 1,
+                "corner_collection": {
+                    "collection_name": "",
+                    "corners": [
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfettt-25",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfettt-25.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfetss-25",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfetss-25.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfetss27",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfetss27.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfetff75",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfetff75.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfettt75",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfettt75.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfetff27",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfetff27.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfettt27",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfettt27.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfetff-25",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfetff-25.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "nfetss75",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/n_01v8/LUT_N_200/nfetss75.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        }
+                    ]
+                }
+            },
+            "M2": {
+                "model_name": null,
+                "instance_name": "M2",
+                "ideal_width": 0,
+                "ideal_length": 0,
+                "phys_width": 0,
+                "phys_length": 0,
+                "num_fingers": 0,
+                "multiplier": 1,
+                "kgm": 1,
+                "id": 1,
+                "corner_collection": {
+                    "collection_name": "",
+                    "corners": [
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfetff-25",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfetff-25.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfetss-25",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfetss-25.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfetff27",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfetff27.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfettt-25",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfettt-25.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfetss27",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfetss27.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfetff75",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfetff75.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfettt75",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfettt75.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfetss75",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfetss75.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        },
+                        {
+                            "vdd": 0.0,
+                            "max_min_vals": {},
+                            "ic_consts": {},
+                            "lut": null,
+                            "corner_name": "pfettt27",
+                            "lut_csv": "/home/adair/Documents/CAD/roar/characterization/sky130/LUTs_SKY130/p_01v8/LUT_P_200/pfettt27.csv",
+                            "length": 0.2,
+                            "pdk": "sky130"
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}
