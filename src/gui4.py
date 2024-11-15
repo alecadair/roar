@@ -463,7 +463,7 @@ class CIDGraphingWindow(ttk.Frame):
             else:
                 self.ax.set_xscale('linear')
                 self.xlog = False
-f
+
     def get_selected_corners(self):
         models_selected = self.graph_controller.tech_browser.tree.get_checked()
         corner_list = []
