@@ -162,7 +162,7 @@ def total_current_ota_v2(ncorner, pcorner, alpha, gbw, cload, kgm_n, kgm_p, gain
         gain_valid = False
     if thermal_rms_noise < thermal_noise_spec:
         thermal_noise_valid = False
-    return total_current, beta, kcout, gain, thermal_rms_noise, beta_valid, gain_valid, thermal_noise_valid, kcout
+    return total_current, m1_current, m6_current, beta, kcout, gain, thermal_rms_noise, beta_valid, gain_valid, thermal_noise_valid, kcout
 
 
 def total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1, kgm2, gain_spec):
@@ -251,7 +251,7 @@ def plot_results_krummenechar_ota_stage1(nom_ncorner, nom_pcorner, alpha, gain, 
             #total_current, beta1, beta_valid, gain_valid = total_current_ota(nom_ncorner, nom_pcorner, alpha, gbw, cload, kgm1_vals[i], kgm2_vals[j], gain_spec=gain)
 
 
-            total_current, beta_i_j, kcout_i_j, gain_i_j, thermal_rms_noise_i_j, beta_valid_i_j, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
+            total_current, m1_current_i_j, m6_current_i_j, beta_i_j, kcout_i_j, gain_i_j, thermal_rms_noise_i_j, beta_valid_i_j, gain_valid, thermal_noise_valid, kc_out= total_current_ota_v2(nom_ncorner, nom_pcorner, alpha, gbw, cload,
                                                                                                                            kgm_vals[i], kgm_vals[j], gain_spec=gain,
                                                                                                                            thermal_noise_spec=therm_noise)
             if kgm_vals[j] > kgm_p_max:
@@ -1017,40 +1017,45 @@ def find_relevant_points(frequency, magnitude_db, phase_deg):
 
 
 # Function to calculate percentage difference between two values
-def percentage_difference(value1, value2):
+def percentage_difference_two_values(value1, value2):
     return 100 * (value2 - value1) / value1
 
+def percentage_difference(values):
+    if not values:
+        return 0
+    # Calculate the mean of the values
+    mean_value = sum(values) / len(values)
+    # Calculate the percentage difference for each value
+    percentage_differences = [(value - mean_value) / mean_value * 100 for value in values]
+    # Return the average of the percentage differences
+    return sum(percentage_differences) / len(percentage_differences)
+
 # Modified function to plot magnitude and phase for ideal and extracted data
-def plot_ac_results(frequency, magnitude_db, phase_deg, label_suffix="", fig=None, ax1=None, ax2=None):
+def plot_ac_results(frequency, magnitude_db, phase_deg, line_style, line_color, label_suffix="", fig=None, ax1=None, ax2=None):
     # Define font path and size within the function
     arial_font = "/home/adair/Documents/CAD/roar/fonts/ArialNarrow/arialnarrow_bold.ttf"
-    font_size = 6  # Adjust font size for labels, ticks, etc.
+    font_size = 8  # Adjust font size for labels, ticks, etc.
     font_properties = FontProperties(fname=arial_font, size=font_size)
     ideal = False
     # Create the figure and axes if not provided (for the first call)
     if fig is None or ax1 is None or ax2 is None:
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3.5, 2.8 * 2), dpi=300)
+        #fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 11), dpi=350)
         ideal = True
 
     # Find the relevant points
     dc_gain, pole_1, pole_2, unity_gain_freq = find_relevant_points(frequency, magnitude_db, phase_deg)
-
-    # Plot magnitude in dB (Ideal or Extracted)
-    ax1.plot(frequency, magnitude_db, label=f'{label_suffix}', linewidth=1)
+    ax1.plot(frequency, magnitude_db, linestyle=line_style, color=line_color, label=f'{label_suffix}', linewidth=1)
+    """
     ax1.set_xscale('log')
     ax1.set_ylabel('Magnitude [dB]', fontproperties=font_properties)
-
-    # Set up grid and limits if this is the first call
-    if label_suffix == "Ideal":
-        #ax1.set_ylim([-40, 40])
-        #ax1.set_xlim([10, 10e9])
-        ax1.grid(which='both', linestyle='--', linewidth=0.6)
-        ax1.xaxis.set_major_locator(LogLocator(base=10.0))  # Major ticks for decades
-        ax1.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1))  # Minor gridlines
-        ax1.grid(which='minor', linestyle=':', linewidth=0.4)
-        ax1.xaxis.set_tick_params(which='minor', length=0)  # Hide minor tick labels
-        ax1.tick_params(labelsize=font_size)
-
+    ax1.grid(which='both', linestyle='--', linewidth=0.6)
+    ax1.xaxis.set_major_locator(LogLocator(base=10.0))  # Major ticks for decades
+    ax1.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(1.0, 20.0) * 0.05))  # Minor gridlines
+    ax1.grid(which='minor', linestyle=':', linewidth=0.4)
+    ax1.tick_params(labelsize=font_size)
+    ax1.set_xlim(10, 1e11)
+    """
     # Plot the points on the graph with larger black markers
     if dc_gain is not None:
         ax1.plot(100, np.interp(100, frequency, magnitude_db), 'ko', markersize=6)  # DC Gain point at 100 Hz
@@ -1072,20 +1077,23 @@ def plot_ac_results(frequency, magnitude_db, phase_deg, label_suffix="", fig=Non
                      bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="lightyellow"))
 
     # Plot phase in degrees (Ideal or Extracted)
-    ax2.plot(frequency, phase_deg, label=f'{label_suffix}', linewidth=1)
+
+    ax2.plot(frequency, phase_deg, linestyle=line_style, color=line_color, label=f'{label_suffix}', linewidth=1)
+    """
     ax2.set_xscale('log')
     ax2.set_xlabel('Frequency [Hz]', fontproperties=font_properties, labelpad=5)
     ax2.set_ylabel('Phase [degrees]', fontproperties=font_properties)
+    ax2.set_xlim(10, 1e11)
 
     # Set up grid and limits if this is the first call
-    if label_suffix == "Ideal":
-        ax2.grid(which='both', linestyle='--', linewidth=0.6)
-        ax2.xaxis.set_major_locator(LogLocator(base=10.0))  # Major ticks for decades
-        ax2.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1))  # Minor gridlines
-        ax2.grid(which='minor', linestyle=':', linewidth=0.4)
-        ax2.xaxis.set_tick_params(which='minor', length=0)  # Hide minor tick labels
-        ax2.tick_params(labelsize=font_size)
-
+    #if label_suffix == "Ideal":
+    ax2.grid(which='both', linestyle='--', linewidth=0.6)
+    ax2.xaxis.set_major_locator(LogLocator(base=10.0))  # Major ticks for decades
+    ax2.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1))  # Minor gridlines
+    ax2.grid(which='minor', linestyle=':', linewidth=0.4)
+    ax2.xaxis.set_tick_params(which='minor', length=0)  # Hide minor tick labels
+    ax2.tick_params(labelsize=font_size)
+    """
     # Annotate the phase margin at the unity gain frequency
     if unity_gain_freq is not None:
         phase_at_unity = np.interp(unity_gain_freq, frequency, phase_deg)  # Phase at unity gain frequency
@@ -1101,33 +1109,111 @@ def plot_ac_results(frequency, magnitude_db, phase_deg, label_suffix="", fig=Non
 
 # Main function to execute the script and handle comparison
 def plot_spice_results():
-    arial_font = "/home/adair/Documents/CAD/roar/fonts/ArialNarrow/arialnarrow_bold.ttf"
-    font_size = 6
+    arial_font = ROAR_HOME + "/fonts/ArialNarrow/arialnarrow_bold.ttf"
+    font_size = 8
     arial_bold = FontProperties(fname=arial_font, size=font_size)
+    font_properties = arial_bold
     # Read ideal simulation data
-    filename = '/home/adair/Documents/CAD/magic_cds/extraction_custom/ac_output.txt'
-    frequency, magnitude_db, phase_deg = read_ac_simulation_data(filename)
 
+    dc_gains = []
+    unity_gains = []
+    phase_margins = []
+
+        # Read extracted simulation data
+    file_neg25_sch = ROAR_DESIGN + '/cm_ota/simulation/golden_sims/neg_25/ac_output.txt'
+    freq_neg25_sch, mag_neg25_sch, phase_neg25_sch = read_ac_simulation_data(file_neg25_sch)
+    # Plot extracted results and pass in the figure and axes from the ideal plot
+    line_style = "-"
+    line_color="blue"
+    fig, ax1, ax2, dc_gain_ext, unity_gain_ext, phase_margin_ext = plot_ac_results(
+        freq_neg25_sch, mag_neg25_sch, phase_neg25_sch, line_style, line_color, label_suffix="Schematic -25° C"
+    )
+    dc_gains.append(dc_gain_ext)
+    unity_gains.append(unity_gain_ext)
+    phase_margins.append(phase_margin_ext)
+    file_neg25_ext = ROAR_DESIGN + '/cm_ota/simulation/golden_sims/neg_25/ac_output_ext.txt'
+    freq_neg25_ext, mag_neg25_ext, phase_neg25_ext = read_ac_simulation_data(file_neg25_ext)
+    # Plot extracted results and pass in the figure and axes from the ideal plot
+    line_style = "--"
+    line_color="blue"
+    fig, ax1, ax2, dc_gain_ext, unity_gain_ext, phase_margin_ext = plot_ac_results(
+        freq_neg25_ext, mag_neg25_ext, phase_neg25_ext, line_style, line_color, label_suffix="Post Layout -25° C", fig=fig, ax1=ax1, ax2=ax2
+    )
+    dc_gains.append(dc_gain_ext)
+    unity_gains.append(unity_gain_ext)
+    phase_margins.append(phase_margin_ext)
+
+
+    filename = ROAR_DESIGN + '/cm_ota/simulation/golden_sims/25/ac_output.txt'
+    frequency, magnitude_db, phase_deg = read_ac_simulation_data(filename)
+    line_style = '-'
+    line_color = "green"
     # Plot ideal results
     fig, ax1, ax2, dc_gain_ideal, unity_gain_ideal, phase_margin_ideal = plot_ac_results(
-        frequency, magnitude_db, phase_deg, label_suffix="Ideal"
+        frequency, magnitude_db, phase_deg, line_style, line_color, label_suffix="Schematic 25° C",  fig=fig, ax1=ax1, ax2=ax2
     )
+    dc_gains.append(dc_gain_ideal)
+    unity_gains.append(unity_gain_ideal)
+    phase_margins.append(phase_margin_ideal)
 
-    # Read extracted simulation data
-    filename2 = '/home/adair/Documents/CAD/magic_cds/extraction_custom/ac_output_ext.txt'
-    frequency2, magnitude_db2, phase_deg2 = read_ac_simulation_data(filename2)
+    file_25_ext = ROAR_DESIGN + '/cm_ota/simulation/golden_sims/25/ac_output_ext.txt'
+    freq_25_ext, mag_25_ext, phase_25_ext = read_ac_simulation_data(file_25_ext)
+
 
     # Plot extracted results and pass in the figure and axes from the ideal plot
+    line_style = "--"
+    line_color="green"
     fig, ax1, ax2, dc_gain_ext, unity_gain_ext, phase_margin_ext = plot_ac_results(
-        frequency2, magnitude_db2, phase_deg2, label_suffix="Extracted", fig=fig, ax1=ax1, ax2=ax2
+                                 freq_25_ext, mag_25_ext, phase_25_ext, line_style, line_color, label_suffix="Post Layout 25° C", fig=fig, ax1=ax1, ax2=ax2
     )
+    dc_gains.append(dc_gain_ext)
+    unity_gains.append(unity_gain_ext)
+    phase_margins.append(phase_margin_ext)
+
+    file_75_ext = ROAR_DESIGN + '/cm_ota/simulation/golden_sims/75/ac_output.txt'
+    freq_75_ext, mag_75_ext, phase_75_ext = read_ac_simulation_data(file_75_ext)
+    # Plot extracted results and pass in the figure and axes from the ideal plot
+    line_style = "-"
+    line_color="red"
+    fig, ax1, ax2, dc_gain_ext, unity_gain_ext, phase_margin_ext = plot_ac_results(
+        freq_75_ext, mag_75_ext, phase_75_ext, line_style, line_color, label_suffix="Schematic 75° C", fig=fig, ax1=ax1, ax2=ax2
+    )
+    dc_gains.append(dc_gain_ext)
+    unity_gains.append(unity_gain_ext)
+    phase_margins.append(phase_margin_ext)
+    #file_hot_sch = ROAR_DESIGN + '/cm_ota/simulation/spice_75c/ac_output.txt'
+    #freq_cold_sch, mag_cold_sch, phase_cold_sch = read_ac_simulation_data(file_cold_sch)
 
     # Calculate percentage differences and annotate them
-    dc_gain_diff = percentage_difference(dc_gain_ideal, dc_gain_ext)
-    unity_gain_diff = percentage_difference(unity_gain_ideal, unity_gain_ext)
-    phase_margin_diff = percentage_difference(phase_margin_ideal, phase_margin_ext)
+    dc_gain_diff = percentage_difference(dc_gains)
+    unity_gain_diff = percentage_difference(unity_gains)
+    phase_margin_diff = percentage_difference(phase_margins)
+
+    file_75_ext = ROAR_DESIGN + '/cm_ota/simulation/golden_sims/75/ac_output_ext.txt'
+    freq_75_ext, mag_75_ext, phase_75_ext = read_ac_simulation_data(file_75_ext)
+    # Plot extracted results and pass in the figure and axes from the ideal plot
+    line_style = "--"
+    line_color="red"
+    fig, ax1, ax2, dc_gain_ext, unity_gain_ext, phase_margin_ext = plot_ac_results(
+        freq_75_ext, mag_75_ext, phase_75_ext, line_style, line_color, label_suffix="Post Layout 75° C", fig=fig, ax1=ax1, ax2=ax2
+    )
+    dc_gains.append(dc_gain_ext)
+    unity_gains.append(unity_gain_ext)
+    phase_margins.append(phase_margin_ext)
+    #file_hot_sch = ROAR_DESIGN + '/cm_ota/simulation/spice_75c/ac_output.txt'
+    #freq_cold_sch, mag_cold_sch, phase_cold_sch = read_ac_simulation_data(file_cold_sch)
+
+    # Calculate percentage differences and annotate them
+    dc_gain_diff = percentage_difference(dc_gains)
+    unity_gain_diff = percentage_difference(unity_gains)
+    phase_margin_diff = percentage_difference(phase_margins)
+
+    #dc_gain_diff = percentage_difference(dc_gain_ideal, dc_gain_ext)
+    #unity_gain_diff = percentage_difference(unity_gain_ideal, unity_gain_ext)
+    #phase_margin_diff = percentage_difference(phase_margin_ideal, phase_margin_ext)
 
     # Annotate percentage differences on the plots
+
     ax1.annotate(f'DC Gain Diff: {dc_gain_diff:.2f}%', xy=(200, 35), fontsize=font_size, ha='left',
                  bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="lightcyan"))
 
@@ -1138,23 +1224,69 @@ def plot_spice_results():
                  bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="lightcyan"))
 
 
+
     for label in ax1.get_xticklabels():
         label.set_fontproperties(arial_bold)
     for label in ax1.get_yticklabels():
         label.set_fontproperties(arial_bold)
     minor_size = font_size - 2
-    #ax1.tick_params(axis='both', which='major', labelsize=font_size)
-    #ax1.tick_params(axis='both', which='minor', labelsize=minor_size)
-    #ax1.tick_params(axis='y', labelsize=12)
+    """
     #ax1.yaxis.set_tick_params(labelsize=font_size, labelrotation=0)
+    ax1.set_xscale('log')
+    ax1.set_ylabel('Magnitude [dB]', fontproperties=font_properties)
+    ax1.grid(which='both', linestyle='--', linewidth=0.6)
+    ax1.xaxis.set_major_locator(LogLocator(base=10.0))  # Major ticks for decades
+    ax1.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(1.0, 20.0) * 0.05))  # Minor gridlines
+    ax1.grid(which='minor', linestyle=':', linewidth=0.4)
+    ax1.tick_params(labelsize=font_size)
+    ax1.set_xlim(10, 1e11)
+    ax1.tick_params(axis='both', which='major', labelsize=font_size)
+    ax1.tick_params(axis='both', which='minor', labelsize=minor_size)
+    """
+    ax1.set_xscale('log')
+    ax1.set_ylabel('Magnitude [dB]', fontproperties=font_properties)
+    ax1.grid(which='both', linestyle='--', linewidth=0.6)
+    # Set the major ticks (decades)
+    ax1.xaxis.set_major_locator(LogLocator(base=10.0, numticks=12))
+    # Add minor gridlines
+    #ax1.grid(which='minor', linestyle=':', linewidth=0.4)
+    # Set the minor ticks (subdivisions of decades)
+    ax1.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=10))
+    # Set limits for the x-axis
+    ax1.set_xlim(10, 1e11)
+
+    # Adjust tick label sizes
+    ax1.tick_params(labelsize=font_size)
+    #ax1.tick_params(axis='both', which='minor', labelsize=minor_size)
+
+    ax2.set_xscale('log')
+    # Set y-axis label
+    ax2.set_ylabel('Phase [°]', fontproperties=font_properties)
+    # Add major gridlines
+    ax2.grid(which='both', linestyle='--', linewidth=0.6)
+    # Set the major ticks (decades)
+    ax2.xaxis.set_major_locator(LogLocator(base=10.0, numticks=12))
+    # Add minor gridlines
+    #ax2.grid(which='minor', linestyle=':', linewidth=0.4)
+    # Set the minor ticks (subdivisions of decades)
+    ax2.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=10))
+    # Set limits for the x-axis
+    ax2.set_xlim(10, 1e11)
+    # Adjust tick label sizes
+    ax2.tick_params(labelsize=font_size)
+    #ax2.tick_params(axis='both', which='minor', labelsize=minor_size)
 
 
+    #ax1.tick_params(axis='y', labelsize=12)
     for label in ax2.get_xticklabels():
         label.set_fontproperties(arial_bold)
     for label in ax2.get_yticklabels():
         label.set_fontproperties(arial_bold)
     minor_size = font_size - 2
-    #ax2.tick_params(axis='both', which='major', labelsize=font_size)
+    ax2.tick_params(axis='both', which='major', labelsize=font_size)
+
+
+
     #ax1.tick_params(axis='both', which='minor', labelsize=minor_size)
     ax1.legend(prop=arial_bold)
     ax2.legend(prop=arial_bold)
@@ -1179,22 +1311,91 @@ def main():
     pfet_device = CIDDevice(device_name="pfet_150n", vdd=1.8,
                             lut_directory=lut_dir + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500",
                             corner_list=None)
+
     nfet_nominal = CIDCorner(corner_name="nfet_150n_nominal",
-                               lut_csv=lut_dir + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt27.csv",
-                               vdd=1.8)
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt25.csv",
+                             vdd=1.8)
 
     pfet_nominal = CIDCorner(corner_name="pet_150n_nominal",
-                               lut_csv=lut_dir + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt27.csv",
-                               vdd=1.8)
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt25.csv",
+                             vdd=1.8)
+
+    nfet_cold = CIDCorner(corner_name="nfet_150n_nominal",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt-25.csv",
+                             vdd=1.8)
+
+    pfet_cold = CIDCorner(corner_name="pet_150n_nominal",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt-25.csv",
+                             vdd=1.8)
+
+    nfet_hot = CIDCorner(corner_name="nfet_150n_nominal",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/n_01v8/LUT_N_500/nfettt75.csv",
+                             vdd=1.8)
+
+    pfet_hot = CIDCorner(corner_name="pet_150n_nominal",
+                             lut_csv=ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130/p_01v8/LUT_P_500/pfettt75.csv",
+                             vdd=1.8)
+
 
     #av1 = math.sqrt(av)
     av1 = 100
     bw = 500e3
     cload1 = 50e-15
-    cm_ota_plotting()
-    #plot_spice_results()
+    #cm_ota_plotting()
+    #THIS IS GOLDEN STANDARD VALUES
+    #w1_2, w3_4, w5_6, w7_8 = size_ota_devices_from_kgm_and_currents(nfet_nominal, pfet_nominal,
+    #                                                                kgm_n=15.95843, kgm_p=5.255)
+
+    w1_2, w3_4, w5_6, w7_8 = size_ota_devices_from_kgm_and_currents(nfet_cold, nfet_hot,
+                                                                    kgm_n=15, kgm_p=5.255)
+    f1_2, f3_4, f4_5, f5_6 = get_fingers_for_align(w1_2, w3_4, w5_6, w7_8)
+
+    plot_spice_results()
     print("DONE")
     w1, gm1, kgm1, w2, gm2, kgm2 = krummenechar_ota_stage1(av=av1, bw=bw, cload=cload1, nfet_device=nfet_device,
-                                                           pfet_device=pfet_device, nom_ncorner=nfet_nominal, nom_pcorner=pfet_nominal)
+                                                    pfet_device=pfet_device, nom_ncorner=nfet_nominal, nom_pcorner=pfet_nominal)
+
+def get_fingers_for_align(w1_2, w3_4, w5_6, w7_8):
+    # Define the pitch
+    pitch = 420e-9
+
+    # Function to calculate the number of fingers
+    def calculate_fingers(width):
+        # Calculate the number of fingers
+        num_fingers = round(width / pitch)
+        # Ensure the number of fingers is even
+        if num_fingers % 2 != 0:
+            num_fingers += 1
+        return num_fingers
+
+    # Calculate the number of fingers for each width
+    w1_2_fingers = calculate_fingers(w1_2)
+    w3_4_fingers = calculate_fingers(w3_4)
+    w5_6_fingers = calculate_fingers(w5_6)
+    w7_8_fingers = calculate_fingers(w7_8)
+
+    return w1_2_fingers, w3_4_fingers, w5_6_fingers, w7_8_fingers
+
+def size_ota_devices_from_kgm_and_currents(n_corner, p_corner, kgm_n, kgm_p, gain=50, bw=2e6):
+    av= 50
+    bw = 2e6
+    gbw = bw * av
+    therm_noise = 500e-9
+    cload = 4e-12
+    tan_thirty = math.tan(30*math.pi/180)
+    alpha = 1/tan_thirty
+    two_pi_alpha_gbw = 2*math.pi*alpha*gbw
+    f2 = alpha*gbw
+    total_current, m1_current, m6_current, beta_i_j, kcout_i_j, gain_i_j, thermal_rms_noise_i_j, beta_valid_i_j, gain_valid, thermal_noise_valid, kc_out = total_current_ota_v2(n_corner, p_corner, alpha, gbw, cload,
+                                                                                                                           kgm_n, kgm_p, gain_spec=gain,
+                                                                                                                           thermal_noise_spec=therm_noise)
+    iden1_2 = n_corner.lookup(param1="kgm", param2="iden", param1_val=kgm_n)
+    iden3_4 = p_corner.lookup(param1="kgm", param2="iden", param1_val=kgm_p)
+    w1_2 = m1_current/iden1_2
+    w3_4 = m1_current/iden3_4
+    w5_6 = m6_current/iden1_2
+    w7_8 = m6_current/iden3_4
+    return w1_2, w3_4, w5_6, w7_8
+
 if __name__ == "__main__":
     main()
