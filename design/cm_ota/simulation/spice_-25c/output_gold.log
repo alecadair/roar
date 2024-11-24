@@ -1,0 +1,98 @@
+
+No compatibility mode selected!
+
+
+Circuit: 
+
+Doing analysis at TEMP = -25.000000 and TNOM = 27.000000
+
+Note: Starting dynamic gmin stepping
+Trying gmin =   1.0000E-03 Note: One successful gmin step
+Trying gmin =   1.0000E-04 Note: One successful gmin step
+Trying gmin =   1.0000E-05 Note: One successful gmin step
+Trying gmin =   1.0000E-06 Note: One successful gmin step
+Trying gmin =   1.0000E-07 Note: One successful gmin step
+Trying gmin =   1.0000E-08 Note: One successful gmin step
+Trying gmin =   1.0000E-09 Note: One successful gmin step
+Trying gmin =   1.0000E-10 Note: One successful gmin step
+Trying gmin =   1.0000E-11 Note: One successful gmin step
+Trying gmin =   1.0000E-12 Note: One successful gmin step
+Trying gmin =   1.0000E-12 Note: One successful gmin step
+Note: Dynamic gmin stepping completed
+
+No. of Data Rows : 1501
+ERROR: (internal)  This operation is not defined for display type PrinterOnly.
+Can't open viewport for graphics.
+ERROR: (internal)  This operation is not defined for display type PrinterOnly.
+Can't open viewport for graphics.
+unity_gain_freq_ext =  1.057168e+08
+unity_gain_freq_ideal=  9.722491e+07
+dc_gain_ext         =  3.553167e+01
+dc_gain_ideal       =  3.517792e+01
+Error: no such vector as ph(v(out_ext).
+ meas ac phase_at_unity_ext find ph(v(out_ext) at=1.057168e+08 failed!
+
+Error: no such vector as ph(v(out)).
+ meas ac phase_at_unity_ideal find ph(v(out)) at=9.722491e+07 failed!
+
+Error(parse.c--checkvalid): phase_at_unity_ext: zero length vector.
+Error: RHS "180 * phase_at_unity_ext / pi" invalid
+Error(parse.c--checkvalid): phase_at_unity_ideal: zero length vector.
+Error: RHS "180 * phase_at_unity_ideal / pi" invalid
+Error(parse.c--checkvalid): phase_deg_at_unity_ext: zero length vector.
+Error: RHS "180 + phase_deg_at_unity_ext" invalid
+Error(parse.c--checkvalid): phase_deg_at_unity_ideal: zero length vector.
+Error: RHS "180 + phase_deg_at_unity_ideal" invalid
+Error(parse.c--checkvalid): phase_margin_ext: zero length vector.
+Error(parse.c--checkvalid): phase_margin_ideal: zero length vector.
+p1_val_ext          =  1.917557e+06
+p2_val_ext          =  1.768577e+08
+
+Error: measure  p1_val  (WHEN) : no such vector as 'phase_vector_ideal'
+ meas ac p1_val when phase_vector_ideal=-45 cross=1 failed!
+
+
+Error: measure  p2_val  (WHEN) : no such vector as 'phase_vector_ideal'
+ meas ac p2_val when phase_vector_ideal=-135 cross=1 failed!
+
+dc_gain_ideal       =  3.517792e+01
+Doing analysis at TEMP = -25.000000 and TNOM = 27.000000
+
+Note: Starting dynamic gmin stepping
+Trying gmin =   1.0000E-03 Note: One successful gmin step
+Trying gmin =   1.0000E-04 Note: One successful gmin step
+Trying gmin =   1.0000E-05 Note: One successful gmin step
+Trying gmin =   1.0000E-06 Note: One successful gmin step
+Trying gmin =   1.0000E-07 Note: One successful gmin step
+Trying gmin =   1.0000E-08 Note: One successful gmin step
+Trying gmin =   1.0000E-09 Note: One successful gmin step
+Trying gmin =   1.0000E-10 Note: One successful gmin step
+Trying gmin =   1.0000E-11 Note: One successful gmin step
+Trying gmin =   1.0000E-12 Note: One successful gmin step
+Trying gmin =   1.0000E-12 Note: One successful gmin step
+Note: Dynamic gmin stepping completed
+
+No. of Data Rows : 1
+kgm1 = 1.521692e+01
+kgm2 = 1.521692e+01
+kgm3 = 4.983516e+00
+kgm4 = 4.983516e+00
+kgm5 = 1.868792e+01
+kgm6 = 1.868792e+01
+kgm7 = 5.403534e+00
+kgm8 = 5.403534e+00
+id1 = 2.918174e-05
+id2 = 2.918174e-05
+id3 = 2.918174e-05
+id4 = 2.918174e-05
+id5 = 2.049705e-04
+id6 = 2.049705e-04
+id7 = 2.049705e-04
+id8 = 2.049705e-04
+kcgg1 = 8.355564e-10
+kcgg4 = 2.529746e-10
+kcgg6 = 8.647287e-10
+kcgg8 = 2.830194e-10
+kco = 1.147748e-09
+current_consumption = 2.341522e-04
+Note: No ".plot", ".print", or ".fourier" lines; no simulations run

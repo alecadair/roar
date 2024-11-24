@@ -6,12 +6,12 @@
 .include $ROAR_DESIGN/cm_ota/simulation/spice_-25c/cm_ota_params.sp
 
 
-V1 avdd_1v8_ext GND 1.8
-C1 out_ext GND 4p m=1
-V3 inn_ext GND DC 1
-V4 inp_ext GND DC 1 AC 1
-X1 iref_ext out_ext inn_ext inp_ext GND avdd_1v8_ext cm_ota_extracted
-I1 GND iref_ext {iref_post_layout}
+** V1 avdd_1v8_ext GND 1.8
+** C1 out_ext GND 4p m=1
+** V3 inn_ext GND DC 1
+** V4 inp_ext GND DC 1 AC 1
+** X1 iref_ext out_ext inn_ext inp_ext GND avdd_1v8_ext cm_ota_extracted
+** I1 GND iref_ext {iref_post_layout}
 
 
 V11 vdd GND 1.8
@@ -135,6 +135,9 @@ I31 GND itail {iref_ideal}
 	let kco = kcgg6 + kcgg8
 	let current_consumption = id2 + id6
 
+	let vds4 = @m.x11.xm4.msky130_fd_pr__pfet_01v8[vds]
+	let vds8 = @m.x11.xm8.msky130_fd_pr__pfet_01v8[vds]
+
 	print kgm1
 	print kgm2
 	print kgm3
@@ -159,7 +162,9 @@ I31 GND itail {iref_ideal}
 	print kcgg8
 	print kco
 	print current_consumption
-
+	print vds4
+	print vds8
+	
 	*print current_scale
 	*print dc_gain_val
 	*print p1_val
@@ -169,7 +174,7 @@ I31 GND itail {iref_ideal}
 
 
 .include $ROAR_DESIGN/cm_ota/simulation/spice_-25c/cm_ota_schematic.sp
-.include $ROAR_DESIGN/cm_ota/simulation/spice_-25c/cm_ota_extracted.sp
+** .include $ROAR_DESIGN/cm_ota/simulation/spice_-25c/cm_ota_extracted.sp
 
 .GLOBAL GND
 .end
