@@ -1346,7 +1346,7 @@ def main():
     #w1_2, w3_4, w5_6, w7_8 = size_ota_devices_from_kgm_and_currents(nfet_nominal, pfet_nominal,
     #                                                                kgm_n=15.95843, kgm_p=5.255)
 
-    w1_2, w3_4, w5_6, w7_8 = size_ota_devices_from_kgm_and_currents(nfet_cold, nfet_hot,
+    w1_2, w3_4, w5_6, w7_8 = size_ota_devices_from_kgm_and_currents(nfet_hot, pfet_hot,
                                                                     kgm_n=15, kgm_p=5.255)
     f1_2, f3_4, f4_5, f5_6 = get_fingers_for_align(w1_2, w3_4, w5_6, w7_8)
 
