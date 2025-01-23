@@ -1,0 +1,13 @@
+couldn't execute "python3 /pri/ala1/Documents/CAD_Custom_Scripts/roar/src/gui4.py &": no such file or directory
+couldn't execute "python3 /pri/ala1/Documents/CAD_Custom_Scripts/roar/src/gui4.py &": no such file or directory
+    while executing
+"exec "python3 $roar_py &"    "
+    invoked from within
+".menubar.roar.menu invoke active"
+    ("uplevel" body line 1)
+    invoked from within
+"uplevel #0 [list $w invoke active]"
+    (procedure "tk::MenuInvoke" line 50)
+    invoked from within
+"tk::MenuInvoke .menubar.roar.menu 1"
+    (command bound to event)
