@@ -651,10 +651,9 @@ class CIDApp(ThemedTk):
         # After adding the panes, set the sash position for control
         #self.top_level_pane.sashpos(1, 400)  # Position the sash at 400px
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
-        #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac", pdk_name="tsmc28_1v8")
-        #self.left_pane.add_tech_luts(dirname="/home/adair/Documents/CAD/roar/characterization/tsmc28/LUTs_1V8_mac", pdk_name="sky130")
-        #self.left_pane.add_tech_luts(dirname=sky130_luts, pdk_name="sky130")
+        predictive_28 = "/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac"
         self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
+        self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
         #self.graph_grid.add_tech_luts(dirname=sky130_luts, pdk_name="sky130")
         # Add a tiny button to mimic being on the handle of the sash
         #self.toggle_button = ttk.Button(self, text="<<", command=self.toggle_right_pane, width=5)
