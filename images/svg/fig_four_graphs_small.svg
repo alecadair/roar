@@ -28,15 +28,15 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="pt"
-     inkscape:zoom="3.4645834"
-     inkscape:cx="191.22068"
-     inkscape:cy="212.72399"
-     inkscape:window-width="3332"
-     inkscape:window-height="1866"
+     inkscape:zoom="2.4498304"
+     inkscape:cx="244.71082"
+     inkscape:cy="223.48486"
+     inkscape:window-width="3468"
+     inkscape:window-height="1825"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="figure_1" />
+     inkscape:current-layer="text_16-5" />
   <metadata
      id="metadata1">
     <rdf:RDF>
@@ -464,7 +464,7 @@
              xml:space="preserve"><tspan
                x="229.56316"
                y="301.54767"
-               id="tspan2">15</tspan></text>
+               id="tspan5">15</tspan></text>
         </g>
       </g>
       <g
@@ -19841,48 +19841,22 @@
          style="stroke-width:0.795516;stroke-linecap:butt;stroke-linejoin:round">
         <g
            id="patch_8-0"
-           transform="matrix(0.76886046,0,0,1,28.788702,0.13771528)"
-           style="stroke-width:1.36087;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none">
+           transform="matrix(0.65960868,0,0,0.57245906,44.984412,22.305331)"
+           style="stroke-width:1.94189;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none">
           <path
              d="m 128.11275,66.601959 h 60.86474 q 1.60558,0 1.60558,-2.836395 v -8.872603 q 0,-2.836397 -1.60558,-2.836397 h -60.86474 q -1.60558,0 -1.60558,2.836397 v 8.872603 q 0,2.836395 1.60558,2.836395 z"
-             style="fill:#ef90ef;fill-opacity:1;stroke:#000000;stroke-width:1.36087;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none"
+             style="fill:#ef90ef;fill-opacity:1;stroke:#000000;stroke-width:1.94189;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none"
              id="path32-3" />
         </g>
         <text
            style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:condensed;font-size:6px;line-height:normal;font-family:'Arial Narrow';-inkscape-font-specification:'Arial Narrow, Bold Condensed';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:start;stroke-width:0.795516;stroke-linecap:butt;stroke-linejoin:round"
-           x="160.01297"
-           y="61.213757"
+           x="131.42299"
+           y="58.366562"
            id="text32-6-4-3"><tspan
              sodipodi:role="line"
-             id="tspan3595-7-0"
-             x="160.01297"
-             y="61.213757"
-             style="stroke-width:0.795516">&lt; 10%</tspan></text>
-        <text
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:condensed;font-size:6px;line-height:normal;font-family:'Arial Narrow';-inkscape-font-specification:'Arial Narrow, Bold Condensed';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:start;stroke-width:0.795516;stroke-linecap:butt;stroke-linejoin:round"
-           x="128.77971"
-           y="64.026779"
-           id="text32-6"><tspan
-             sodipodi:role="line"
-             id="tspan3595"
-             x="128.77971"
-             y="64.026779"
-             style="stroke-width:0.795516">Variation</tspan><tspan
-             sodipodi:role="line"
-             x="128.77971"
-             y="64.026779"
-             style="stroke-width:0.795516"
-             id="tspan1145" /></text>
-        <text
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:condensed;font-size:6px;line-height:normal;font-family:'Arial Narrow';-inkscape-font-specification:'Arial Narrow, Bold Condensed';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:start;stroke-width:0.795516;stroke-linecap:butt;stroke-linejoin:round"
-           x="128.77971"
-           y="58.166824"
-           id="text32-6-4"><tspan
-             sodipodi:role="line"
-             id="tspan3595-7"
-             x="128.77971"
-             y="58.166824"
-             style="stroke-width:0.795516">Temperature</tspan></text>
+             id="tspan1"
+             x="131.42299"
+             y="58.366562">Variation &lt; 10%</tspan></text>
       </g>
     </g>
     <ellipse

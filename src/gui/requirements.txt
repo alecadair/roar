@@ -1,0 +1,8 @@
+PyQt6
+PySide6
+pyqtdarktheme
+numpy
+sympy
+pandas
+pyqtgraph
+PyOpenGL
