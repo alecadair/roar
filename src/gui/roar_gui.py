@@ -1,8 +1,6 @@
 import sys
 import os
 import numpy as np
-import pyqtgraph as pg
-import qdarktheme
 import pyqtgraph.opengl as gl
 from PyQt6.QtWidgets import (
     QDoubleSpinBox,
@@ -13,10 +11,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor
 from PySide6.QtCore import Qt
+import pyqtgraph as pg
+import qdarktheme
 
 #sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from cid import CIDDevice
 from design_editor import *
+from generator import *
+
 # Environment variables
 ROAR_HOME = os.environ.get("ROAR_HOME", "")
 ROAR_LIB = os.environ.get("ROAR_LIB", "")
@@ -24,6 +26,7 @@ ROAR_SRC = os.environ.get("ROAR_SRC", "")
 ROAR_CHARACTERIZATION = os.environ.get("ROAR_CHARACTERIZATION", "")
 ROAR_DESIGN_SCRIPTS = os.environ.get("ROAR_DESIGN", "")
 
+DEBUG = True
 
 class ROARTechBrowser(QWidget):
     def __init__(self, parent, lookup_window, top_level_app, tech_dict=None):
@@ -114,6 +117,8 @@ class ROARTechBrowser(QWidget):
         self.graphing_widget = graphing_widget
 
     def add_tech_luts(self, dirname=None, pdk_name=None):
+        print("Adding technology from directory" + dirname)
+        print("PDK Name: " + pdk_name)
         if dirname is None:
             dirname = QFileDialog.getExistingDirectory(self, "Select Directory")
             if not dirname:
@@ -127,7 +132,8 @@ class ROARTechBrowser(QWidget):
         #self.tree.addTopLevelItem(pdk_item)
         pdk_dict = None
         if self.top_level_app is not None:
-            pdk_dict = self.top_level_app.tech_dict.get(pdk_name, {})
+            pdk_dict = self.top_level_app.tech_dict
+            #pdk_dict = self.top_level_app.tech_dict.get(pdk_name, {})
         else:
             pdk_dict = ROARTechBrowser.create_tech_dict_from_dir(dirname, pdk_name)
 
@@ -160,7 +166,7 @@ class ROARTechBrowser(QWidget):
 
 
 class ROARLookupWindow(QWidget):
-    def __init__(self, parent, expand_callback, top_level_app, tech_dict=None, graph_grid=None):
+    def __init__(self, parent, expand_callback, top_level_app, graph_grid=None):
         super().__init__(parent)
         self.expand_callback = expand_callback
         self.top_level_app = top_level_app
@@ -180,7 +186,9 @@ class ROARLookupWindow(QWidget):
 
         # Initialize the tech browser widget
         self.tech_browser = ROARTechBrowser(self, lookup_window=self, top_level_app=self.top_level_app, tech_dict=tech_dict)
-        self.tech_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        if DEBUG == False:
+            self.tech_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Create a container for control widgets
         self.controls_container = QWidget()
@@ -256,11 +264,23 @@ class ROARLookupWindow(QWidget):
 
         # Initialize the graphing window
         #self.graphing_window = ROARPlotWidget(self, top_level_app=self.top_level_app)
-        self.plot_widget =  pg.PlotWidget()
-        self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.plot_widget = pg.PlotWidget()
+        #self.plot_scientific_data()
+        #self.plot_widget = pg.GraphicsLayoutWidget()  # Wrap it in a QWidget-compatible class
+        #self.plot = self.plot_widget.addPlot()
+        #self.plot_container = QWidget()
+        #self.layout = QVBoxLayout(self.plot_container)
+        #layout.addWidget(self.plot_widget)
+        #self.plot_container.setLayout(layout)
+        # Uncomment the following when not debugging
+        if DEBUG == False:
+            self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Add widgets to the main horizontal splitter
         self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser + controls)
+        self.test_widget = QWidget()
+        self.plot_widget = self.test_widget
+        #self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
         self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
 
         # Adjust stretch factors for main splitter (tech section gets less space than graphing)
@@ -269,6 +289,7 @@ class ROARLookupWindow(QWidget):
 
         # Add splitter to the main layout
         self.main_layout.addWidget(self.top_level_pane)
+        self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.is_dark_mode = False
         self.is_3d_mode = False
@@ -276,7 +297,7 @@ class ROARLookupWindow(QWidget):
         self.current_color_index = 0
 
         # Auto-plot different colored sine waves on startup
-        self.plot_scientific_data()
+        #self.plot_scientific_data()
         self.expand_button.clicked.connect(self.toggle_expand)
 
     def toggle_expand(self):
@@ -363,6 +384,46 @@ class ROARLookupWindow(QWidget):
         if self.lookup_window is not None:
             self.lookup_window.update_graph_from_tech_browser()
 
+    def update_graph_from_tech_browser(self, equation_eval=None):
+        models_selected = self.tech_browser.tree.get_checked()
+        self.graphing_window.ax.cla()
+        self.graphing_window.canvas.draw()
+        color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
+                      'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
+                      'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
+        color_index = 0
+
+        for model in models_selected:
+            model_tokens = model.split(">")
+            pdk = model_tokens[0]
+            model_name = model_tokens[1]
+            length = model_tokens[2]
+            corner = model_tokens[3]
+            cid_corner = self.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
+            if equation_eval != None:
+                print("TODO")
+                return 0
+            #cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
+            param1 = self.graphing_window.x_dropdown.get()
+            param2 = self.graphing_window.y_dropdown.get()
+            legend_str = pdk + " " + model_name + " " + length + " " + corner
+            color = color_list[color_index]
+            #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+            #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
+            cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str, show_legend=self.legend_var.get())
+            self.graphing_window.ax.grid(True, which="both")
+
+            color_index += 1
+            if color_index >= len(color_list):
+                color_index = 0
+            #self.graphing_window.canvas.draw()
+            self.graphing_window.canvas.draw()
+
+    def add_tech_luts(self, dirname, pdk_name):
+        self.tech_browser.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
+
+
 class ROARPlotSettings(QWidget):
     def __init__(self, parent=None, top_level_app=None):
         super().__init__(parent)
@@ -390,15 +451,17 @@ class ROARPlotLookupBanner(QWidget):
         self.banner_layout.addWidget(self.x_label)
 
         self.x_dropdown = QComboBox()
-        self.x_dropdown.addItems(("kgm", "kcgd", "kgds", "iden"))
-        self.x_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.x_dropdown.addItems(self.top_level_app.lookups)
+        if DEBUG == False:
+            self.x_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.x_dropdown)
 
         self.x_spinbox = QDoubleSpinBox()
         self.x_spinbox.setRange(0, 100)
         self.x_spinbox.setSingleStep(0.1)
         self.x_spinbox.setValue(15)
-        self.x_spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        if DEBUG == False:
+            self.x_spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.x_spinbox)
 
         # Y selection
@@ -406,20 +469,23 @@ class ROARPlotLookupBanner(QWidget):
         self.banner_layout.addWidget(self.y_label)
 
         self.y_dropdown = QComboBox()
-        self.y_dropdown.addItems(("kgm", "kcgd", "kgds", "iden"))
-        self.y_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.y_dropdown.addItems(self.top_level_app.lookups)
+        if DEBUG == False:
+            self.y_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.y_dropdown)
 
         self.y_spinbox = QDoubleSpinBox()
         self.y_spinbox.setRange(0, 100)
         self.y_spinbox.setSingleStep(0.1)
         self.y_spinbox.setValue(15)
-        self.y_spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        if DEBUG == False:
+            self.y_spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.y_spinbox)
 
         # Lookup Label
         self.lookup_label = QLabel()
-        self.lookup_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        if DEBUG == False:
+            self.lookup_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.lookup_label)
 
         # Add a spacer to push the update button to the right
@@ -428,7 +494,8 @@ class ROARPlotLookupBanner(QWidget):
         # Update Button
         self.update_button = QPushButton("Update")
         self.update_button.setFixedWidth(80)
-        self.update_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        if DEBUG == False:
+            self.update_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.update_button.clicked.connect(self.update_graph)
         self.banner_layout.addWidget(self.update_button)
 
@@ -530,7 +597,7 @@ class ROARPlotWidget(QWidget):
 
 
 class ROARHeader(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, top_level_app=None):
         super().__init__(parent)
 
         # Set a taller fixed height for the header
@@ -611,29 +678,37 @@ class ROARHeader(QWidget):
 class ROARGraphGrid(QWidget):
     def __init__(self, parent=None, top_level_app=None, tech_dict=None):
         super().__init__(parent)
-        
+        self.lookup_windows = []
         layout = QVBoxLayout(self)
+        self.top_level_app = top_level_app
         self.grid_splitter = QSplitter(Qt.Orientation.Vertical)
         self.grid_splitter.setChildrenCollapsible(False)
-        self.grid_splitter.setSizePolicy(self.grid_splitter.sizePolicy())
+        if DEBUG == False:
+            self.grid_splitter.setSizePolicy(self.grid_splitter.sizePolicy())
         self.grid_splitter.setChildrenCollapsible(False)
         
         self.top_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.top_splitter.setChildrenCollapsible(False)
-        self.top_splitter.setSizePolicy(self.top_splitter.sizePolicy())
+        if DEBUG == False:
+            self.top_splitter.setSizePolicy(self.top_splitter.sizePolicy())
         self.top_splitter.setChildrenCollapsible(False)
         self.bottom_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.bottom_splitter.setChildrenCollapsible(False)
-        self.bottom_splitter.setSizePolicy(self.bottom_splitter.sizePolicy())
+        if DEBUG == False:
+            self.bottom_splitter.setSizePolicy(self.bottom_splitter.sizePolicy())
         self. bottom_splitter.setChildrenCollapsible(False)
-        
-        self.lookup_window_1 = ROARLookupWindow(self, None, top_level_app, tech_dict=tech_dict, graph_grid=self)
-        self.lookup_window_2 = ROARLookupWindow(self, None, top_level_app, tech_dict=tech_dict, graph_grid=self)
-        self.lookup_window_3 = ROARLookupWindow(self, None, top_level_app, tech_dict=tech_dict, graph_grid=self)
-        self.lookup_window_4 = ROARLookupWindow(self, None, top_level_app, tech_dict=tech_dict, graph_grid=self)
 
 
-        
+        self.lookup_window_1 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_window_2 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_window_3 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_window_4 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+
+        self.lookup_windows.append(self.lookup_window_1)
+        self.lookup_windows.append(self.lookup_window_2)
+        self.lookup_windows.append(self.lookup_window_3)
+        self.lookup_windows.append(self.lookup_window_4)
+
         self.top_splitter.addWidget(self.lookup_window_1)
         self.top_splitter.addWidget(self.lookup_window_2)
         
@@ -647,15 +722,25 @@ class ROARGraphGrid(QWidget):
         
         layout.addWidget(self.grid_splitter)
 
-class ROARApp(QMainWindow):
-    def __init__(self):
-        super().__init__()
+    def add_tech_luts(self, dirname, pdk_name):
+        for lookup_window in self.lookup_windows:
+            lookup_window.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
 
+
+class ROARApp(QMainWindow):
+    def __init__(self, tech_dict=None):
+        super().__init__()
+        self.roar_design = ROARDesign()
         # Define lookup variables
         self.lookups = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'csb', 'css', 'ft', 'gds', 'gm', 'gmb',
                         'gmidft', 'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm',
                         'kgmft', 'n', 'rds', 'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth')
-        self.tech_dict = {}
+        self.tech_dict = None
+        if tech_dict == None:
+            self.tech_dict = {}
+        else:
+            self.tech_dict = tech_dict
+        self.roar_teal = '#1C8091'
 
         # Window properties
         self.setWindowTitle("ROAR - Robust Optimal Analog Reuse")
@@ -666,15 +751,15 @@ class ROARApp(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
 
         # Add ROARHeader at the top
-        self.header = ROARHeader(self)
+        self.header = ROARHeader(self, top_level_app=self)
         main_layout.addWidget(self.header)
 
         # Create a horizontal splitter
         splitter_h = QSplitter(Qt.Orientation.Horizontal)
-        self.editor_window = EditorWindow()
+        self.editor_window = ROAREditorWindow(top_level_app=self)
         splitter_h.addWidget(self.editor_window)
 
-        self.graph_grid = ROARGraphGrid(self, self)
+        self.graph_grid = ROARGraphGrid(parent=self, top_level_app=self)
         splitter_h.addWidget(self.graph_grid)
 
         # Add splitter to the layout
@@ -685,6 +770,38 @@ class ROARApp(QMainWindow):
 
         # Initialize menu bar
         self.init_menu_bar()
+
+        sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
+        predictive_28 = "/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac"
+        self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
+        #self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
+
+    def add_tech_luts(self, dir, pdk_name):
+        self.tech_dict[pdk_name] = {}
+        for filename in os.listdir(dir):
+            f = os.path.join(dir, filename)
+            if os.path.isdir(f):
+                model_name = filename
+                self.create_devices_from_model_dir(pdk_name=pdk_name, model_name=model_name, model_dir=f)
+        self.graph_grid.add_tech_luts(dirname=dir, pdk_name=pdk_name)
+        return (self.tech_dict)
+
+
+    def create_devices_from_model_dir(self, pdk_name, model_name, model_dir):
+        self.tech_dict[pdk_name][model_name] = {}
+        for filename in os.listdir(model_dir):
+            length_dir = os.path.join(model_dir, filename)
+            tokens = filename.split('_')
+            length = tokens[-1]
+            device = CIDDevice(device_name=model_name, vdd=0.0, lut_directory=length_dir, corner_list=None)
+            self.tech_dict[pdk_name][model_name][length] = {}
+            self.tech_dict[pdk_name][model_name][length]["device"] = device
+            self.tech_dict[pdk_name][model_name][length]["corners"] = {}
+            for corner in device.corners:
+                corner_name = corner.corner_name
+                self.tech_dict[pdk_name][model_name][length]["corners"][corner_name] = corner
+        return(self.tech_dict)
+
 
     def init_menu_bar(self):
         """Creates the menu bar with File, Solver, Window, Export, and Help options."""
@@ -792,9 +909,12 @@ class ROARApp(QMainWindow):
     def show_about_dialog(self):
         """Displays an About dialog."""
         QMessageBox.about(self, "About ROAR", "ROAR - Robust Optimal Analog Reuse\nVersion 1.0\n© 2024 ROAR Inc.")
+
+
 if __name__ == "__main__":
     #qdarktheme.enable_hi_dpi()
-    app = QApplication(sys.argv)
+    #app = QApplication([sys.argv])
+    app = QApplication([])
     #qdarktheme.setup_theme("light")
     #qdarktheme.setup_theme("auto")
     #qdarktheme.setup_theme()
@@ -821,7 +941,8 @@ if __name__ == "__main__":
         test_widget = ROARGraphGrid(window, None, tech_dict=tech_dict)
         window.setCentralWidget(test_widget)
     else:
-        window = ROARApp()
+        window = ROARApp(tech_dict)
+        #window.setCentralWidget(app_widget)
     #window.setStyle("Fusion")
     window.show()
     sys.exit(app.exec())
