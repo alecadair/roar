@@ -1,5 +1,19 @@
 PyQt6
 PySide6
+
+# ALIGN LIBS
+colorlog
+pydantic<2
+more-itertools
+z3
+networkx
+flatdict
+python-gdsii
+gdspy
+plotly
+#
+
+gdstk
 pyqtdarktheme
 numpy
 sympy

@@ -122,10 +122,11 @@ class BaseEditor(QWidget):
         self.update_row_colors()  # Apply correct colors after loading data
 
 
-class EditorWindow(QWidget):
-    def __init__(self):
+class ROAREditorWindow(QWidget):
+    def __init__(self, top_level_app=None):
         super().__init__()
         self.setWindowTitle("Editor Window")
+        self.top_level_app = top_level_app
         layout = QVBoxLayout()
         self.setLayout(layout)
 
