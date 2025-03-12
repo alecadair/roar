@@ -19,7 +19,7 @@ ROAR_DESIGN_SCRIPTS = os.environ["ROAR_DESIGN"]
 
 
 sys.path.append(ROAR_LIB + "/python/sv_ttk-2.5.4/")
-sys.path.append(ROAR_LIB + "/python/ttkwidgets-0.13.0/")
+sys.path.append(ROAR_LIB + "/python/ttkwidgets")
 sys.path.append(ROAR_LIB + "/python/schemdraw-master")
 sys.path.append(ROAR_LIB + "/python/ttkthemes-3.2.2")
 sys.path.append(ROAR_LIB + "/python/ecos/ecos-2.0.13")
