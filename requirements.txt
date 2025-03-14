@@ -1,2 +1,11 @@
 ttkwidgets
 ttkthemes
+matplotlib
+pandas
+sv_ttk
+sympy
+pyqtgraph
+PyQt6
+PyOpenGL
+PySide6
+pyqtdarktheme
