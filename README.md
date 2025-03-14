@@ -13,13 +13,13 @@ To set up the ROAR environment, follow these steps:
    pip install -r requirements.txt
    ```
 
-1. **Install dependencies**  
-  Second, run make in the top level of your local copy of this repository:
+2. **Run make to create environment**  
+   Second, run make in the top level of your local copy of this repository:
 
-  ```bash
-  make
-  ```
-  This generates a file called roar_env.csh
+   ```bash
+   make
+   ```
+   This generates a file called roar_env.csh
 
 3. **Set environmental variables**  
    After installing the dependencies, you need to source the environment configuration file. To do this, run:
