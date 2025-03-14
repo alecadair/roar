@@ -22,7 +22,7 @@ To set up the ROAR environment, follow these steps:
    This generates a file called roar_env.csh
 
 3. **Set environmental variables**  
-   After installing the dependencies, you need to source the environment configuration file. To do this, run:
+   After installing the dependencies and running make, you need to source the environment configuration file generated from make. To do this, run:
 
    ```bash
    source roar_env.csh
