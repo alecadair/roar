@@ -1,2 +1,35 @@
+
 # ROAR
-Robust and Optimal Analog Reuse flow developed based on C/ID design methodology.
+The Robust and Optimal Analog Reuse (ROAR) flow/tool is developed to enable a GUI based approach to the C/ID and gm/ID (I like to say Inverse ID) analog circuit design methodologies. This software enables the the ability to design, optimize, and generate process/technology agnostic design scripts in a graphical and automad fashion.
+
+## Installation
+
+To set up the ROAR environment, follow these steps:
+
+1. **Install dependencies**  
+   First, install the required Python dependencies using pip. Run the following command:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+1. **Install dependencies**  
+  Second, run make in the top level of your local copy of this repository:
+
+  ```bash
+  make
+  ```
+  This generates a file called roar_env.csh
+
+3. **Set environmental variables**  
+   After installing the dependencies, you need to source the environment configuration file. To do this, run:
+
+   ```bash
+   source roar_env.csh
+   ```
+
+   This will configure the environment variables needed for ROAR to function properly.
+
+## Purpose
+
+ROAR is designed to enable and optimize gm/id and c/id based analog circuit design. The primary goal of this software is to streamline the process of analog circuit design, making it easier to optimize and reuse existing designs through an efficient and automated workflow.
