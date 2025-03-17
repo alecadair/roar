@@ -2,45 +2,56 @@
 # Author: Alec S. Adair
 # ROAR - Turku, Finland
 #
-# Intended to run with Centos/Redhat operating systems and tcsh or csh
-# Also tested with Ubuntu and should run on Ubuntu
+# Generates roar_env.csh for setting ROAR environment variables.
+# Works with CentOS, RedHat, Ubuntu, and tcsh/csh.
 #
 
 TCSH_PATH := $(shell which tcsh)
 
-# If tcsh is found, set the SHELL variable to its path
+# Ensure tcsh is installed
 ifeq ($(TCSH_PATH),)
-    $(error "tcsh is not installed or not in the system PATH.")
+    $(error "Error: tcsh is not installed or not in the system PATH.")
 endif
 
-# Set the SHELL variable to use the detected tcsh path
+# Use detected tcsh as the Makefile shell
 SHELL := $(TCSH_PATH)
 CURRENT_DIRECTORY := $(shell pwd)
+OUTPUT_FILE := roar_env.csh
 
 all: generate_roar_env
 
 generate_roar_env:
 	@echo "Generating ROAR Environment File: roar_env.csh"
-	@echo "If running ROAR from source code, roar_env.csh must be sourced before using ROAR e.g."
-	@echo "source roar_env.csh "
-	@echo "This sets environmental variables needed for the ROAR flow"
-	@echo "The contents of roar_env.csh can be appended to your .bashrc/.cshrc file in your home directory."
-	@echo "If the contents of roar_env.csh are not appended to your .bashrc/.cshrc then"
-	@echo "roar_env.csh needs to be sourced every time before using ROAR."
+	@echo "Source it before using ROAR: source roar_env.csh"
+	@echo "To make it permanent, add 'source /path/to/roar_env.csh' to ~/.cshrc or ~/.tcshrc."
 
-	@echo "#" > roar_env.csh
-	@echo -n "# File generated on " >> roar_env.csh 
-	@date >> roar_env.csh
-	@echo "#" >> roar_env.csh
-	@echo "" >> roar_env.csh
+	@echo "#" > $(OUTPUT_FILE)
+	@echo "# ROAR Environment Setup Script" >> $(OUTPUT_FILE)
+	@echo "# Generated on `date`" >> $(OUTPUT_FILE)
+	@echo "# This script must be sourced to configure the ROAR environment." >> $(OUTPUT_FILE)
+	@echo "#" >> $(OUTPUT_FILE)
+	@echo "" >> $(OUTPUT_FILE)
 
-	@echo 'setenv ROAR_HOME $(CURRENT_DIRECTORY)' >> roar_env.csh
-	@echo 'setenv ROAR_SRC $$ROAR_HOME/src' >> roar_env.csh
-	@echo 'setenv ROAR_DESIGN $$ROAR_HOME/design' >> roar_env.csh
-	@echo 'setenv ROAR_LIB $$ROAR_HOME/lib' >> roar_env.csh
-	@echo 'setenv ROAR_CHARACTERIZATION $$ROAR_HOME/characterization' >> roar_env.csh
+	@echo 'setenv ROAR_HOME "$(CURRENT_DIRECTORY)"' >> $(OUTPUT_FILE)
+	@echo 'setenv ROAR_SRC "$$ROAR_HOME/src"' >> $(OUTPUT_FILE)
+	@echo 'setenv ROAR_DESIGN "$$ROAR_HOME/design"' >> $(OUTPUT_FILE)
+	@echo 'setenv ROAR_DEPENDENCIES "$$ROAR_HOME/dependencies"' >> $(OUTPUT_FILE)
+	@echo 'setenv ROAR_CHARACTERIZATION "$$ROAR_HOME/characterization"' >> $(OUTPUT_FILE)
+	@echo "" >> $(OUTPUT_FILE)
 
-	@echo '' >> roar_env.csh
+	@echo 'if (! $$?LD_LIBRARY_PATH) then' >> $(OUTPUT_FILE)
+	@echo '    setenv LD_LIBRARY_PATH "$$ROAR_DEPENDENCIES/lib64"' >> $(OUTPUT_FILE)
+	@echo 'else' >> $(OUTPUT_FILE)
+	@echo '    setenv LD_LIBRARY_PATH "$$ROAR_DEPENDENCIES/lib64:$$LD_LIBRARY_PATH"' >> $(OUTPUT_FILE)
+	@echo 'endif' >> $(OUTPUT_FILE)
+	@echo 'setenv LD_LIBRARY_PATH "$$ROAR_DEPENDENCIES/lib:$$LD_LIBRARY_PATH"' >> $(OUTPUT_FILE)
+	@echo "" >> $(OUTPUT_FILE)
+
+	@echo 'echo "ROAR environment variables set."' >> $(OUTPUT_FILE)
+	@echo 'echo "Run: source $(OUTPUT_FILE) before using ROAR."' >> $(OUTPUT_FILE)
+
+	@echo "ROAR environment script generated: $(OUTPUT_FILE)"
 
 clean:
-	@rm -f roar_env.csh
+	@rm -f $(OUTPUT_FILE)
+	@echo "Cleaned: $(OUTPUT_FILE)"
