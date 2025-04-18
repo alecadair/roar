@@ -4,8 +4,8 @@ matplotlib
 pandas
 sv_ttk
 sympy
-pyqtgraph
-PyQt6
+PyQt6>=6.5,<6.7
+pyqtgraph>=0.13
 PyOpenGL
-PySide6
+# PySide6
 pyqtdarktheme
