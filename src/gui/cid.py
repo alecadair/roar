@@ -860,63 +860,65 @@ class CIDCorner():
         return((fig1, ax1))
 
 
-def plot_processes_params_roar_plot_widget(self, param1, param2, param3=None, norm_type="", show_plot=True, new_plot=True, 
-                                           roar_plot_widget=None, color=None, legend_str=None, enable_3d=False):
-    color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
-    color_index = 0
+    def plot_processes_params_roar_plot_widget(self, param1, param2, param3=None, norm_type="",
+                                               show_plot=True, new_plot=True, roar_plot_widget=None,
+                                               color=None, legend_str=None, enable_3d=False):
+        color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
+        color_index = 0
 
-    if roar_plot_widget is None:
-        raise ValueError("A valid pg.PlotWidget instance must be provided.")
+        if roar_plot_widget is None:
+            raise ValueError("A valid pg.PlotWidget instance must be provided.")
 
-    if new_plot:
-        roar_plot_widget.clear()
+        if new_plot:
+            roar_plot_widget.clear()
 
-    # Ensure the plot widget has a legend
-    if not hasattr(roar_plot_widget, "legend"):
-        roar_plot_widget.legend = pg.LegendItem(offset=(10, 10))  # Create legend
-        roar_plot_widget.legend.setParentItem(roar_plot_widget.getPlotItem())  # Attach legend to the plot
+        # Ensure the plot widget has a legend
+        if not hasattr(roar_plot_widget, "legend"):
+            print("TODO: Create legend on plot")
+            #roar_plot_widget.legend = pg.LegendItem(offset=(10, 10))  # Create legend
+            #roar_plot_widget.legend.setParentItem(roar_plot_widget.getPlotItem())  # Attach legend to the plot
 
-    # Data selection based on 'kgm' filtering
-    params1_all = self.df[param1]
-    params2_all = self.df[param2]
-    params3_all = self.df[param3] if enable_3d and param3 is not None else params1_all
-    kgm_col = self.df["kgm"]
+        # Data selection based on 'kgm' filtering
+        params1_all = self.df[param1]
+        params2_all = self.df[param2]
+        params3_all = self.df[param3] if enable_3d and param3 is not None else params1_all
+        kgm_col = self.df["kgm"]
 
-    params1, params2, params3 = [], [], []
-    for i in range(len(params1_all)):
-        if 0.5 < kgm_col[i] < 40:
-            params1.append(params1_all[i])
-            params2.append(params2_all[i])
-            params3.append(params3_all[i])
+        params1, params2, params3 = [], [], []
+        for i in range(len(params1_all)):
+            if 0.5 < kgm_col[i] < 40:
+                params1.append(params1_all[i])
+                params2.append(params2_all[i])
+                params3.append(params3_all[i])
 
-    # Normalize data if required
-    def normalize(data):
-        data_min, data_max = min(data), max(data)
-        return [(num - data_min) / (data_max - data_min) if data_max != data_min else 0 for num in data]
+        # Normalize data if required
+        def normalize(data):
+            data_min, data_max = min(data), max(data)
+            return [(num - data_min) / (data_max - data_min) if data_max != data_min else 0 for num in data]
 
-    if norm_type == "xnorm":
-        params1 = normalize(params1)
-    elif norm_type == "ynorm":
-        params2 = normalize(params2)
-    elif norm_type == "norm":
-        params1 = normalize(params1)
-        params2 = normalize(params2)
+        if norm_type == "xnorm":
+            params1 = normalize(params1)
+        elif norm_type == "ynorm":
+            params2 = normalize(params2)
+        elif norm_type == "norm":
+            params1 = normalize(params1)
+            params2 = normalize(params2)
 
-    # Select color
-    if color is None:
-        color = color_list[color_index % len(color_list)]
-        color_index += 1
+        # Select color
+        if color is None:
+            color = color_list[color_index % len(color_list)]
+            color_index += 1
 
-    # Plot on pg.PlotWidget
-    curve = roar_plot_widget.plot(params1, params2, pen=color, name=legend_str)
+        # Plot on pg.PlotWidget
+        curve = roar_plot_widget.plot(params1, params2, pen=color, name=legend_str)
 
-    # Add to legend if legend_str is provided
-    if legend_str:
-        roar_plot_widget.legend.addItem(curve, legend_str)
+        # Add to legend if legend_str is provided
+        if legend_str:
+            roar_plot_widget.legend.addItem(curve, legend_str)
 
-    # Set labels
-    roar_plot_widget.setLabel('bottom', param1)
-    roar_plot_widget.setLabel('left', param2)
-    roar_plot_widget.setTitle(f"{param2} vs {param1}")
+        # Set labels
+        roar_plot_widget.setLabel('bottom', param1)
+        roar_plot_widget.setLabel('left', param2)
+        roar_plot_widget.setTitle(f"{param2} vs {param1}")
 
-    return roar_plot_widget
+        return roar_plot_widget

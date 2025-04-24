@@ -1,7 +1,12 @@
 import sys
 import os
+os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = '/home/adair/Documents/CAD/roar_venv/lib/python3.10/site-packages/PySide6/Qt/plugins/platforms'
+
+
 import numpy as np
 import pyqtgraph.opengl as gl
+
+
 from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout, 
@@ -10,7 +15,9 @@ from PyQt6.QtWidgets import (
     QMessageBox, QMenuBar, QMenu, QFileDialog)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor
-from PySide6.QtCore import Qt
+#os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
+
+#from PySide6.QtCore import Qt
 import pyqtgraph as pg
 import qdarktheme
 
@@ -25,6 +32,8 @@ ROAR_LIB = os.environ.get("ROAR_LIB", "")
 ROAR_SRC = os.environ.get("ROAR_SRC", "")
 ROAR_CHARACTERIZATION = os.environ.get("ROAR_CHARACTERIZATION", "")
 ROAR_DESIGN_SCRIPTS = os.environ.get("ROAR_DESIGN", "")
+
+
 
 DEBUG = True
 
@@ -43,6 +52,7 @@ class ROARTechBrowser(QWidget):
         self.tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         #self.tree.itemClicked.connect(self.select_item)
+        self.startup = True
         self.tree.itemChanged.connect(self.handle_item_changed)
         layout.addWidget(self.tree)
 
@@ -87,6 +97,31 @@ class ROARTechBrowser(QWidget):
                 tech_dict[pdk_name][model_name][length]["corners"][corner_name] = corner
         return tech_dict
 
+    def get_checked_item_paths(self):
+        checked_paths = []
+
+        def build_path(item):
+            path = []
+            while item:
+                path.insert(0, item.text(0))
+                item = item.parent()
+            return ">".join(path)
+
+        def recurse(parent_item):
+            parent_child_count = parent_item.childCount()
+            for i in range(parent_child_count):
+                child = parent_item.child(i)
+                if child.checkState(0) == Qt.CheckState.Checked:
+                    if child.childCount() == 0:
+                        checked_paths.append(build_path(child))
+                recurse(child)
+
+        root = self.tree.invisibleRootItem()
+        root_child_count = root.childCount()
+        for i in range(root_child_count):
+            recurse(root.child(i))
+        return checked_paths
+
     def get_selected_corners(self):
         checked_items = self.tree.selectedItems()
         selected_corners = set()
@@ -112,6 +147,10 @@ class ROARTechBrowser(QWidget):
         check_state = item.checkState(0)
         for i in range(item.childCount()):
             item.child(i).setCheckState(0, check_state)
+        if self.startup == True:
+            #self.startup = False
+            return 0
+        self.lookup_window.update_graph_from_tech_browser()
 
     def set_graphing_widget(self, graphing_widget):
         self.graphing_widget = graphing_widget
@@ -187,8 +226,9 @@ class ROARLookupWindow(QWidget):
         # Initialize the tech browser widget
         self.tech_browser = ROARTechBrowser(self, lookup_window=self, top_level_app=self.top_level_app, tech_dict=tech_dict)
 
-        if DEBUG == False:
-            self.tech_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        #if DEBUG == False:
+        self.tech_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.tech_browser.startup = False
 
         # Create a container for control widgets
         self.controls_container = QWidget()
@@ -273,13 +313,13 @@ class ROARLookupWindow(QWidget):
         #layout.addWidget(self.plot_widget)
         #self.plot_container.setLayout(layout)
         # Uncomment the following when not debugging
-        if DEBUG == False:
-            self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        #if DEBUG == False:
+        self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Add widgets to the main horizontal splitter
         self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser + controls)
-        self.test_widget = QWidget()
-        self.plot_widget = self.test_widget
+        #self.test_widget = QWidget()
+        #self.plot_widget = self.test_widget
         #self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
         self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
 
@@ -289,7 +329,7 @@ class ROARLookupWindow(QWidget):
 
         # Add splitter to the main layout
         self.main_layout.addWidget(self.top_level_pane)
-        self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        #self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.is_dark_mode = False
         self.is_3d_mode = False
@@ -385,40 +425,54 @@ class ROARLookupWindow(QWidget):
             self.lookup_window.update_graph_from_tech_browser()
 
     def update_graph_from_tech_browser(self, equation_eval=None):
-        models_selected = self.tech_browser.tree.get_checked()
-        self.graphing_window.ax.cla()
-        self.graphing_window.canvas.draw()
+        models_selected = self.tech_browser.get_checked_item_paths()
+        #models_selected = self.tech_browser.tree.get_checked()
+        #self.plot_widget.ax.cla()
+        #self.plot_widget.canvas.draw()
         color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
                       'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
                       'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
+        color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
+
         color_index = 0
 
         for model in models_selected:
             model_tokens = model.split(">")
-            pdk = model_tokens[0]
-            model_name = model_tokens[1]
-            length = model_tokens[2]
-            corner = model_tokens[3]
+            pdk = model_tokens[1]
+            model_name = model_tokens[2]
+            length = model_tokens[3]
+            corner = model_tokens[4]
             cid_corner = self.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
             if equation_eval != None:
                 print("TODO")
                 return 0
             #cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
-            param1 = self.graphing_window.x_dropdown.get()
-            param2 = self.graphing_window.y_dropdown.get()
+            param1 = self.combo_x.currentText()
+            param2 = self.combo_y.currentText()
+            param3 = self.combo_y.currentText()
+            #param1 = self.graphing_window.x_dropdown.get()
+            #param2 = self.graphing_window.y_dropdown.get()
             legend_str = pdk + " " + model_name + " " + length + " " + corner
             color = color_list[color_index]
             #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
             #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
-            cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
-                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str, show_legend=self.legend_var.get())
-            self.graphing_window.ax.grid(True, which="both")
+            #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+            #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax,
+            #                                 color=color, legend_str=legend_str, show_legend=self.legend_var.get())
+            #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+            #                                 fig1=None, ax1=None, color=color, legend_str=legend_str,
+            #                                 show_legend=self.checkbox_legend.isChecked())
+            cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
+                                                   show_plot=True, new_plot=True, roar_plot_widget=self.plot_widget,
+                                                   color=color, legend_str=None, enable_3d=False)
+            #self.graphing_window.ax.grid(True, which="both")
 
             color_index += 1
             if color_index >= len(color_list):
                 color_index = 0
             #self.graphing_window.canvas.draw()
-            self.graphing_window.canvas.draw()
+            #self.graphing_window.canvas.draw()
+        return 0
 
     def add_tech_luts(self, dirname, pdk_name):
         self.tech_browser.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
@@ -494,8 +548,8 @@ class ROARPlotLookupBanner(QWidget):
         # Update Button
         self.update_button = QPushButton("Update")
         self.update_button.setFixedWidth(80)
-        if DEBUG == False:
-            self.update_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        #if DEBUG == False:
+        self.update_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.update_button.clicked.connect(self.update_graph)
         self.banner_layout.addWidget(self.update_button)
 
@@ -772,8 +826,9 @@ class ROARApp(QMainWindow):
         self.init_menu_bar()
 
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
-        predictive_28 = "/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac"
-        self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
+        #predictive_28 = "/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac"
+        #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
+        self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
         #self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
 
     def add_tech_luts(self, dir, pdk_name):
@@ -922,10 +977,17 @@ if __name__ == "__main__":
     #test = "test_plot_widget"
     #test = "test_lookup_window"
     #test = "test_window_grid"
+    #window = QMainWindow()
+    #sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
+    #tech_dict = ROARTechBrowser.create_tech_dict_from_dir(sky130_luts, "Skywater130A")
+    tech_dict = None
+    window = None
     test = ""
-    window = QMainWindow()
-    sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
-    tech_dict = ROARTechBrowser.create_tech_dict_from_dir(sky130_luts, "Skywater130A")
+
+    window = None
+
+    if test in ["test_tech_browser", "test_plot_widget", "test_lookup_window", "test_window_grid"]:
+        window = QMainWindow()
 
     if test == "test_tech_browser":
         test_widget = ROARTechBrowser(window, None, None, tech_dict={})
@@ -941,8 +1003,8 @@ if __name__ == "__main__":
         test_widget = ROARGraphGrid(window, None, tech_dict=tech_dict)
         window.setCentralWidget(test_widget)
     else:
-        window = ROARApp(tech_dict)
-        #window.setCentralWidget(app_widget)
-    #window.setStyle("Fusion")
+        window = ROARApp()
+        #window = ROARApp(tech_dict)
+
     window.show()
     sys.exit(app.exec())
