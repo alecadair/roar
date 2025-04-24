@@ -35,6 +35,7 @@ generate_roar_env:
 	@echo 'setenv ROAR_HOME "$(CURRENT_DIRECTORY)"' >> $(OUTPUT_FILE)
 	@echo 'setenv ROAR_SRC "$$ROAR_HOME/src"' >> $(OUTPUT_FILE)
 	@echo 'setenv ROAR_DESIGN "$$ROAR_HOME/design"' >> $(OUTPUT_FILE)
+	@echo 'setenv ROAR_LIB "$$ROAR_HOME/lib"' >> $(OUTPUT_FILE)
 	@echo 'setenv ROAR_DEPENDENCIES "$$ROAR_HOME/dependencies"' >> $(OUTPUT_FILE)
 	@echo 'setenv ROAR_CHARACTERIZATION "$$ROAR_HOME/characterization"' >> $(OUTPUT_FILE)
 	@echo "" >> $(OUTPUT_FILE)
