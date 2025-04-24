@@ -862,7 +862,7 @@ class CIDCorner():
 
     def plot_processes_params_roar_plot_widget(self, param1, param2, param3=None, norm_type="",
                                                show_plot=True, new_plot=True, roar_plot_widget=None,
-                                               color=None, legend_str=None, enable_3d=False):
+                                               color=None, legend_str=None, enable_3d=False, pen=None):
         color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
         color_index = 0
 
@@ -870,7 +870,8 @@ class CIDCorner():
             raise ValueError("A valid pg.PlotWidget instance must be provided.")
 
         if new_plot:
-            roar_plot_widget.clear()
+            print("TODO: NEW PLOT")
+            #roar_plot_widget.clear()
 
         # Ensure the plot widget has a legend
         if not hasattr(roar_plot_widget, "legend"):
@@ -905,12 +906,11 @@ class CIDCorner():
             params2 = normalize(params2)
 
         # Select color
-        if color is None:
-            color = color_list[color_index % len(color_list)]
+        if pen is None:
+            pen = color_list[color_index % len(color_list)]
             color_index += 1
-
-        # Plot on pg.PlotWidget
-        curve = roar_plot_widget.plot(params1, params2, pen=color, name=legend_str)
+            # Plot on pg.PlotWidget
+        curve = roar_plot_widget.plot(params1, params2, pen=pen, name=legend_str)
 
         # Add to legend if legend_str is provided
         if legend_str:
@@ -920,5 +920,7 @@ class CIDCorner():
         roar_plot_widget.setLabel('bottom', param1)
         roar_plot_widget.setLabel('left', param2)
         roar_plot_widget.setTitle(f"{param2} vs {param1}")
+        roar_plot_widget.getAxis('left').setStyle(autoExpandTextSpace=True)
+        roar_plot_widget.getAxis('left').enableAutoSIPrefix(False)
 
         return roar_plot_widget

@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
     QMessageBox, QMenuBar, QMenu, QFileDialog)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor
+from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen
 #os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 
 #from PySide6.QtCore import Qt
@@ -237,21 +237,24 @@ class ROARLookupWindow(QWidget):
         # Individual Labels, ComboBoxes, and SpinBoxes for X, Y, and Z
         self.label_x = QLabel("X:")
         self.combo_x = QComboBox()
-        self.combo_x.addItems(["kgm", "kco", "kgd", "iden"])
+        self.combo_x.addItems(self.top_level_app.lookups)
+        self.combo_x.setCurrentText("kgm")
         self.spin_x = QDoubleSpinBox()
         self.spin_x.setRange(0.0, 100.0)
         self.checkbox_logx = QCheckBox("LogX")
 
         self.label_y = QLabel("Y:")
         self.combo_y = QComboBox()
-        self.combo_y.addItems(["kgm", "kco", "kgd", "iden"])
+        self.combo_y.addItems(self.top_level_app.lookups)
+        self.combo_y.setCurrentText("kcgs")
         self.spin_y = QDoubleSpinBox()
         self.spin_y.setRange(0.0, 100.0)
         self.checkbox_logy = QCheckBox("LogY")
 
         self.label_z = QLabel("Z:")
         self.combo_z = QComboBox()
-        self.combo_z.addItems(["kgm", "kco", "kgd", "iden"])
+        self.combo_z.addItems(self.top_level_app.lookups)
+        self.combo_z.setCurrentText("iden")
         self.spin_z = QDoubleSpinBox()
         self.spin_z.setRange(0.0, 100.0)
         self.checkbox_logz = QCheckBox("LogZ")
@@ -301,17 +304,8 @@ class ROARLookupWindow(QWidget):
         # Adjust stretch factors for tech splitter (tech browser gets more space than controls)
         self.tech_splitter.setStretchFactor(0, 3)
         self.tech_splitter.setStretchFactor(1, 1)
-
-        # Initialize the graphing window
-        #self.graphing_window = ROARPlotWidget(self, top_level_app=self.top_level_app)
-        self.plot_widget = pg.PlotWidget()
-        #self.plot_scientific_data()
-        #self.plot_widget = pg.GraphicsLayoutWidget()  # Wrap it in a QWidget-compatible class
-        #self.plot = self.plot_widget.addPlot()
-        #self.plot_container = QWidget()
-        #self.layout = QVBoxLayout(self.plot_container)
-        #layout.addWidget(self.plot_widget)
-        #self.plot_container.setLayout(layout)
+        #self.plot_widget = pg.PlotWidget()
+        self.plot_widget = ROARPlotWidget(top_level_app=self.top_level_app)
         # Uncomment the following when not debugging
         #if DEBUG == False:
         self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -334,7 +328,11 @@ class ROARLookupWindow(QWidget):
         self.is_dark_mode = False
         self.is_3d_mode = False
         self.colors = [pg.mkPen(color) for color in ['r', 'g', 'b', 'y']]
+        self.color_list = [Qt.GlobalColor.red, Qt.GlobalColor.green, Qt.GlobalColor.blue,
+                           Qt.GlobalColor.cyan, Qt.GlobalColor.magenta, Qt.GlobalColor.yellow]
+        self.style_list = [Qt.PenStyle.SolidLine, Qt.PenStyle.DashLine, Qt.PenStyle.DotLine]
         self.current_color_index = 0
+        self.current_style_index = 0
 
         # Auto-plot different colored sine waves on startup
         #self.plot_scientific_data()
@@ -429,10 +427,12 @@ class ROARLookupWindow(QWidget):
         #models_selected = self.tech_browser.tree.get_checked()
         #self.plot_widget.ax.cla()
         #self.plot_widget.canvas.draw()
-        color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
-                      'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
-                      'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
-        color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
+        #color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
+        #              'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
+        #              'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
+        #color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
+
+
 
         color_index = 0
 
@@ -453,7 +453,16 @@ class ROARLookupWindow(QWidget):
             #param1 = self.graphing_window.x_dropdown.get()
             #param2 = self.graphing_window.y_dropdown.get()
             legend_str = pdk + " " + model_name + " " + length + " " + corner
-            color = color_list[color_index]
+            if self.current_color_index >= len(self.color_list):
+                self.current_color_index = 0
+                self.current_style_index += 1
+                if self.current_style_index >= len(self.style_list):
+                    self.current_style_index = 0
+            color = self.color_list[self.current_color_index]
+            style = self.style_list[self.current_style_index]
+            #graph_pen = QPen(color)
+            #graph_pen.setStyle(style)
+            graph_pen = pg.mkPen(color=QColor(color), style=style, width=1)
             #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
             #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
             #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
@@ -464,12 +473,11 @@ class ROARLookupWindow(QWidget):
             #                                 show_legend=self.checkbox_legend.isChecked())
             cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
                                                    show_plot=True, new_plot=True, roar_plot_widget=self.plot_widget,
-                                                   color=color, legend_str=None, enable_3d=False)
+                                                   color=color, legend_str=None, enable_3d=False, pen=graph_pen)
             #self.graphing_window.ax.grid(True, which="both")
 
-            color_index += 1
-            if color_index >= len(color_list):
-                color_index = 0
+            self.current_color_index += 1
+
             #self.graphing_window.canvas.draw()
             #self.graphing_window.canvas.draw()
         return 0
@@ -565,89 +573,33 @@ class ROARPlotLookupBanner(QWidget):
         """Calls the update graph function provided"""
         self.update_graph_callback()
 
-class ROARPlotWidget(QWidget):
-    def __init__(self, parent=None, top_level_app=None):
-        super().__init__(parent)
+class ROARPlotWidget(pg.PlotWidget):
+    def __init__(self, *args, top_level_app=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.top_level_app = top_level_app  # Store the app reference
+        self._log_x = False
+        self._log_y = False
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        plot_container = QWidget()
-        plot_layout = QVBoxLayout(plot_container)
-        #bottom_buttons_layout = QHBoxLayout()
-        bottom_buttons_layout = QGridLayout()
-        self.plot_widget = pg.PlotWidget()
-        self.lookup_banner = ROARPlotLookupBanner(top_level_app, self.plot_scientific_data, self)
-        self.dark_mode_checkbox = QCheckBox("Enable Dark Mode")
-        self.dark_mode_checkbox.setCheckState(Qt.CheckState.Unchecked)
-        self.dark_mode_checkbox.stateChanged.connect(self.toggle_dark_mode)
-        bottom_buttons_layout.addWidget(self.dark_mode_checkbox, 0, 0)
+    def keyPressEvent(self, event):
+        key = event.key()
 
-        self.three_d_checkbox = QCheckBox("Enable 3D Rendering")
-        self.three_d_checkbox.stateChanged.connect(self.toggle_three_d_mode)
-        bottom_buttons_layout.addWidget(self.three_d_checkbox, 1, 0)
+        if self.underMouse():
+            if key == Qt.Key.Key_F:
+                self.plotItem.enableAutoRange(axis=pg.ViewBox.XYAxes, enable=True)
 
-        self.color_button = QPushButton("Change Plot Colors")
-        self.color_button.clicked.connect(self.change_plot_colors)
-        bottom_buttons_layout.addWidget(self.color_button, 0, 1)
+            elif key == Qt.Key.Key_X:
+                self._log_x = not self._log_x
+                self.setLogMode(x=self._log_x, y=self._log_y)
 
-        self.expand_button = QPushButton("Expand Plot")
-        self.expand_button.clicked.connect(self.expand_plot)
-        bottom_buttons_layout.addWidget(self.expand_button, 1, 1)
+            elif key == Qt.Key.Key_Y:
+                self._log_y = not self._log_y
+                self.setLogMode(x=self._log_x, y=self._log_y)
 
-        plot_layout.addWidget(self.lookup_banner)
-        plot_layout.addWidget(self.plot_widget)
-        plot_layout.addLayout(bottom_buttons_layout)
+        # Call the base handler
+        super().keyPressEvent(event)
 
 
 
-        splitter.addWidget(plot_container)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 4)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(splitter)
-
-        self.is_dark_mode = False
-        self.is_3d_mode = False
-        self.colors = [pg.mkPen(color) for color in ['r', 'g', 'b', 'y']]
-        self.current_color_index = 0
-        
-        # Auto-plot different colored sine waves on startup
-        self.plot_scientific_data()
-
-    def expand_plot(self):
-        print("TODO")
-
-    def toggle_dark_mode(self):
-        self.is_dark_mode = self.dark_mode_checkbox.isChecked()
-        self.plot_widget.setBackground('k' if self.is_dark_mode else 'w')
-        self.plot_scientific_data()
-
-    def toggle_three_d_mode(self):
-        self.is_3d_mode = self.three_d_checkbox.isChecked()
-        self.plot_scientific_data()
-
-    def change_plot_colors(self):
-        for i in range(len(self.colors)):
-            color = QColorDialog.getColor()
-            if color.isValid():
-                self.colors[i] = pg.mkPen(color.name())
-        self.plot_scientific_data()
-
-    def plot_scientific_data(self):
-        self.plot_widget.clear()
-        x = np.linspace(0, 10, 100)
-        for i, color in enumerate(self.colors):
-            y = np.sin(x + i)
-            self.plot_widget.plot(x, y, pen=color)
-
-
-    def plot_scientific_data(self):
-        self.plot_widget.clear()
-        x = np.linspace(0, 10, 100)
-        for i, color in enumerate(self.colors):
-            y = np.sin(x + i)
-            self.plot_widget.plot(x, y, pen=color)
 
 
 class ROARHeader(QWidget):
@@ -786,9 +738,9 @@ class ROARApp(QMainWindow):
         super().__init__()
         self.roar_design = ROARDesign()
         # Define lookup variables
-        self.lookups = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'csb', 'css', 'ft', 'gds', 'gm', 'gmb',
+        self.lookups = ['cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'csb', 'css', 'ft', 'gds', 'gm', 'gmb',
                         'gmidft', 'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm',
-                        'kgmft', 'n', 'rds', 'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth')
+                        'kgmft', 'n', 'rds', 'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth']
         self.tech_dict = None
         if tech_dict == None:
             self.tech_dict = {}
