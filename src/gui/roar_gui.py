@@ -471,10 +471,13 @@ class ROARLookupWindow(QWidget):
             #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
             #                                 fig1=None, ax1=None, color=color, legend_str=legend_str,
             #                                 show_legend=self.checkbox_legend.isChecked())
+            unit1 = self.top_level_app.lookups_units_dict[param1]
+            unit2 = self.top_level_app.lookups_units_dict[param2]
             cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
                                                    show_plot=True, new_plot=True, roar_plot_widget=self.plot_widget,
-                                                   color=color, legend_str=None, enable_3d=False, pen=graph_pen)
+                                                   color=color, legend_str=None, enable_3d=False, pen=graph_pen, unit1=unit1, unit2=unit2)
             #self.graphing_window.ax.grid(True, which="both")
+            self.plot_widget.showGrid(x=True, y=True)
 
             self.current_color_index += 1
 
@@ -741,6 +744,42 @@ class ROARApp(QMainWindow):
         self.lookups = ['cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'csb', 'css', 'ft', 'gds', 'gm', 'gmb',
                         'gmidft', 'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm',
                         'kgmft', 'n', 'rds', 'ro', 'va', 'vds', 'vdsat', 'vgs', 'vth']
+        self.lookups_units_dict = {}
+        self.lookups_units_dict["cdb"] = "F"
+        self.lookups_units_dict["cdd"] = "F"
+        self.lookups_units_dict["cds"] = "F"
+        self.lookups_units_dict["cgb"] = "F"
+        self.lookups_units_dict["cgd"] = "F"
+        self.lookups_units_dict["cgg"] = "F"
+        self.lookups_units_dict["cgs"] = "F"
+        self.lookups_units_dict["csb"] = "F"
+        self.lookups_units_dict["css"] = "F"
+        self.lookups_units_dict["ft"] = "Hz"
+        self.lookups_units_dict["gds"] = "S"
+        self.lookups_units_dict["gm"] = "A/V"
+        self.lookups_units_dict["gmb"] = "A/V"
+        self.lookups_units_dict["gmidft"] = "Hz/V"
+        self.lookups_units_dict["gmro"] = "V/V"
+        self.lookups_units_dict["ic"] = ""
+        self.lookups_units_dict["ids"] = "A"
+        self.lookups_units_dict["kcdb"] = "F/A"
+        self.lookups_units_dict["kcds"] = "F/A"
+        self.lookups_units_dict["kcgd"] = "F/A"
+        self.lookups_units_dict["kcgs"] = "F/A"
+        self.lookups_units_dict["kgds"] = "F/A"
+        self.lookups_units_dict["kgm"] = "1/V"
+        self.lookups_units_dict["kgmft"] = "Hz/V"
+        self.lookups_units_dict["n"] = "V/Decade"
+        self.lookups_units_dict["rds"] = "Ω"
+        self.lookups_units_dict["ro"] = "Ω"
+        self.lookups_units_dict["va"] = "V"
+        self.lookups_units_dict["vds"] = "V"
+        self.lookups_units_dict["vdsat"] = "V"
+        self.lookups_units_dict["vth"] = "V"
+
+
+
+
         self.tech_dict = None
         if tech_dict == None:
             self.tech_dict = {}
@@ -778,8 +817,8 @@ class ROARApp(QMainWindow):
         self.init_menu_bar()
 
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
-        #predictive_28 = "/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac"
-        #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
+        predictive_28 = "/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac"
+        self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
         self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
         #self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
 
