@@ -8,11 +8,10 @@ import pyqtgraph.opengl as gl
 
 
 from PyQt6.QtWidgets import (
-    QDoubleSpinBox,
-    QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout, 
+    QDoubleSpinBox, QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout,
     QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem, 
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
-    QMessageBox, QMenuBar, QMenu, QFileDialog)
+    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen
 #os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
@@ -582,6 +581,31 @@ class ROARPlotWidget(pg.PlotWidget):
         self.top_level_app = top_level_app  # Store the app reference
         self._log_x = False
         self._log_y = False
+        self._mouse_inside = False
+        self.scene().sigMouseMoved.connect(self._mouse_moved)
+
+    def enterEvent(self, event):
+        self._mouse_inside = True
+        super().enterEvent(event)
+
+
+    def leaveEvent(self, event):
+        self._mouse_inside = False
+        if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
+            self.top_level_app.coord_label.setText("Coordinates: ")
+        super().leaveEvent(event)
+
+    def _mouse_moved(self, pos):
+        if not self._mouse_inside:
+            return
+        vb = self.plotItem.vb
+        if not vb.sceneBoundingRect().contains(pos):
+            return
+        mouse_point = vb.mapSceneToView(pos)
+        x = mouse_point.x()
+        y = mouse_point.y()
+        if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
+            self.top_level_app.coord_label.setText(f"Coordinates: ({x:.2f}, {y:.2f})")
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -740,6 +764,9 @@ class ROARApp(QMainWindow):
     def __init__(self, tech_dict=None):
         super().__init__()
         self.roar_design = ROARDesign()
+        self.setStatusBar(QStatusBar())
+        self.coord_label = QLabel("Coordinates: ")
+        self.statusBar().addPermanentWidget(self.coord_label)
         # Define lookup variables
         self.lookups = ['cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'csb', 'css', 'ft', 'gds', 'gm', 'gmb',
                         'gmidft', 'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm',
@@ -777,9 +804,6 @@ class ROARApp(QMainWindow):
         self.lookups_units_dict["vdsat"] = "V"
         self.lookups_units_dict["vth"] = "V"
 
-
-
-
         self.tech_dict = None
         if tech_dict == None:
             self.tech_dict = {}
@@ -794,7 +818,8 @@ class ROARApp(QMainWindow):
         # Create UI elements
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
-
+        main_layout.setContentsMargins(0, 0, 0, 0)  # No outer margins
+        main_layout.setSpacing(0)  # No inner spacing between widgets
         # Add ROARHeader at the top
         self.header = ROARHeader(self, top_level_app=self)
         main_layout.addWidget(self.header)
@@ -817,8 +842,8 @@ class ROARApp(QMainWindow):
         self.init_menu_bar()
 
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
-        predictive_28 = "/home/adair/Documents/CAD/roar/characterization/predictive_28/LUTs_1V8_mac"
-        self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
+        predictive_28 = ROAR_CHARACTERIZATION + "/predictive_28/LUTs_1V8_mac"
+        #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
         self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
         #self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
 
