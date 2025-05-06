@@ -862,7 +862,7 @@ class CIDCorner():
 
     def plot_processes_params_roar_plot_widget(self, param1, param2, param3=None, norm_type="",
                                                show_plot=True, new_plot=True, roar_plot_widget=None,
-                                               color=None, legend_str=None, enable_3d=False, pen=None):
+                                               color=None, legend_str=None, enable_3d=False, pen=None, unit1="", unit2=""):
         color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
         color_index = 0
 
@@ -917,8 +917,10 @@ class CIDCorner():
             roar_plot_widget.legend.addItem(curve, legend_str)
 
         # Set labels
-        roar_plot_widget.setLabel('bottom', param1)
-        roar_plot_widget.setLabel('left', param2)
+        xlabel = param1 + "  [" + unit1 + "]"
+        ylabel = param2 + "  [" + unit2 + "]"
+        roar_plot_widget.setLabel('bottom', xlabel)
+        roar_plot_widget.setLabel('left', ylabel)
         roar_plot_widget.setTitle(f"{param2} vs {param1}")
         roar_plot_widget.getAxis('left').setStyle(autoExpandTextSpace=True)
         roar_plot_widget.getAxis('left').enableAutoSIPrefix(False)
