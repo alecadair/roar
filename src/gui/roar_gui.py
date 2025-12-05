@@ -213,6 +213,12 @@ class ROARLookupWindow(QWidget):
 
         # Create the main layout
         self.main_layout = QVBoxLayout(self)
+        left, top, right, bottom = self.main_layout.getContentsMargins()
+
+        # Set a new left margin value, keeping the others unchanged
+        new_left_margin = 3
+        self.main_layout.setContentsMargins(new_left_margin, top, right, bottom)
+        #self.main_layout.setSpacing(0)
         self.setLayout(self.main_layout)
 
         # Create the horizontal splitter for tech browser + controls (left) and graphing window (right)
@@ -826,6 +832,7 @@ class ROARApp(QMainWindow):
 
         # Create a horizontal splitter
         splitter_h = QSplitter(Qt.Orientation.Horizontal)
+        #splitter_h.setHandleWidth(1)
         self.editor_window = ROAREditorWindow(top_level_app=self)
         splitter_h.addWidget(self.editor_window)
 
