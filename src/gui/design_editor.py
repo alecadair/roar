@@ -181,6 +181,6 @@ class ROAREditorWindow(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = EditorWindow()
+    window = ROAREditorWindow()
     window.show()
     sys.exit(app.exec())
