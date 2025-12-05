@@ -1,26 +1,26 @@
 import sys
 import os
-os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = '/home/adair/Documents/CAD/roar_venv/lib/python3.10/site-packages/PySide6/Qt/plugins/platforms'
 
+os.environ[
+    'QT_QPA_PLATFORM_PLUGIN_PATH'] = '/home/adair/Documents/CAD/roar_venv/lib/python3.10/site-packages/PySide6/Qt/plugins/platforms'
 
 import numpy as np
 import pyqtgraph.opengl as gl
 
-
 from PyQt6.QtWidgets import (
     QDoubleSpinBox, QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout,
-    QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem, 
+    QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem,
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
     QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen
-#os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
+# os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 
-#from PySide6.QtCore import Qt
+# from PySide6.QtCore import Qt
 import pyqtgraph as pg
 import qdarktheme
 
-#sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from cid import CIDDevice
 from design_editor import *
 from generator import *
@@ -32,9 +32,8 @@ ROAR_SRC = os.environ.get("ROAR_SRC", "")
 ROAR_CHARACTERIZATION = os.environ.get("ROAR_CHARACTERIZATION", "")
 ROAR_DESIGN_SCRIPTS = os.environ.get("ROAR_DESIGN", "")
 
+DEBUG = False
 
-
-DEBUG = True
 
 class ROARTechBrowser(QWidget):
     def __init__(self, parent, lookup_window, top_level_app, tech_dict=None):
@@ -50,7 +49,7 @@ class ROARTechBrowser(QWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        #self.tree.itemClicked.connect(self.select_item)
+        # self.tree.itemClicked.connect(self.select_item)
         self.startup = True
         self.tree.itemChanged.connect(self.handle_item_changed)
         layout.addWidget(self.tree)
@@ -77,7 +76,7 @@ class ROARTechBrowser(QWidget):
             if os.path.isdir(f):
                 model_name = filename
                 ROARTechBrowser.create_devices_from_model_dir(pdk_name, model_name, f, tech_dict)
-        #graph_grid.add_tech_luts(dirname=dir, pdk_name=pdk_name)
+        # graph_grid.add_tech_luts(dirname=dir, pdk_name=pdk_name)
         return tech_dict
 
     @staticmethod
@@ -147,7 +146,7 @@ class ROARTechBrowser(QWidget):
         for i in range(item.childCount()):
             item.child(i).setCheckState(0, check_state)
         if self.startup == True:
-            #self.startup = False
+            # self.startup = False
             return 0
         self.lookup_window.update_graph_from_tech_browser()
 
@@ -162,16 +161,17 @@ class ROARTechBrowser(QWidget):
             if not dirname:
                 return  # User canceled
 
-            pdk_name, ok = QInputDialog.getText(self, "Technology Process Name", "Enter name of process i.e. sky130, process_soi_22")
+            pdk_name, ok = QInputDialog.getText(self, "Technology Process Name",
+                                                "Enter name of process i.e. sky130, process_soi_22")
             if not ok or not pdk_name.strip():
                 return  # User canceled or empty input
 
-        #pdk_item = QTreeWidgetItem([pdk_name])
-        #self.tree.addTopLevelItem(pdk_item)
+        # pdk_item = QTreeWidgetItem([pdk_name])
+        # self.tree.addTopLevelItem(pdk_item)
         pdk_dict = None
         if self.top_level_app is not None:
             pdk_dict = self.top_level_app.tech_dict
-            #pdk_dict = self.top_level_app.tech_dict.get(pdk_name, {})
+            # pdk_dict = self.top_level_app.tech_dict.get(pdk_name, {})
         else:
             pdk_dict = ROARTechBrowser.create_tech_dict_from_dir(dirname, pdk_name)
 
@@ -202,7 +202,6 @@ class ROARTechBrowser(QWidget):
                         length_item.addChild(corner_item)
 
 
-
 class ROARLookupWindow(QWidget):
     def __init__(self, parent, expand_callback, top_level_app, graph_grid=None):
         super().__init__(parent)
@@ -223,9 +222,10 @@ class ROARLookupWindow(QWidget):
         self.tech_splitter = QSplitter(Qt.Orientation.Vertical, self)
 
         # Initialize the tech browser widget
-        self.tech_browser = ROARTechBrowser(self, lookup_window=self, top_level_app=self.top_level_app, tech_dict=tech_dict)
+        self.tech_browser = ROARTechBrowser(self, lookup_window=self, top_level_app=self.top_level_app,
+                                            tech_dict=tech_dict)
 
-        #if DEBUG == False:
+        # if DEBUG == False:
         self.tech_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.tech_browser.startup = False
 
@@ -286,7 +286,7 @@ class ROARLookupWindow(QWidget):
         self.controls_layout.addWidget(self.checkbox_3d, 4, 1)
         self.controls_layout.addWidget(self.checkbox_contour, 4, 2)
         self.controls_layout.addWidget(self.checkbox_legend, 4, 3)
-        #self.controls_layout.addWidget(self.checkbox_black_bg, 4, 3)
+        # self.controls_layout.addWidget(self.checkbox_black_bg, 4, 3)
 
         self.copy_button = QPushButton("Copy")
         self.settings_button = QPushButton("Settings")
@@ -303,17 +303,17 @@ class ROARLookupWindow(QWidget):
         # Adjust stretch factors for tech splitter (tech browser gets more space than controls)
         self.tech_splitter.setStretchFactor(0, 3)
         self.tech_splitter.setStretchFactor(1, 1)
-        #self.plot_widget = pg.PlotWidget()
+        # self.plot_widget = pg.PlotWidget()
         self.plot_widget = ROARPlotWidget(top_level_app=self.top_level_app)
         # Uncomment the following when not debugging
-        #if DEBUG == False:
+        # if DEBUG == False:
         self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Add widgets to the main horizontal splitter
         self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser + controls)
-        #self.test_widget = QWidget()
-        #self.plot_widget = self.test_widget
-        #self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
+        # self.test_widget = QWidget()
+        # self.plot_widget = self.test_widget
+        # self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
         self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
 
         # Adjust stretch factors for main splitter (tech section gets less space than graphing)
@@ -322,7 +322,7 @@ class ROARLookupWindow(QWidget):
 
         # Add splitter to the main layout
         self.main_layout.addWidget(self.top_level_pane)
-        #self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.is_dark_mode = False
         self.is_3d_mode = False
@@ -334,7 +334,7 @@ class ROARLookupWindow(QWidget):
         self.current_style_index = 0
 
         # Auto-plot different colored sine waves on startup
-        #self.plot_scientific_data()
+        # self.plot_scientific_data()
         self.expand_button.clicked.connect(self.toggle_expand)
 
     def toggle_expand(self):
@@ -423,15 +423,13 @@ class ROARLookupWindow(QWidget):
 
     def update_graph_from_tech_browser(self, equation_eval=None):
         models_selected = self.tech_browser.get_checked_item_paths()
-        #models_selected = self.tech_browser.tree.get_checked()
-        #self.plot_widget.ax.cla()
-        #self.plot_widget.canvas.draw()
-        #color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
+        # models_selected = self.tech_browser.tree.get_checked()
+        # self.plot_widget.ax.cla()
+        # self.plot_widget.canvas.draw()
+        # color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
         #              'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
         #              'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
-        #color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
-
-
+        # color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
 
         color_index = 0
 
@@ -445,12 +443,12 @@ class ROARLookupWindow(QWidget):
             if equation_eval != None:
                 print("TODO")
                 return 0
-            #cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
+            # cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
             param1 = self.combo_x.currentText()
             param2 = self.combo_y.currentText()
             param3 = self.combo_y.currentText()
-            #param1 = self.graphing_window.x_dropdown.get()
-            #param2 = self.graphing_window.y_dropdown.get()
+            # param1 = self.graphing_window.x_dropdown.get()
+            # param2 = self.graphing_window.y_dropdown.get()
             legend_str = pdk + " " + model_name + " " + length + " " + corner
             if self.current_color_index >= len(self.color_list):
                 self.current_color_index = 0
@@ -459,29 +457,31 @@ class ROARLookupWindow(QWidget):
                     self.current_style_index = 0
             color = self.color_list[self.current_color_index]
             style = self.style_list[self.current_style_index]
-            #graph_pen = QPen(color)
-            #graph_pen.setStyle(style)
+            # graph_pen = QPen(color)
+            # graph_pen.setStyle(style)
             graph_pen = pg.mkPen(color=QColor(color), style=style, width=1)
-            #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+            # cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
             #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
-            #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+            # cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
             #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax,
             #                                 color=color, legend_str=legend_str, show_legend=self.legend_var.get())
-            #cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
+            # cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
             #                                 fig1=None, ax1=None, color=color, legend_str=legend_str,
             #                                 show_legend=self.checkbox_legend.isChecked())
             unit1 = self.top_level_app.lookups_units_dict[param1]
             unit2 = self.top_level_app.lookups_units_dict[param2]
             cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
-                                                   show_plot=True, new_plot=True, roar_plot_widget=self.plot_widget,
-                                                   color=color, legend_str=None, enable_3d=False, pen=graph_pen, unit1=unit1, unit2=unit2)
-            #self.graphing_window.ax.grid(True, which="both")
+                                                              show_plot=True, new_plot=True,
+                                                              roar_plot_widget=self.plot_widget,
+                                                              color=color, legend_str=None, enable_3d=False,
+                                                              pen=graph_pen, unit1=unit1, unit2=unit2)
+            # self.graphing_window.ax.grid(True, which="both")
             self.plot_widget.showGrid(x=True, y=True)
 
             self.current_color_index += 1
 
-            #self.graphing_window.canvas.draw()
-            #self.graphing_window.canvas.draw()
+            # self.graphing_window.canvas.draw()
+            # self.graphing_window.canvas.draw()
         return 0
 
     def add_tech_luts(self, dirname, pdk_name):
@@ -491,6 +491,7 @@ class ROARLookupWindow(QWidget):
 class ROARPlotSettings(QWidget):
     def __init__(self, parent=None, top_level_app=None):
         super().__init__(parent)
+
 
 class ROARPlotLookupBanner(QWidget):
     def __init__(self, top_level_app, update_graph_callback, parent=None):
@@ -504,11 +505,11 @@ class ROARPlotLookupBanner(QWidget):
         self.banner_layout = QHBoxLayout()
 
         # Toggle browser button
-        #self.toggle_browser_button = QPushButton(">")
-        #self.toggle_browser_button.setFixedWidth(30)
-        #self.toggle_browser_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        #self.toggle_browser_button.clicked.connect(self.toggle_browser)
-        #self.banner_layout.addWidget(self.toggle_browser_button)
+        # self.toggle_browser_button = QPushButton(">")
+        # self.toggle_browser_button.setFixedWidth(30)
+        # self.toggle_browser_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # self.toggle_browser_button.clicked.connect(self.toggle_browser)
+        # self.banner_layout.addWidget(self.toggle_browser_button)
 
         # X selection
         self.x_label = QLabel("X:")
@@ -558,7 +559,7 @@ class ROARPlotLookupBanner(QWidget):
         # Update Button
         self.update_button = QPushButton("Update")
         self.update_button.setFixedWidth(80)
-        #if DEBUG == False:
+        # if DEBUG == False:
         self.update_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.update_button.clicked.connect(self.update_graph)
         self.banner_layout.addWidget(self.update_button)
@@ -575,6 +576,7 @@ class ROARPlotLookupBanner(QWidget):
         """Calls the update graph function provided"""
         self.update_graph_callback()
 
+
 class ROARPlotWidget(pg.PlotWidget):
     def __init__(self, *args, top_level_app=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -587,7 +589,6 @@ class ROARPlotWidget(pg.PlotWidget):
     def enterEvent(self, event):
         self._mouse_inside = True
         super().enterEvent(event)
-
 
     def leaveEvent(self, event):
         self._mouse_inside = False
@@ -626,9 +627,6 @@ class ROARPlotWidget(pg.PlotWidget):
         super().keyPressEvent(event)
 
 
-
-
-
 class ROARHeader(QWidget):
     def __init__(self, parent=None, top_level_app=None):
         super().__init__(parent)
@@ -637,7 +635,7 @@ class ROARHeader(QWidget):
         self.roar_teal = '#1C8091'
         banner_height = 72
         self.setFixedHeight(banner_height)  # Increased height for better spacing
-        #self.setAutoFillBackground(True)  # Ensures the background color applies
+        # self.setAutoFillBackground(True)  # Ensures the background color applies
 
         # Apply stylesheet to enforce background color
         self.setStyleSheet(f"background-color: {self.roar_teal};")
@@ -656,11 +654,12 @@ class ROARHeader(QWidget):
         # Verify that images exist
         self.logo_label = QLabel()
         logo_pixmap = QPixmap(self.logo_image_path)
-        logo_scale = banner_height/64
+        logo_scale = banner_height / 64
         if not logo_pixmap.isNull():
             self.logo_label.setPixmap(logo_pixmap)
             self.logo_label.setScaledContents(True)  # Ensures it resizes correctly
-            self.logo_label.setFixedSize(int(181*logo_scale), int(64*logo_scale))  # Adjust logo size to match header
+            self.logo_label.setFixedSize(int(181 * logo_scale),
+                                         int(64 * logo_scale))  # Adjust logo size to match header
         else:
             self.logo_label.setText("Logo not found")  # Debugging fallback
 
@@ -671,7 +670,7 @@ class ROARHeader(QWidget):
             icon = QIcon(icon_pixmap)
             self.graph_calc_icon.setIcon(icon)
             self.graph_calc_icon.setIconSize(icon_pixmap.rect().size())  # Ensure full-size icon
-        button_scale = banner_height/64
+        button_scale = banner_height / 64
         self.graph_calc_icon.setFixedSize(banner_height, banner_height)  # Increased button size
         self.graph_calc_icon.setStyleSheet("""
             QPushButton {
@@ -708,34 +707,35 @@ class ROARHeader(QWidget):
 
         self.setLayout(layout)
 
+
 class ROARGraphGrid(QWidget):
     def __init__(self, parent=None, top_level_app=None, tech_dict=None):
         super().__init__(parent)
         self.lookup_windows = []
         layout = QVBoxLayout(self)
         self.top_level_app = top_level_app
+
         self.grid_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.grid_splitter.setChildrenCollapsible(False)
-        if DEBUG == False:
-            self.grid_splitter.setSizePolicy(self.grid_splitter.sizePolicy())
-        self.grid_splitter.setChildrenCollapsible(False)
-        
+        self.grid_splitter.setChildrenCollapsible(True)
+
         self.top_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.top_splitter.setChildrenCollapsible(False)
-        if DEBUG == False:
-            self.top_splitter.setSizePolicy(self.top_splitter.sizePolicy())
-        self.top_splitter.setChildrenCollapsible(False)
+        self.top_splitter.setChildrenCollapsible(True)
+
         self.bottom_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.bottom_splitter.setChildrenCollapsible(False)
-        if DEBUG == False:
-            self.bottom_splitter.setSizePolicy(self.bottom_splitter.sizePolicy())
-        self. bottom_splitter.setChildrenCollapsible(False)
+        self.bottom_splitter.setChildrenCollapsible(True)
 
-
-        self.lookup_window_1 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
-        self.lookup_window_2 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
-        self.lookup_window_3 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
-        self.lookup_window_4 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        # Top left lookup window in grid
+        self.lookup_window_1 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app,
+                                                graph_grid=self)
+        # Top right lookup window in grid
+        self.lookup_window_2 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app,
+                                                graph_grid=self)
+        # Bottom left lookup window in grid
+        self.lookup_window_3 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app,
+                                                graph_grid=self)
+        # Bottom right lookup window in grid
+        self.lookup_window_4 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app,
+                                                graph_grid=self)
 
         self.lookup_windows.append(self.lookup_window_1)
         self.lookup_windows.append(self.lookup_window_2)
@@ -744,15 +744,15 @@ class ROARGraphGrid(QWidget):
 
         self.top_splitter.addWidget(self.lookup_window_1)
         self.top_splitter.addWidget(self.lookup_window_2)
-        
+
         self.bottom_splitter.addWidget(self.lookup_window_3)
         self.bottom_splitter.addWidget(self.lookup_window_4)
-        
+
         self.grid_splitter.addWidget(self.top_splitter)
         self.grid_splitter.setStretchFactor(0, 1)
         self.grid_splitter.addWidget(self.bottom_splitter)
         self.grid_splitter.setStretchFactor(1, 1)
-        
+
         layout.addWidget(self.grid_splitter)
 
     def add_tech_luts(self, dirname, pdk_name):
@@ -843,9 +843,9 @@ class ROARApp(QMainWindow):
 
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
         predictive_28 = ROAR_CHARACTERIZATION + "/predictive_28/LUTs_1V8_mac"
-        #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
+        # self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
         self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
-        #self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
+        # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
 
     def add_tech_luts(self, dir, pdk_name):
         self.tech_dict[pdk_name] = {}
@@ -856,7 +856,6 @@ class ROARApp(QMainWindow):
                 self.create_devices_from_model_dir(pdk_name=pdk_name, model_name=model_name, model_dir=f)
         self.graph_grid.add_tech_luts(dirname=dir, pdk_name=pdk_name)
         return (self.tech_dict)
-
 
     def create_devices_from_model_dir(self, pdk_name, model_name, model_dir):
         self.tech_dict[pdk_name][model_name] = {}
@@ -871,8 +870,7 @@ class ROARApp(QMainWindow):
             for corner in device.corners:
                 corner_name = corner.corner_name
                 self.tech_dict[pdk_name][model_name][length]["corners"][corner_name] = corner
-        return(self.tech_dict)
-
+        return (self.tech_dict)
 
     def init_menu_bar(self):
         """Creates the menu bar with File, Solver, Window, Export, and Help options."""
@@ -983,19 +981,19 @@ class ROARApp(QMainWindow):
 
 
 if __name__ == "__main__":
-    #qdarktheme.enable_hi_dpi()
-    #app = QApplication([sys.argv])
+    # qdarktheme.enable_hi_dpi()
+    # app = QApplication([sys.argv])
     app = QApplication([])
-    #qdarktheme.setup_theme("light")
-    #qdarktheme.setup_theme("auto")
-    #qdarktheme.setup_theme()
-    #test = "test_tech_browser"
-    #test = "test_plot_widget"
-    #test = "test_lookup_window"
-    #test = "test_window_grid"
-    #window = QMainWindow()
-    #sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
-    #tech_dict = ROARTechBrowser.create_tech_dict_from_dir(sky130_luts, "Skywater130A")
+    # qdarktheme.setup_theme("light")
+    # qdarktheme.setup_theme("auto")
+    # qdarktheme.setup_theme()
+    # test = "test_tech_browser"
+    # test = "test_plot_widget"
+    # test = "test_lookup_window"
+    # test = "test_window_grid"
+    # window = QMainWindow()
+    # sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
+    # tech_dict = ROARTechBrowser.create_tech_dict_from_dir(sky130_luts, "Skywater130A")
     tech_dict = None
     window = None
     test = ""
@@ -1020,7 +1018,7 @@ if __name__ == "__main__":
         window.setCentralWidget(test_widget)
     else:
         window = ROARApp()
-        #window = ROARApp(tech_dict)
+        # window = ROARApp(tech_dict)
 
     window.show()
     sys.exit(app.exec())
