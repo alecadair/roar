@@ -210,6 +210,7 @@ class ROARLookupWindow(QWidget):
         self.graph_grid = graph_grid  # Store reference to ROARGraphGrid
         self.is_expanded = False  # Track expansion state
         self.original_state = None  # Store splitter state
+        self._is_updating = False
 
         # Create the main layout
         self.main_layout = QVBoxLayout(self)
@@ -310,7 +311,7 @@ class ROARLookupWindow(QWidget):
         self.tech_splitter.setStretchFactor(0, 3)
         self.tech_splitter.setStretchFactor(1, 1)
         # self.plot_widget = pg.PlotWidget()
-        self.plot_widget = ROARPlotWidget(top_level_app=self.top_level_app)
+        self.plot_widget = ROARPlotWidget(parent_lookup_window=self, top_level_app=self.top_level_app)
         # Uncomment the following when not debugging
         # if DEBUG == False:
         self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -342,6 +343,20 @@ class ROARLookupWindow(QWidget):
         # Auto-plot different colored sine waves on startup
         # self.plot_scientific_data()
         self.expand_button.clicked.connect(self.toggle_expand)
+
+        self.checkbox_logx.stateChanged.connect(self.update_log_scale)
+        self.checkbox_logy.stateChanged.connect(self.update_log_scale)
+
+    def sync_log_checkboxes(self):
+        x_log = self.plot_widget.getPlotItem().getAxis('bottom').logMode
+        y_log = self.plot_widget.getPlotItem().getAxis('left').logMode
+
+        self.checkbox_logx.setChecked(x_log)
+        self.checkbox_logy.setChecked(y_log)
+
+    def update_log_scale(self):
+        self.plot_widget.getPlotItem().setLogMode(x=self.checkbox_logx.isChecked(), y=self.checkbox_logy.isChecked())
+        self.update_graph_from_tech_browser()
 
     def toggle_expand(self):
         """
@@ -428,66 +443,96 @@ class ROARLookupWindow(QWidget):
             self.lookup_window.update_graph_from_tech_browser()
 
     def update_graph_from_tech_browser(self, equation_eval=None):
-        models_selected = self.tech_browser.get_checked_item_paths()
-        # models_selected = self.tech_browser.tree.get_checked()
-        # self.plot_widget.ax.cla()
-        # self.plot_widget.canvas.draw()
-        # color_list = ['r-', 'b-', 'g-', 'c-', 'm-', 'y-', 'k-',
-        #              'r--', 'b--', 'g--', 'c--', 'm--', 'y--', 'k--',
-        #              'r-.', 'b-.', 'g-.', 'c-.', 'm-.', 'y-.', 'k-.']
-        # color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
+        if self._is_updating:
+            return
+        self._is_updating = True
 
-        color_index = 0
+        try:
+            models_selected = self.tech_browser.get_checked_item_paths()
 
-        for model in models_selected:
-            model_tokens = model.split(">")
-            pdk = model_tokens[1]
-            model_name = model_tokens[2]
-            length = model_tokens[3]
-            corner = model_tokens[4]
-            cid_corner = self.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
-            if equation_eval != None:
-                print("TODO")
-                return 0
-            # cid_corner = self.graph_controller.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
-            param1 = self.combo_x.currentText()
-            param2 = self.combo_y.currentText()
-            param3 = self.combo_y.currentText()
-            # param1 = self.graphing_window.x_dropdown.get()
-            # param2 = self.graphing_window.y_dropdown.get()
-            legend_str = pdk + " " + model_name + " " + length + " " + corner
-            if self.current_color_index >= len(self.color_list):
-                self.current_color_index = 0
-                self.current_style_index += 1
-                if self.current_style_index >= len(self.style_list):
-                    self.current_style_index = 0
-            color = self.color_list[self.current_color_index]
-            style = self.style_list[self.current_style_index]
-            # graph_pen = QPen(color)
-            # graph_pen.setStyle(style)
-            graph_pen = pg.mkPen(color=QColor(color), style=style, width=1)
-            # cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
-            #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax, color=color, legend_str=legend_str)
-            # cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
-            #                                 fig1=self.graphing_window.fig, ax1=self.graphing_window.ax,
-            #                                 color=color, legend_str=legend_str, show_legend=self.legend_var.get())
-            # cid_corner.plot_processes_params(param1=param1, param2=param2, show_plot=False, new_plot=False,
-            #                                 fig1=None, ax1=None, color=color, legend_str=legend_str,
-            #                                 show_legend=self.checkbox_legend.isChecked())
-            unit1 = self.top_level_app.lookups_units_dict[param1]
-            unit2 = self.top_level_app.lookups_units_dict[param2]
-            cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
-                                                              show_plot=True, new_plot=True,
-                                                              roar_plot_widget=self.plot_widget,
-                                                              color=color, legend_str=None, enable_3d=False,
-                                                              pen=graph_pen, unit1=unit1, unit2=unit2)
-            # self.graphing_window.ax.grid(True, which="both")
-            self.plot_widget.showGrid(x=True, y=True)
+            # Store marker positions before clearing
+            marker_positions = []
+            for marker_info in self.plot_widget.markers:
+                marker_positions.append(marker_info)
 
-            self.current_color_index += 1
+            # Check if the plot is empty before clearing, to enable auto-fitting for the first trace
+            auto_fit = not self.plot_widget.plotItem.curves
 
-            # self.graphing_window.canvas.draw()
-            # self.graphing_window.canvas.draw()
+            self.plot_widget.clear()
+            self.plot_widget.markers.clear()
+
+            if not models_selected:
+                self.plot_widget.getPlotItem().setXRange(0, 1)
+                self.plot_widget.getPlotItem().setYRange(0, 1)
+                self.plot_widget.getPlotItem().setTitle("")
+                self.plot_widget.getPlotItem().setLabel('left', "")
+                self.plot_widget.getPlotItem().setLabel('bottom', "")
+                self._is_updating = False
+                return
+
+            self.current_color_index = 0
+            self.current_style_index = 0
+            new_plot = True
+
+            for model in models_selected:
+                model_tokens = model.split(">")
+                pdk = model_tokens[1]
+                model_name = model_tokens[2]
+                length = model_tokens[3]
+                corner = model_tokens[4]
+                cid_corner = self.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
+                if equation_eval != None:
+                    print("TODO")
+                    continue
+
+                param1 = self.combo_x.currentText()
+                param2 = self.combo_y.currentText()
+
+                if self.current_color_index >= len(self.color_list):
+                    self.current_color_index = 0
+                    self.current_style_index += 1
+                    if self.current_style_index >= len(self.style_list):
+                        self.current_style_index = 0
+
+                color = self.color_list[self.current_color_index]
+                style = self.style_list[self.current_style_index]
+                graph_pen = pg.mkPen(color=QColor(color), style=style, width=1)
+
+                unit1 = self.top_level_app.lookups_units_dict[param1]
+                unit2 = self.top_level_app.lookups_units_dict[param2]
+
+                cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
+                                                                  show_plot=True, new_plot=new_plot,
+                                                                  roar_plot_widget=self.plot_widget,
+                                                                  color=color, legend_str=None, enable_3d=False,
+                                                                  pen=graph_pen, unit1=unit1, unit2=unit2)
+                new_plot = False
+                self.plot_widget.showGrid(x=True, y=True)
+                self.current_color_index += 1
+
+            if auto_fit:
+                self.plot_widget.plotItem.autoRange()
+
+            # Re-plot markers
+            for marker_info in marker_positions:
+                x, y = marker_info['pos']
+
+                x_log = self.plot_widget.getPlotItem().getAxis('bottom').logMode
+                y_log = self.plot_widget.getPlotItem().getAxis('left').logMode
+
+                plot_x = np.log10(x) if x_log and x > 0 else x
+                plot_y = np.log10(y) if y_log and y > 0 else y
+
+                marker = pg.ScatterPlotItem(x=[plot_x], y=[plot_y], symbol='o', size=10, pen=pg.mkPen('r'), brush=pg.mkBrush('r'))
+                self.plot_widget.plotItem.addItem(marker)
+
+                text = pg.TextItem(f"({x:.2f}, {y:.2f})", anchor=(0.5, 1.5))
+                text.setPos(plot_x, plot_y)
+                self.plot_widget.plotItem.addItem(text)
+
+                self.plot_widget.markers.append({"marker": marker, "text": text, "pos": (x, y)})
+        finally:
+            self._is_updating = False
         return 0
 
     def add_tech_luts(self, dirname, pdk_name):
@@ -584,13 +629,35 @@ class ROARPlotLookupBanner(QWidget):
 
 
 class ROARPlotWidget(pg.PlotWidget):
-    def __init__(self, *args, top_level_app=None, **kwargs):
+    def __init__(self, *args, top_level_app=None, parent_lookup_window=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.top_level_app = top_level_app  # Store the app reference
-        self._log_x = False
-        self._log_y = False
+        self.top_level_app = top_level_app
+        self.parent_lookup_window = parent_lookup_window
         self._mouse_inside = False
-        self.scene().sigMouseMoved.connect(self._mouse_moved)
+
+        # Add legend and crosshair lines
+        self.plotItem.addLegend()
+        self.v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
+        self.h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
+        self.plotItem.addItem(self.v_line, ignoreBounds=True)
+        self.plotItem.addItem(self.h_line, ignoreBounds=True)
+
+        # Add text item for coordinates
+        self.coord_text = pg.TextItem(anchor=(0, 1))
+        self.plotItem.addItem(self.coord_text)
+        self.coord_text.setZValue(100)
+
+        # Initialize markers list
+        self.markers = []
+
+        # Connect mouse events
+        self.scene().sigMouseMoved.connect(self.on_mouse_moved)
+        self.scene().sigMouseClicked.connect(self.on_mouse_clicked)
+        self.plotItem.vb.sigStateChanged.connect(self.on_state_changed)
+
+    def on_state_changed(self, _):
+        if self.parent_lookup_window:
+            self.parent_lookup_window.sync_log_checkboxes()
 
     def enterEvent(self, event):
         self._mouse_inside = True
@@ -602,35 +669,98 @@ class ROARPlotWidget(pg.PlotWidget):
             self.top_level_app.coord_label.setText("Coordinates: ")
         super().leaveEvent(event)
 
-    def _mouse_moved(self, pos):
-        if not self._mouse_inside:
-            return
-        vb = self.plotItem.vb
-        if not vb.sceneBoundingRect().contains(pos):
-            return
-        mouse_point = vb.mapSceneToView(pos)
-        x = mouse_point.x()
-        y = mouse_point.y()
-        if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
-            self.top_level_app.coord_label.setText(f"Coordinates: ({x:.2f}, {y:.2f})")
+    def on_mouse_moved(self, pos):
+        if self._mouse_inside and self.plotItem.sceneBoundingRect().contains(pos):
+            # Only update coordinates if there are items in the plot
+            if not self.plotItem.curves:
+                return
+
+            mouse_point = self.plotItem.vb.mapSceneToView(pos)
+            x, y = mouse_point.x(), mouse_point.y()
+
+            if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
+                self.top_level_app.coord_label.setText(f"Coordinates: ({x:.2f}, {y:.2f})")
+
+            self.coord_text.setText(f"x={x:.2f}, y={y:.2f}")
+            self.coord_text.setPos(mouse_point)
+            self.v_line.setPos(x)
+            self.h_line.setPos(y)
+
+    def on_mouse_clicked(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            scene_pos = event.scenePos()
+            if self.plotItem.sceneBoundingRect().contains(scene_pos):
+                mouse_point = self.plotItem.vb.mapSceneToView(scene_pos)
+
+                for marker_info in self.markers:
+                    marker_item = marker_info["marker"]
+                    if self.is_close(marker_item.getData()[0][0], marker_item.getData()[1][0], mouse_point.x(), mouse_point.y()):
+                        self.plotItem.removeItem(marker_info["marker"])
+                        self.plotItem.removeItem(marker_info["text"])
+                        self.markers.remove(marker_info)
+                        return
+
+                closest_curve, closest_point_index = self.find_closest_point(mouse_point)
+
+                if closest_curve is not None and closest_point_index is not None:
+                    x_data, y_data = closest_curve.getData()
+                    x, y = x_data[closest_point_index], y_data[closest_point_index]
+
+                    x_log = self.plotItem.getAxis('bottom').logMode
+                    y_log = self.plotItem.getAxis('left').logMode
+
+                    # Store the true linear value of the marker
+                    store_x = 10**x if x_log else x
+                    store_y = 10**y if y_log else y
+
+                    marker = pg.ScatterPlotItem(x=[x], y=[y], symbol='o', size=10, pen=pg.mkPen('r'), brush=pg.mkBrush('r'))
+                    self.plotItem.addItem(marker)
+
+                    text = pg.TextItem(f"({store_x:.2f}, {store_y:.2f})", anchor=(0.5, 1.5))
+                    text.setPos(x, y)
+                    self.plotItem.addItem(text)
+
+                    self.markers.append({"marker": marker, "text": text, "pos": (store_x, store_y)})
+
+    def find_closest_point(self, mouse_point):
+        closest_curve = None
+        closest_point_index = None
+        min_dist_sq = float('inf')
+
+        mouse_pos_scene = self.plotItem.vb.mapViewToScene(mouse_point)
+
+        for curve in self.getPlotItem().curves:
+            x_data, y_data = curve.getData()
+            if x_data is None or y_data is None:
+                continue
+
+            for i in range(len(x_data)):
+                point_view = pg.Point(x_data[i], y_data[i])
+                point_scene = self.plotItem.vb.mapViewToScene(point_view)
+
+                dist_sq = (point_scene.x() - mouse_pos_scene.x())**2 + (point_scene.y() - mouse_pos_scene.y())**2
+
+                if dist_sq < min_dist_sq:
+                    min_dist_sq = dist_sq
+                    closest_curve = curve
+                    closest_point_index = i
+
+        # Check if the closest point is reasonably close to the mouse click (in pixels)
+        if min_dist_sq > 75**2: # 75 pixels tolerance
+            return None, None
+
+        return closest_curve, closest_point_index
+
+    def is_close(self, x1, y1, x2, y2):
+        p1 = self.plotItem.vb.mapViewToScene(pg.Point(x1, y1))
+        p2 = self.plotItem.vb.mapViewToScene(pg.Point(x2, y2))
+        return (p1.x() - p2.x())**2 + (p1.y() - p2.y())**2 < 10**2 # 10 pixels tolerance
 
     def keyPressEvent(self, event):
-        key = event.key()
-
-        if self.underMouse():
-            if key == Qt.Key.Key_F:
-                self.plotItem.enableAutoRange(axis=pg.ViewBox.XYAxes, enable=True)
-
-            elif key == Qt.Key.Key_X:
-                self._log_x = not self._log_x
-                self.setLogMode(x=self._log_x, y=self._log_y)
-
-            elif key == Qt.Key.Key_Y:
-                self._log_y = not self._log_y
-                self.setLogMode(x=self._log_x, y=self._log_y)
-
-        # Call the base handler
-        super().keyPressEvent(event)
+        if event.key() == Qt.Key.Key_F and self._mouse_inside:
+            self.plotItem.autoRange()
+        else:
+            super().keyPressEvent(event)
 
 
 class ROARHeader(QWidget):

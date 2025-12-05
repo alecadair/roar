@@ -128,6 +128,10 @@ class ROAREditorWindow(QWidget):
         self.setWindowTitle("Editor Window")
         self.top_level_app = top_level_app
         layout = QVBoxLayout()
+        # COPILOT EDITS
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        # END OF COPILOT EDITS
         self.setLayout(layout)
 
         splitter = QSplitter(Qt.Orientation.Vertical)  # Create a vertical splitter
