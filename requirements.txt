@@ -4,7 +4,7 @@ matplotlib
 pandas
 sv_ttk
 sympy
-PyQt6>=6.5,<6.7
+PyQt6==6.8
 pyqtgraph>=0.13
 PyOpenGL
 # PySide6

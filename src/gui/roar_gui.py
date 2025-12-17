@@ -284,6 +284,11 @@ class ROARLookupWindow(QWidget):
         self.spin_z.setRange(0.0, 100.0)
         self.checkbox_logz = QCheckBox("LogZ")
 
+        # Clear markers when changing axes
+        self.combo_x.currentIndexChanged.connect(self.clear_markers)
+        self.combo_y.currentIndexChanged.connect(self.clear_markers)
+        self.combo_z.currentIndexChanged.connect(self.clear_markers)
+
         self.controls_layout.addWidget(self.label_x, 1, 0)
         self.controls_layout.addWidget(self.combo_x, 1, 1)
         self.controls_layout.addWidget(self.spin_x, 1, 2)
@@ -366,6 +371,22 @@ class ROARLookupWindow(QWidget):
 
         self.checkbox_logx.stateChanged.connect(self.update_log_scale)
         self.checkbox_logy.stateChanged.connect(self.update_log_scale)
+
+    def clear_markers(self):
+        """Remove all markers and their text from the plot and clear the markers list."""
+        pw = getattr(self, "plot_widget", None)
+        if not pw:
+            return
+        # Remove items safely
+        for marker_info in pw.markers[:]:
+            try:
+                if "marker" in marker_info and marker_info["marker"] is not None:
+                    pw.plotItem.removeItem(marker_info["marker"])
+                if "text" in marker_info and marker_info["text"] is not None:
+                    pw.plotItem.removeItem(marker_info["text"])
+            except Exception:
+                pass
+        pw.markers.clear()
 
     def sync_log_checkboxes(self):
         x_log = self.plot_widget.getPlotItem().getAxis('bottom').logMode
