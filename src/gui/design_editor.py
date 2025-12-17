@@ -1,7 +1,6 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QLineEdit,
-    QDialog, QLabel, QComboBox, QMessageBox, QSplitter
+    QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QLineEdit, QMessageBox, QSplitter, QGroupBox
 )
 from PyQt6.QtGui import QColor
 from PyQt6.QtCore import Qt
@@ -23,13 +22,25 @@ class BaseEditor(QWidget):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
+        # If a title is provided, use a QGroupBox so the title appears in the widget border.
+        if title:
+            group = QGroupBox(title)
+            group_layout = QVBoxLayout()
+            group_layout.setContentsMargins(6, 6, 6, 6)  # tighter inner margins
+            group.setLayout(group_layout)
+            container_layout = group_layout
+            # add the group box to the outer layout
+            layout.addWidget(group)
+        else:
+            container_layout = layout
+
         # Create the TreeWidget
         self.tree = QTreeWidget()
         self.tree.setColumnCount(len(columns))
         self.tree.setHeaderLabels(columns)
         self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)  # Allow resizing
         self.tree.setTabKeyNavigation(False)  # Disable default row-wise tab behavior
-        layout.addWidget(self.tree)
+        container_layout.addWidget(self.tree)
 
         # Button panel
         button_layout = QHBoxLayout()
@@ -48,9 +59,11 @@ class BaseEditor(QWidget):
         self.plot_button = QPushButton(self.plot_button_text)
         if self.plot_command is not None:
             self.plot_button.clicked.connect(self.plot_command)
+        else:
+            self.plot_button.clicked.connect(self.plot_row)
         button_layout.addWidget(self.plot_button)
 
-        layout.addLayout(button_layout)
+        container_layout.addLayout(button_layout)
 
     def add_row(self):
         item = QTreeWidgetItem(["" for _ in self.columns])
@@ -121,6 +134,15 @@ class BaseEditor(QWidget):
 
         self.update_row_colors()  # Apply correct colors after loading data
 
+    def plot_row(self):
+        selected_items = self.tree.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No item selected", "Please select an item to plot.")
+            return
+
+        # In ROAREditorWindow, this will be overridden
+        print("Plotting row:", [selected_items[0].text(i) for i in range(self.tree.columnCount())])
+
 
 class ROAREditorWindow(QWidget):
     def __init__(self, top_level_app=None):
@@ -150,16 +172,33 @@ class ROAREditorWindow(QWidget):
         self.save_button = QPushButton("Save")
         self.evaluate_button = QPushButton("Evaluate")
         self.open_editor_button = QPushButton("Open Editor")
+        self.plot_equation_button = QPushButton("Plot Equation")
         self.save_button.clicked.connect(self.save_all_data)
+        self.plot_equation_button.clicked.connect(self.plot_expression)
 
         self.load_button = QPushButton("Load")
         self.load_button.clicked.connect(self.load_all_data)
         button_layout.addWidget(self.evaluate_button)
         button_layout.addWidget(self.open_editor_button)
+        button_layout.addWidget(self.plot_equation_button)
         button_layout.addWidget(self.load_button)
         button_layout.addWidget(self.save_button)
 
         layout.addLayout(button_layout)
+
+    def plot_expression(self):
+        selected_items = self.expression_editor.tree.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No Expression Selected", "Please select an expression to graph.")
+            return
+
+        selected_item = selected_items[0]
+        expression = selected_item.text(1)
+
+        if self.top_level_app:
+            # For now, plot on the first graph
+            lookup_window = self.top_level_app.graph_grid.lookup_window_1
+            lookup_window.plot_custom_equation(expression)
 
     def save_all_data(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save File", "", "JSON Files (*.json)")
