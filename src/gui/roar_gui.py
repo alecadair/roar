@@ -34,6 +34,25 @@ ROAR_DESIGN_SCRIPTS = os.environ.get("ROAR_DESIGN", "")
 
 DEBUG = False
 
+def format_eng(num):
+    if num == 0:
+        return "0"
+
+    exp = int(np.floor(np.log10(abs(num))))
+    exp3 = exp - (exp % 3)
+
+    mant = num / 10**exp3
+
+    if mant == int(mant):
+        mant_str = f"{int(mant)}"
+    else:
+        mant_str = f"{mant:.2f}".rstrip('0').rstrip('.')
+
+    if exp3 == 0:
+        return mant_str
+    else:
+        return f"{mant_str}e{exp3}"
+
 
 class ROARTechBrowser(QWidget):
     def __init__(self, parent, lookup_window, top_level_app, tech_dict=None):
@@ -283,6 +302,7 @@ class ROARLookupWindow(QWidget):
         # Update button spanning the first row
         self.update_button = QPushButton("Update")
         self.controls_layout.addWidget(self.update_button, 0, 0, 1, 4)
+        self.update_button.clicked.connect(self.update_graph_from_tech_browser)
 
         # Individual Checkboxes with specific callbacks
         self.checkbox_3d = QCheckBox("3-D")
@@ -526,7 +546,7 @@ class ROARLookupWindow(QWidget):
                 marker = pg.ScatterPlotItem(x=[plot_x], y=[plot_y], symbol='o', size=10, pen=pg.mkPen('r'), brush=pg.mkBrush('r'))
                 self.plot_widget.plotItem.addItem(marker)
 
-                text = pg.TextItem(f"({x:.2f}, {y:.2f})", anchor=(0.5, 1.5))
+                text = pg.TextItem(f"({format_eng(x)}, {format_eng(y)})", anchor=(0.5, 1.5))
                 text.setPos(plot_x, plot_y)
                 self.plot_widget.plotItem.addItem(text)
 
@@ -628,6 +648,7 @@ class ROARPlotLookupBanner(QWidget):
         self.update_graph_callback()
 
 
+
 class ROARPlotWidget(pg.PlotWidget):
     def __init__(self, *args, top_level_app=None, parent_lookup_window=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -678,10 +699,16 @@ class ROARPlotWidget(pg.PlotWidget):
             mouse_point = self.plotItem.vb.mapSceneToView(pos)
             x, y = mouse_point.x(), mouse_point.y()
 
-            if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
-                self.top_level_app.coord_label.setText(f"Coordinates: ({x:.2f}, {y:.2f})")
+            x_log = self.plotItem.getAxis('bottom').logMode
+            y_log = self.plotItem.getAxis('left').logMode
 
-            self.coord_text.setText(f"x={x:.2f}, y={y:.2f}")
+            display_x = 10**x if x_log else x
+            display_y = 10**y if y_log else y
+
+            if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
+                self.top_level_app.coord_label.setText(f"Coordinates: ({format_eng(display_x)}, {format_eng(display_y)})")
+
+            self.coord_text.setText(f"x={format_eng(display_x)}, y={format_eng(display_y)}")
             self.coord_text.setPos(mouse_point)
             self.v_line.setPos(x)
             self.h_line.setPos(y)
@@ -716,7 +743,7 @@ class ROARPlotWidget(pg.PlotWidget):
                     marker = pg.ScatterPlotItem(x=[x], y=[y], symbol='o', size=10, pen=pg.mkPen('r'), brush=pg.mkBrush('r'))
                     self.plotItem.addItem(marker)
 
-                    text = pg.TextItem(f"({store_x:.2f}, {store_y:.2f})", anchor=(0.5, 1.5))
+                    text = pg.TextItem(f"({format_eng(store_x)}, {format_eng(store_y)})", anchor=(0.5, 1.5))
                     text.setPos(x, y)
                     self.plotItem.addItem(text)
 
@@ -810,7 +837,7 @@ class ROARHeader(QWidget):
         self.graph_calc_icon.setFixedSize(banner_height, banner_height)  # Increased button size
         self.graph_calc_icon.setStyleSheet("""
             QPushButton {
-                border: none; 
+                border: none;
                 background: #1C8091;
             }
             QPushButton:hover {
@@ -827,7 +854,7 @@ class ROARHeader(QWidget):
         self.layout_button.setFixedSize(banner_height, banner_height)  # Increased button size
         self.layout_button.setStyleSheet("""
             QPushButton {
-                border: none; 
+                border: none;
                 background: #1C8091;
             }
             QPushButton:hover {
@@ -924,6 +951,7 @@ class ROARApp(QMainWindow):
         self.lookups_units_dict["gmidft"] = "Hz/V"
         self.lookups_units_dict["gmro"] = "V/V"
         self.lookups_units_dict["ic"] = ""
+        self.lookups_units_dict["iden"] = "A/m"
         self.lookups_units_dict["ids"] = "A"
         self.lookups_units_dict["kcdb"] = "F/A"
         self.lookups_units_dict["kcds"] = "F/A"
@@ -980,7 +1008,7 @@ class ROARApp(QMainWindow):
 
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
         predictive_28 = ROAR_CHARACTERIZATION + "/predictive_28/LUTs_1V8_mac"
-        # self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
+        #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
         self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
         # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
 
