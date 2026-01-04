@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem,
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
     QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen
 # os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 
@@ -52,6 +52,46 @@ def format_eng(num):
         return mant_str
     else:
         return f"{mant_str}e{exp3}"
+
+
+class EngSpinBox(QDoubleSpinBox):
+    """QDoubleSpinBox that displays values using engineering notation (3-power exponents).
+
+    It uses the project's format_eng() to render values and accepts standard float/scientific input.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # allow a lot of decimal precision internally so tiny values don't display as 0
+        self.setDecimals(12)
+
+    def textFromValue(self, value: float) -> str:
+        try:
+            # format_eng already returns '0' for zero and uses multiples-of-3 exponents
+            return format_eng(float(value))
+        except Exception:
+            return super().textFromValue(value)
+
+    def valueFromText(self, text: str) -> float:
+        try:
+            # Accept scientific input like '1e-9' as well as plain numbers
+            return float(text)
+        except Exception:
+            # fallback to base class parsing
+            return super().valueFromText(text)
+
+    def sizeHint(self):
+        """Return a sizeHint wide enough to display the engineering-formatted min/max/current values."""
+        try:
+            fm = self.fontMetrics()
+            candidates = [format_eng(self.minimum()), format_eng(self.maximum()), format_eng(self.value())]
+            # include a reasonable extra string like '-1.00e-12' to be safe
+            candidates.append('-1.00e-12')
+            widest = max((fm.horizontalAdvance(str(t)) for t in candidates), default=80)
+            base = super().sizeHint()
+            # add padding for the up/down buttons and some margin
+            return QSize(max(base.width(), widest + 40), base.height())
+        except Exception:
+            return super().sizeHint()
 
 
 class ROARTechBrowser(QWidget):
@@ -264,24 +304,27 @@ class ROARLookupWindow(QWidget):
         self.combo_x = QComboBox()
         self.combo_x.addItems(self.top_level_app.lookups)
         self.combo_x.setCurrentText("kgm")
-        self.spin_x = QDoubleSpinBox()
+        self.spin_x = EngSpinBox()
         self.spin_x.setRange(0.0, 100.0)
+        self.spin_x.setMinimumWidth(120)
         self.checkbox_logx = QCheckBox("LogX")
 
         self.label_y = QLabel("Y:")
         self.combo_y = QComboBox()
         self.combo_y.addItems(self.top_level_app.lookups)
         self.combo_y.setCurrentText("kcgs")
-        self.spin_y = QDoubleSpinBox()
+        self.spin_y = EngSpinBox()
         self.spin_y.setRange(0.0, 100.0)
+        self.spin_y.setMinimumWidth(120)
         self.checkbox_logy = QCheckBox("LogY")
 
         self.label_z = QLabel("Z:")
         self.combo_z = QComboBox()
         self.combo_z.addItems(self.top_level_app.lookups)
         self.combo_z.setCurrentText("iden")
-        self.spin_z = QDoubleSpinBox()
+        self.spin_z = EngSpinBox()
         self.spin_z.setRange(0.0, 100.0)
+        self.spin_z.setMinimumWidth(120)
         self.checkbox_logz = QCheckBox("LogZ")
 
         # Clear markers when changing axes
@@ -304,10 +347,10 @@ class ROARLookupWindow(QWidget):
         self.controls_layout.addWidget(self.spin_z, 3, 2)
         self.controls_layout.addWidget(self.checkbox_logz, 3, 3)
 
-        # Update button spanning the first row
-        self.update_button = QPushButton("Update")
-        self.controls_layout.addWidget(self.update_button, 0, 0, 1, 4)
-        self.update_button.clicked.connect(self.update_graph_from_tech_browser)
+        # Update button removed (was spanning the first row)
+        # self.update_button = QPushButton("Update")
+        # self.controls_layout.addWidget(self.update_button, 0, 0, 1, 4)
+        # self.update_button.clicked.connect(self.update_graph_from_tech_browser)
 
         # Individual Checkboxes with specific callbacks
         self.checkbox_3d = QCheckBox("3-D")
@@ -613,10 +656,11 @@ class ROARPlotLookupBanner(QWidget):
             self.x_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.x_dropdown)
 
-        self.x_spinbox = QDoubleSpinBox()
+        self.x_spinbox = EngSpinBox()
         self.x_spinbox.setRange(0, 100)
         self.x_spinbox.setSingleStep(0.1)
         self.x_spinbox.setValue(15)
+        self.x_spinbox.setMinimumWidth(120)
         if DEBUG == False:
             self.x_spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.x_spinbox)
@@ -631,10 +675,11 @@ class ROARPlotLookupBanner(QWidget):
             self.y_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.y_dropdown)
 
-        self.y_spinbox = QDoubleSpinBox()
+        self.y_spinbox = EngSpinBox()
         self.y_spinbox.setRange(0, 100)
         self.y_spinbox.setSingleStep(0.1)
         self.y_spinbox.setValue(15)
+        self.y_spinbox.setMinimumWidth(120)
         if DEBUG == False:
             self.y_spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.banner_layout.addWidget(self.y_spinbox)
@@ -648,13 +693,13 @@ class ROARPlotLookupBanner(QWidget):
         # Add a spacer to push the update button to the right
         self.banner_layout.addStretch()
 
-        # Update Button
-        self.update_button = QPushButton("Update")
-        self.update_button.setFixedWidth(80)
-        # if DEBUG == False:
-        self.update_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.update_button.clicked.connect(self.update_graph)
-        self.banner_layout.addWidget(self.update_button)
+        # Update Button removed
+        # self.update_button = QPushButton("Update")
+        # self.update_button.setFixedWidth(80)
+        # # if DEBUG == False:
+        # self.update_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # self.update_button.clicked.connect(self.update_graph)
+        # self.banner_layout.addWidget(self.update_button)
 
         # Set up layouts
         self.main_layout.addLayout(self.banner_layout)
@@ -769,6 +814,40 @@ class ROARPlotWidget(pg.PlotWidget):
                     self.plotItem.addItem(text)
 
                     self.markers.append({"marker": marker, "text": text, "pos": (store_x, store_y)})
+
+                    # Update parent lookup window spinboxes (expand ranges if needed)
+                    plw = getattr(self, "parent_lookup_window", None)
+                    if plw:
+                        try:
+                            spinx = getattr(plw, "spin_x", None)
+                            spiny = getattr(plw, "spin_y", None)
+                            if isinstance(spinx, QDoubleSpinBox):
+                                self._ensure_spinbox_range(spinx, store_x)
+                                spinx.setValue(store_x)
+                            if isinstance(spiny, QDoubleSpinBox):
+                                self._ensure_spinbox_range(spiny, store_y)
+                                spiny.setValue(store_y)
+                        except Exception:
+                            # Don't raise on UI update errors
+                            pass
+
+    def _ensure_spinbox_range(self, spinbox: QDoubleSpinBox, value: float, margin: float = 0.1):
+        """
+        Expand the given QDoubleSpinBox range so `value` can be set without being clamped.
+        """
+        try:
+            cur_min = spinbox.minimum()
+            cur_max = spinbox.maximum()
+            # If the incoming value is outside current range, expand by a small margin
+            if value < cur_min:
+                new_min = value - max(abs(value) * margin, 1e-12)
+                spinbox.setMinimum(new_min)
+            if value > cur_max:
+                new_max = value + max(abs(value) * margin, 1e-12)
+                spinbox.setMaximum(new_max)
+        except Exception:
+            # Be defensive: don't let a spinbox error break marker placement
+            pass
 
     def find_closest_point(self, mouse_point):
         closest_curve = None
