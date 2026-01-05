@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QLineEdit, QMessageBox, QSplitter, QGroupBox
 )
 from PyQt6.QtGui import QColor
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 import json
 import sys
 from equation_solver import *
@@ -145,6 +145,8 @@ class BaseEditor(QWidget):
 
 
 class ROAREditorWindow(QWidget):
+    expressions_changed = pyqtSignal(list)
+
     def __init__(self, top_level_app=None):
         super().__init__()
         self.setWindowTitle("Editor Window")
@@ -186,6 +188,23 @@ class ROAREditorWindow(QWidget):
 
         layout.addLayout(button_layout)
 
+        # Connect signals for expression changes
+        self.expression_editor.tree.itemChanged.connect(self.on_expressions_changed)
+        self.expression_editor.add_button.clicked.connect(self.on_expressions_changed)
+        self.expression_editor.delete_button.clicked.connect(self.on_expressions_changed)
+
+    def on_expressions_changed(self):
+        self.expressions_changed.emit(self.get_expression_symbols())
+
+    def get_expression_symbols(self):
+        symbols = []
+        for i in range(self.expression_editor.tree.topLevelItemCount()):
+            item = self.expression_editor.tree.topLevelItem(i)
+            symbol = item.text(0)
+            if symbol:
+                symbols.append(symbol)
+        return symbols
+
     def plot_expression(self):
         selected_items = self.expression_editor.tree.selectedItems()
         if not selected_items:
@@ -212,15 +231,28 @@ class ROAREditorWindow(QWidget):
                 json.dump(data, file, indent=4)
             QMessageBox.information(self, "Success", "Data saved successfully!")
 
-    def load_all_data(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open File", "", "JSON Files (*.json)")
+    def load_all_data(self, file_path=None, show_success_message=True):
+        if not file_path:
+            file_path, _ = QFileDialog.getOpenFileName(self, "Open File", "", "JSON Files (*.json)")
+
         if file_path:
-            with open(file_path, "r") as file:
-                data = json.load(file)
-            self.expression_editor.load_table_data(data.get("expression_editor", []))
-            self.constraint_editor.load_table_data(data.get("constraint_editor", []))
-            self.instance_table.load_table_data(data.get("instance_table", []))
-            QMessageBox.information(self, "Success", "Data loaded successfully!")
+            try:
+                with open(file_path, "r") as file:
+                    data = json.load(file)
+                self.expression_editor.load_table_data(data.get("expression_editor", []))
+                self.constraint_editor.load_table_data(data.get("constraint_editor", []))
+                self.instance_table.load_table_data(data.get("instance_table", []))
+                if show_success_message:
+                    QMessageBox.information(self, "Success", "Data loaded successfully!")
+
+                # Emit signal after loading data
+                self.on_expressions_changed()
+            except FileNotFoundError:
+                QMessageBox.critical(self, "Error", f"File not found: {file_path}")
+            except json.JSONDecodeError:
+                QMessageBox.critical(self, "Error", f"Error decoding JSON from {file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
