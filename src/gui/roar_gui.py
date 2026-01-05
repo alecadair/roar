@@ -955,6 +955,19 @@ class ROARPlotWidget(pg.PlotWidget):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F and self._mouse_inside:
             self.plotItem.autoRange()
+        elif event.key() == Qt.Key.Key_X and self._mouse_inside:
+            if self.parent_lookup_window:
+                self.parent_lookup_window.checkbox_logx.toggle()
+        elif event.key() == Qt.Key.Key_Y and self._mouse_inside:
+            if self.parent_lookup_window:
+                self.parent_lookup_window.checkbox_logy.toggle()
+        elif event.key() == Qt.Key.Key_L and self._mouse_inside:
+            if self.parent_lookup_window:
+                log_x_checked = self.parent_lookup_window.checkbox_logx.isChecked()
+                log_y_checked = self.parent_lookup_window.checkbox_logy.isChecked()
+                new_state = not (log_x_checked and log_y_checked)
+                self.parent_lookup_window.checkbox_logx.setChecked(new_state)
+                self.parent_lookup_window.checkbox_logy.setChecked(new_state)
         else:
             super().keyPressEvent(event)
 
