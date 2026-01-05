@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout,
     QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem,
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
-    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar)
+    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen
 # os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
@@ -33,6 +33,7 @@ ROAR_CHARACTERIZATION = os.environ.get("ROAR_CHARACTERIZATION", "")
 ROAR_DESIGN_SCRIPTS = os.environ.get("ROAR_DESIGN", "")
 
 DEBUG = False
+DEBUG_DESIGN = True
 
 def format_eng(num):
     if num == 0:
@@ -269,6 +270,7 @@ class ROARLookupWindow(QWidget):
         self.graph_grid = graph_grid  # Store reference to ROARGraphGrid
         self.is_expanded = False  # Track expansion state
         self.original_state = None  # Store splitter state
+        self.expression_symbols = []
         self._is_updating = False
 
         # Create the main layout
@@ -298,6 +300,19 @@ class ROARLookupWindow(QWidget):
         # Create a container for control widgets
         self.controls_container = QWidget()
         self.controls_layout = QGridLayout(self.controls_container)
+
+        # Radio buttons for parameter source
+        self.radio_device_params = QRadioButton("Device Parameters")
+        self.radio_design_eq = QRadioButton("Design Equations")
+        self.radio_device_params.setChecked(True)
+
+        radio_layout = QHBoxLayout()
+        radio_layout.addWidget(self.radio_device_params)
+        radio_layout.addWidget(self.radio_design_eq)
+        self.controls_layout.addLayout(radio_layout, 0, 0, 1, 4)
+
+        # Connect toggled signal
+        self.radio_device_params.toggled.connect(self.update_combobox_items)
 
         # Individual Labels, ComboBoxes, and SpinBoxes for X, Y, and Z
         self.label_x = QLabel("X:")
@@ -414,6 +429,60 @@ class ROARLookupWindow(QWidget):
 
         self.checkbox_logx.stateChanged.connect(self.update_log_scale)
         self.checkbox_logy.stateChanged.connect(self.update_log_scale)
+
+        self.checkbox_3d.stateChanged.connect(self._update_z_controls_state)
+        self._update_z_controls_state()
+
+    def update_combobox_items(self):
+        current_x = self.combo_x.currentText()
+        current_y = self.combo_y.currentText()
+        current_z = self.combo_z.currentText()
+
+        self.combo_x.clear()
+        self.combo_y.clear()
+        self.combo_z.clear()
+
+        if self.radio_device_params.isChecked():
+            items = self.top_level_app.lookups
+            self.combo_x.addItems(items)
+            self.combo_y.addItems(items)
+            self.combo_z.addItems(items)
+            self.combo_x.setCurrentText("kgm")
+            self.combo_y.setCurrentText("kcgs")
+            self.combo_z.setCurrentText("iden")
+        else:
+            items = self.expression_symbols
+            self.combo_x.addItems(items)
+            self.combo_y.addItems(items)
+            self.combo_z.addItems(items)
+
+            if items:
+                # Set X
+                self.combo_x.setCurrentIndex(0)
+
+                # Set Y
+                if len(items) > 1:
+                    self.combo_y.setCurrentIndex(1)
+                else:
+                    self.combo_y.setCurrentIndex(len(items) - 1)
+
+                # Set Z
+                if len(items) > 2:
+                    self.combo_z.setCurrentIndex(2)
+                else:
+                    self.combo_z.setCurrentIndex(len(items) - 1)
+
+    def update_expression_symbols(self, symbols):
+        self.expression_symbols = symbols
+        self.update_combobox_items()
+
+    def _update_z_controls_state(self):
+        is_3d = self.checkbox_3d.isChecked()
+        self.label_z.setEnabled(is_3d)
+        self.combo_z.setEnabled(is_3d)
+        self.spin_z.setEnabled(is_3d)
+        self.checkbox_logz.setEnabled(is_3d)
+        self.checkbox_contour.setEnabled(is_3d)
 
     def clear_markers(self):
         """Remove all markers and their text from the plot and clear the markers list."""
@@ -1097,6 +1166,9 @@ class ROARApp(QMainWindow):
         self.graph_grid = ROARGraphGrid(parent=self, top_level_app=self)
         splitter_h.addWidget(self.graph_grid)
 
+        # Connect the expressions_changed signal to a slot in ROARApp
+        self.editor_window.expressions_changed.connect(self.update_lookup_windows)
+
         # Add splitter to the layout
         main_layout.addWidget(splitter_h)
 
@@ -1111,6 +1183,14 @@ class ROARApp(QMainWindow):
         #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
         self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
         # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
+
+        if DEBUG_DESIGN:
+            design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "cs2.json")
+            self.editor_window.load_all_data(file_path=design_path, show_success_message=False)
+
+    def update_lookup_windows(self, symbols):
+        for window in self.graph_grid.lookup_windows:
+            window.update_expression_symbols(symbols)
 
     def add_tech_luts(self, dir, pdk_name):
         self.tech_dict[pdk_name] = {}
