@@ -655,8 +655,13 @@ class ROARLookupWindow(QWidget):
                 style = self.style_list[self.current_style_index]
                 graph_pen = pg.mkPen(color=QColor(color), style=style, width=1)
 
-                unit1 = self.top_level_app.lookups_units_dict[param1]
-                unit2 = self.top_level_app.lookups_units_dict[param2]
+                unit1 = ""
+                unit2 = ""
+                if param1 in self.top_level_app.lookups_units_dict:
+                    unit1 = self.top_level_app.lookups_units_dict[param1]
+                if param2 in self.top_level_app.lookups_units_dict:
+                    unit2 = self.top_level_app.lookups_units_dict[param2]
+
 
                 cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
                                                                   show_plot=True, new_plot=new_plot,
