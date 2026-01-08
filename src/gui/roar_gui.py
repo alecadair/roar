@@ -302,14 +302,18 @@ class ROARLookupWindow(QWidget):
         self.controls_layout = QGridLayout(self.controls_container)
 
         # Radio buttons for parameter source
-        self.radio_device_params = QRadioButton("Device Parameters")
-        self.radio_design_eq = QRadioButton("Design Equations")
+        self.radio_device_params = QRadioButton("Device Params")
+        self.radio_design_eq = QRadioButton("Design Eqs")
         self.radio_device_params.setChecked(True)
+        self.checkbox_legend = QCheckBox("Legend")
 
-        radio_layout = QHBoxLayout()
-        radio_layout.addWidget(self.radio_device_params)
-        radio_layout.addWidget(self.radio_design_eq)
-        self.controls_layout.addLayout(radio_layout, 0, 0, 1, 4)
+        # store the radio layout on the instance so other methods can reference it
+        self.radio_layout = QHBoxLayout()
+        self.radio_layout.addWidget(self.radio_device_params)
+        self.radio_layout.addWidget(self.radio_design_eq)
+        self.radio_layout.addStretch()
+        self.controls_layout.addLayout(self.radio_layout, 0, 0, 1, 3)
+        self.controls_layout.addWidget(self.checkbox_legend, 0, 3)
 
         # Connect toggled signal
         self.radio_device_params.toggled.connect(self.update_combobox_items)
@@ -320,7 +324,6 @@ class ROARLookupWindow(QWidget):
         self.combo_x.addItems(self.top_level_app.lookups)
         self.combo_x.setCurrentText("kgm")
         self.spin_x = EngSpinBox()
-        self.spin_x.setRange(0.0, 100.0)
         self.spin_x.setMinimumWidth(120)
         self.checkbox_logx = QCheckBox("LogX")
 
@@ -329,7 +332,6 @@ class ROARLookupWindow(QWidget):
         self.combo_y.addItems(self.top_level_app.lookups)
         self.combo_y.setCurrentText("kcgs")
         self.spin_y = EngSpinBox()
-        self.spin_y.setRange(0.0, 100.0)
         self.spin_y.setMinimumWidth(120)
         self.checkbox_logy = QCheckBox("LogY")
 
@@ -338,7 +340,6 @@ class ROARLookupWindow(QWidget):
         self.combo_z.addItems(self.top_level_app.lookups)
         self.combo_z.setCurrentText("iden")
         self.spin_z = EngSpinBox()
-        self.spin_z.setRange(0.0, 100.0)
         self.spin_z.setMinimumWidth(120)
         self.checkbox_logz = QCheckBox("LogZ")
 
@@ -362,21 +363,16 @@ class ROARLookupWindow(QWidget):
         self.controls_layout.addWidget(self.spin_z, 3, 2)
         self.controls_layout.addWidget(self.checkbox_logz, 3, 3)
 
-        # Update button removed (was spanning the first row)
-        # self.update_button = QPushButton("Update")
-        # self.controls_layout.addWidget(self.update_button, 0, 0, 1, 4)
-        # self.update_button.clicked.connect(self.update_graph_from_tech_browser)
+        # Set column stretch factors
+        self.controls_layout.setColumnStretch(2, 1) # Spinner column
 
         # Individual Checkboxes with specific callbacks
         self.checkbox_3d = QCheckBox("3-D")
         self.checkbox_contour = QCheckBox("Contour")
-        self.checkbox_legend = QCheckBox("Legend")
         self.checkbox_black_bg = QCheckBox("Black BG")
 
         self.controls_layout.addWidget(self.checkbox_3d, 4, 1)
         self.controls_layout.addWidget(self.checkbox_contour, 4, 2)
-        self.controls_layout.addWidget(self.checkbox_legend, 4, 3)
-        # self.controls_layout.addWidget(self.checkbox_black_bg, 4, 3)
 
         self.copy_button = QPushButton("Copy")
         self.settings_button = QPushButton("Settings")
@@ -433,17 +429,30 @@ class ROARLookupWindow(QWidget):
         self.checkbox_3d.stateChanged.connect(self._update_z_controls_state)
         self._update_z_controls_state()
 
+        # Ensure combo boxes and visibility reflect the current radio selection
+        self.update_combobox_items()
+
     def update_combobox_items(self):
-        current_x = self.combo_x.currentText()
-        current_y = self.combo_y.currentText()
-        current_z = self.combo_z.currentText()
+        is_device_params = self.radio_device_params.isChecked()
 
-        self.combo_x.clear()
-        self.combo_y.clear()
-        self.combo_z.clear()
+        # Update visibility of Z-axis and 3D controls
+        self.label_z.setVisible(not is_device_params)
+        self.combo_z.setVisible(not is_device_params)
+        self.spin_z.setVisible(not is_device_params)
+        self.checkbox_logz.setVisible(not is_device_params)
+        self.checkbox_3d.setVisible(not is_device_params)
+        self.checkbox_contour.setVisible(not is_device_params)
 
-        if self.radio_device_params.isChecked():
-            items = self.top_level_app.lookups
+        # Do not attempt to reparent widgets here; only update visibility and contents.
+        # Keep the legend checkbox in its layout position and control visibility if needed.
+        self.checkbox_legend.setVisible(True)
+
+        if is_device_params:
+            items = list(self.top_level_app.lookups) if self.top_level_app else []
+            # populate with device lookup names and set device defaults
+            self.combo_x.clear()
+            self.combo_y.clear()
+            self.combo_z.clear()
             self.combo_x.addItems(items)
             self.combo_y.addItems(items)
             self.combo_z.addItems(items)
@@ -451,26 +460,21 @@ class ROARLookupWindow(QWidget):
             self.combo_y.setCurrentText("kcgs")
             self.combo_z.setCurrentText("iden")
         else:
-            items = self.expression_symbols
+            items = list(self.expression_symbols) if self.expression_symbols else []
+            self.combo_x.clear()
+            self.combo_y.clear()
+            self.combo_z.clear()
             self.combo_x.addItems(items)
             self.combo_y.addItems(items)
             self.combo_z.addItems(items)
 
             if items:
-                # Set X
                 self.combo_x.setCurrentIndex(0)
+                self.combo_y.setCurrentIndex(min(1, len(items) - 1))
+                self.combo_z.setCurrentIndex(min(2, len(items) - 1))
 
-                # Set Y
-                if len(items) > 1:
-                    self.combo_y.setCurrentIndex(1)
-                else:
-                    self.combo_y.setCurrentIndex(len(items) - 1)
-
-                # Set Z
-                if len(items) > 2:
-                    self.combo_z.setCurrentIndex(2)
-                else:
-                    self.combo_z.setCurrentIndex(len(items) - 1)
+        if not is_device_params:
+            self._update_z_controls_state()
 
     def update_expression_symbols(self, symbols):
         self.expression_symbols = symbols
