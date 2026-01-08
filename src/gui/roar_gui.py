@@ -323,24 +323,32 @@ class ROARLookupWindow(QWidget):
         self.combo_x = QComboBox()
         self.combo_x.addItems(self.top_level_app.lookups)
         self.combo_x.setCurrentText("kgm")
+        # Keep combo boxes left-aligned and do not allow them to expand horizontally
+        self.combo_x.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.spin_x = EngSpinBox()
         self.spin_x.setMinimumWidth(120)
+        # Make spinboxes expand horizontally to absorb extra space
+        self.spin_x.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.checkbox_logx = QCheckBox("LogX")
 
         self.label_y = QLabel("Y:")
         self.combo_y = QComboBox()
         self.combo_y.addItems(self.top_level_app.lookups)
         self.combo_y.setCurrentText("kcgs")
+        self.combo_y.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.spin_y = EngSpinBox()
         self.spin_y.setMinimumWidth(120)
+        self.spin_y.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.checkbox_logy = QCheckBox("LogY")
 
         self.label_z = QLabel("Z:")
         self.combo_z = QComboBox()
         self.combo_z.addItems(self.top_level_app.lookups)
         self.combo_z.setCurrentText("iden")
+        self.combo_z.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.spin_z = EngSpinBox()
         self.spin_z.setMinimumWidth(120)
+        self.spin_z.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.checkbox_logz = QCheckBox("LogZ")
 
         # Clear markers when changing axes
@@ -364,16 +372,20 @@ class ROARLookupWindow(QWidget):
         self.controls_layout.addWidget(self.checkbox_logz, 3, 3)
 
         # Set column stretch factors
-        self.controls_layout.setColumnStretch(2, 1) # Spinner column
+        # Make the spinner column stretch (absorb extra space) while other columns remain tight
+        self.controls_layout.setColumnStretch(0, 0)
+        self.controls_layout.setColumnStretch(1, 0)
+        self.controls_layout.setColumnStretch(2, 1) # Spinner column expands
+        self.controls_layout.setColumnStretch(3, 0)
 
         # Individual Checkboxes with specific callbacks
         self.checkbox_3d = QCheckBox("3-D")
         self.checkbox_contour = QCheckBox("Contour")
         self.checkbox_black_bg = QCheckBox("Black BG")
 
-        self.controls_layout.addWidget(self.checkbox_3d, 4, 1)
-        self.controls_layout.addWidget(self.checkbox_contour, 4, 2)
-
+        # We'll place the 3-D/Contour checkboxes and Copy/Settings buttons dynamically
+        # inside update_combobox_items() so their positions change depending on
+        # whether Device Params or Design Eqs is selected.
         self.copy_button = QPushButton("Copy")
         self.settings_button = QPushButton("Settings")
         self.controls_layout.addWidget(self.copy_button, 5, 0, 1, 2)
@@ -472,6 +484,34 @@ class ROARLookupWindow(QWidget):
                 self.combo_x.setCurrentIndex(0)
                 self.combo_y.setCurrentIndex(min(1, len(items) - 1))
                 self.combo_z.setCurrentIndex(min(2, len(items) - 1))
+
+        # Reposition the 3-D / Contour checkboxes and Copy/Settings buttons so that
+        # when Design Eqs is selected the checkboxes are to the left of the buttons
+        # on the same row, and when Device Params is selected the checkboxes are hidden
+        # and the buttons shift left without leaving blank space.
+        try:
+            # Remove widgets from any previous positions (safe to call repeatedly)
+            self.controls_layout.removeWidget(self.copy_button)
+            self.controls_layout.removeWidget(self.settings_button)
+            self.controls_layout.removeWidget(self.checkbox_3d)
+            self.controls_layout.removeWidget(self.checkbox_contour)
+        except Exception:
+            pass
+
+        if is_device_params:
+            # Hide the 3-D/Contour checkboxes and place Copy/Settings left-aligned
+            self.checkbox_3d.hide()
+            self.checkbox_contour.hide()
+            self.controls_layout.addWidget(self.copy_button, 5, 0, 1, 2)
+            self.controls_layout.addWidget(self.settings_button, 5, 2, 1, 2)
+        else:
+            # Show checkboxes and place them to the left of the Copy/Settings buttons
+            self.checkbox_3d.show()
+            self.checkbox_contour.show()
+            self.controls_layout.addWidget(self.checkbox_3d, 5, 0)
+            self.controls_layout.addWidget(self.checkbox_contour, 5, 1)
+            self.controls_layout.addWidget(self.copy_button, 5, 2)
+            self.controls_layout.addWidget(self.settings_button, 5, 3)
 
         if not is_device_params:
             self._update_z_controls_state()
