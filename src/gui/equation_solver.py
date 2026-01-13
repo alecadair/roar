@@ -7,7 +7,7 @@ from decimal import Decimal
 import re
 
 
-class EquationSolver:
+class ROAREquationSolver:
     def __init__(self, top_level_app, data_frames=None):
         self.equations = {}
         self.variables = {}
@@ -233,7 +233,7 @@ if __name__ == "__main__":
         'ids': [0.001, 0.0015, 0.002]
     }
     df = pd.DataFrame(data)
-    solver = EquationSolver(top_level_app=None, data_frames=[df])
+    solver = ROAREquationSolver(top_level_app=None, data_frames=[df])
     # Add equations - order doesn't matter, solver figures out dependencies
     solver.add_equation('Gm', '2 * ids / vgs')  # transconductance
     solver.add_equation('Rds', 'vds / ids')  # output resistance
