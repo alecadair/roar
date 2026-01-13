@@ -24,6 +24,7 @@ import qdarktheme
 from cid import CIDDevice
 from design_editor import *
 from generator import *
+from equation_solver import *
 
 # Environment variables
 ROAR_HOME = os.environ.get("ROAR_HOME", "")
@@ -1245,6 +1246,7 @@ class ROARApp(QMainWindow):
         #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
         self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
         # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
+        self.equation_solver = ROAREquationSolver(top_level_app=self,data_frames=[])
 
         if DEBUG_DESIGN:
             design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "cs2.json")
