@@ -57,7 +57,7 @@ class EquationSolver:
         if name in self.variables:
             del self.variables[name]
 
-    def create_matrix_from_lookup(self, lookup):
+    def create_matrix_from_lookup(self, lookup, corner_dfs):
         column_vectors = []
         split_lookup = lookup.split(":")
         device = ""
@@ -67,16 +67,18 @@ class EquationSolver:
             lookup_var = split_lookup[0]
         else:
             lookup_var = split_lookup[0]
-        corner_collection = self.top_level_app.roar_design.devices[device].corner_collection
+        #corner_collection = self.top_level_app.roar_design.devices[device].corner_collection
         #corners_to_eval = self.top_level_app.roar_design.
-        for corner in corner_collection.corners:
-            df = corner.df
+        for corner in corner_dfs:
+        #for corner in corner_collection.corners:
+            #df = corner.df
+            df = corner
             #df = corner.df
             if lookup_var in df.columns:
                 column_vectors.append(df[lookup_var].values)
         # Stack the column vectors horizontally to form a 2D matrix
         matrix = np.column_stack(column_vectors)
-        return matrix, corner_collection
+        return matrix, corner_dfs
 
     def add_variable_from_dataframe(self, dataframe):
         for column in dataframe.columns:
@@ -97,7 +99,7 @@ class EquationSolver:
             return False
         """
 
-    def evaluate_equations(self, symbols_to_add):
+    def evaluate_equations(self, symbols_to_add, corner_dfs=None):
         dependency_graph = self.build_dependency_graph()
         if self.has_cycle(dependency_graph):
             print("Error: The equations have cyclical dependencies.")
@@ -113,7 +115,7 @@ class EquationSolver:
         results = {}
         for equation in sorted_equations:
             if equation in self.lookup_vals or ":" in equation:
-                result, corner_collection = self.create_matrix_from_lookup(equation)
+                result, corner_collection = self.create_matrix_from_lookup(equation, corner_dfs=corner_dfs)
                 if equation in symbols_to_add_strings:
                     for corner in corner_collection:
                         print("TODO")
@@ -125,13 +127,19 @@ class EquationSolver:
                 continue
             result = self.evaluate_equation(equation_to_evaluate, results)
             if result is not None:
+                corner_equation_dict = {}
                 if equation in symbols_to_add_strings:
-                    for device in self.top_level_app.roar_design.devices:
-                        corner_count = 0
-                        for corner in self.top_level_app.roar_design.devices[device].corner_collection.corners:
-                            result_column = result[:, corner_count]
-                            corner.df[equation] = result_column
-                            corner_count += 1
+                    corner_count = 0
+                    for corner_df in corner_dfs:
+                        result_column = result[:, corner_count]
+                        corner_df[equation] = result_column
+                        corner_count += 1
+                    #for device in self.top_level_app.roar_design.devices:
+                    #    corner_count = 0
+                    #    for corner in self.top_level_app.roar_design.devices[device].corner_collection.corners:
+                    #        result_column = result[:, corner_count]
+                    #        corner.df[equation] = result_column
+                    #        corner_count += 1
                     #if equation not in self.top_level_app.lookups:
                     #    self.top_level_app.lookups = self.top_level_app.lookups + (equation,)
                 results[equation] = result
@@ -210,18 +218,42 @@ class EquationSolver:
 
 if __name__ == "__main__":
     # Example usage:
+    """
     data = {
         'd': [1, 2, 3],
         'e': [4, 5, 6]
     }
     df = pd.DataFrame(data)
+    
+    solver = EquationSolver(top_level_app=None, data_frames=[df])
+    """
+    data = {
+        'vgs': [0.5, 0.6, 0.7],
+        'vds': [1.0, 1.2, 1.4],
+        'ids': [0.001, 0.0015, 0.002]
+    }
+    df = pd.DataFrame(data)
+    solver = EquationSolver(top_level_app=None, data_frames=[df])
+    # Add equations - order doesn't matter, solver figures out dependencies
+    solver.add_equation('Gm', '2 * ids / vgs')  # transconductance
+    solver.add_equation('Rds', 'vds / ids')  # output resistance
+    solver.add_equation('gain', 'Gm * Rds')  # intrinsic gain
+    solver.add_equation('power', 'vds * ids')  # DC power
+    solver.add_equation('efficiency', 'gain / power')  # custom metric
+    results = solver.evaluate_equations(symbols_to_add=['gain', 'efficiency'], corner_dfs=[df])
+    # Print results
+    if results is not None:
+        for name, result in results.items():
+            print(f'{name}: {result}')
 
-    solver = EquationSolver(data_frames=[df])
-
+    """        
     # Add equations
     solver.add_equation('a', 'b + c')
     solver.add_equation('b', '2 * d')
     solver.add_equation('c', 'g - 1')
+    solver.add_equation('d', '4 - 1')
+    solver.add_equation('e', 'g - 1')
+
     solver.add_equation('j', 'i * a')
     solver.add_equation('f', '3 * e')
     solver.add_equation('g', '2')
@@ -229,7 +261,8 @@ if __name__ == "__main__":
     solver.add_equation('i', 'b*2/4')
 
     # Evaluate equations
-    results = solver.evaluate_equations()
+    results = solver.evaluate_equations(symbols_to_add=['a', 'b', 'c', 'f', 'g', 'h', 'i'])
     if results is not None:
         for name, result in results.items():
             print(f'{name}: {result}')
+    """
