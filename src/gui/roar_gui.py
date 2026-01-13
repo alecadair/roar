@@ -640,6 +640,20 @@ class ROARLookupWindow(QWidget):
         if self.lookup_window is not None:
             self.lookup_window.update_graph_from_tech_browser()
 
+    def get_corner_dfs_from_models_selected(self):
+        models_selected = self.tech_browser.get_checked_item_paths()
+        corner_dfs = []
+        for model in models_selected:
+            model_tokens = model.split(">")
+            pdk = model_tokens[1]
+            model_name = model_tokens[2]
+            length = model_tokens[3]
+            corner = model_tokens[4]
+            cid_corner = self.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
+            corner_df = cid_corner.df
+            corner_dfs.append(corner_df)
+        return corner_dfs
+
     def update_graph_from_tech_browser(self, equation_eval=None):
         if self._is_updating:
             return
@@ -1159,6 +1173,8 @@ class ROARApp(QMainWindow):
     def __init__(self, tech_dict=None):
         super().__init__()
         self.roar_design = ROARDesign()
+        roar_images = ROAR_HOME + "/images/png/"
+        self.setWindowIcon(QIcon(roar_images + "ROAR_ICON.png"))
         self.setStatusBar(QStatusBar())
         self.coord_label = QLabel("Coordinates: ")
         self.statusBar().addPermanentWidget(self.coord_label)
