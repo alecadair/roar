@@ -7,58 +7,40 @@
             "plot": false
         },
         {
-            "Symbol": "kgds1",
-            "Expression": "kgds:M1",
+            "Symbol": "kcgs1",
+            "Expression": "kcgs:M1",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kco1",
-            "Expression": "kcds:M1 + kcgs:M1 + (1 + 1/Av)*(kcds:M1)",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "Av",
-            "Expression": "kgm1/kgds1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "gbw",
-            "Expression": "100e6",
+            "Symbol": "ws",
+            "Expression": "kgm1/kcgs1",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "cload",
-            "Expression": "50e-15",
+            "Expression": "10e-12",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "wu",
+            "Expression": "100e6",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "ids0",
-            "Expression": "(gbw*cload)/kgm1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "f0",
-            "Expression": "kgm1/(2*pi*kco1)",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "ids1",
-            "Expression": "ids0*(1/(1 - gw/f0))",
+            "Expression": "(wu*cload)/kgm1",
             "disabled": false,
             "plot": false
         }
     ],
     "constraint_editor": [
         {
-            "Symbol": "positive_current",
-            "Constraint Expression": "ids1 > 0",
+            "Symbol": "min_kcgs",
+            "Constraint Expression": "kcgs1 > 0",
             "disabled": false,
             "plot": false
         }
