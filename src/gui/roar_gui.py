@@ -1,11 +1,8 @@
 import sys
 import os
-
-os.environ[
-    'QT_QPA_PLATFORM_PLUGIN_PATH'] = '/home/adair/Documents/CAD/roar_venv/lib/python3.10/site-packages/PySide6/Qt/plugins/platforms'
-
+os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 import numpy as np
-import pyqtgraph.opengl as gl
+#import pyqtgraph.opengl as gl
 
 from PyQt6.QtWidgets import (
     QDoubleSpinBox, QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout,
@@ -14,7 +11,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen
-# os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
+os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 
 # from PySide6.QtCore import Qt
 import pyqtgraph as pg
@@ -306,6 +303,8 @@ class ROARLookupWindow(QWidget):
         self.radio_device_params = QRadioButton("Device Params")
         self.radio_design_eq = QRadioButton("Design Eqs")
         self.radio_device_params.setChecked(True)
+        # Track current mode on the instance (True = Device Params, False = Design Eqs)
+        self.is_device_params_mode = self.radio_device_params.isChecked()
         self.checkbox_legend = QCheckBox("Legend")
 
         # store the radio layout on the instance so other methods can reference it
@@ -316,8 +315,9 @@ class ROARLookupWindow(QWidget):
         self.controls_layout.addLayout(self.radio_layout, 0, 0, 1, 3)
         self.controls_layout.addWidget(self.checkbox_legend, 0, 3)
 
-        # Connect toggled signal
-        self.radio_device_params.toggled.connect(self.update_combobox_items)
+        # Connect toggled signal(s) to keep mode variable in sync and update UI
+        self.radio_device_params.toggled.connect(self.on_mode_changed)
+        self.radio_design_eq.toggled.connect(self.on_mode_changed)
 
         # Individual Labels, ComboBoxes, and SpinBoxes for X, Y, and Z
         self.label_x = QLabel("X:")
@@ -406,8 +406,8 @@ class ROARLookupWindow(QWidget):
         self.plot_widget = ROARPlotWidget(parent_lookup_window=self, top_level_app=self.top_level_app)
         # Uncomment the following when not debugging
         # if DEBUG == False:
-        self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
+        self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         # Add widgets to the main horizontal splitter
         self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser + controls)
         # self.test_widget = QWidget()
@@ -516,6 +516,13 @@ class ROARLookupWindow(QWidget):
 
         if not is_device_params:
             self._update_z_controls_state()
+
+    def on_mode_changed(self, _checked):
+        """Keep the boolean mode in sync with the radio buttons and refresh UI."""
+        # Update the stored mode flag
+        self.is_device_params_mode = self.radio_device_params.isChecked()
+        # Refresh the UI to match the new mode
+        self.update_combobox_items()
 
     def update_expression_symbols(self, symbols):
         self.expression_symbols = symbols
@@ -710,19 +717,53 @@ class ROARLookupWindow(QWidget):
                 style = self.style_list[self.current_style_index]
                 graph_pen = pg.mkPen(color=QColor(color), style=style, width=1)
 
-                unit1 = ""
-                unit2 = ""
-                if param1 in self.top_level_app.lookups_units_dict:
-                    unit1 = self.top_level_app.lookups_units_dict[param1]
-                if param2 in self.top_level_app.lookups_units_dict:
-                    unit2 = self.top_level_app.lookups_units_dict[param2]
+                if self.is_device_params_mode:
+                    unit1 = ""
+                    unit2 = ""
+                    if param1 in self.top_level_app.lookups_units_dict:
+                        unit1 = self.top_level_app.lookups_units_dict[param1]
+                    if param2 in self.top_level_app.lookups_units_dict:
+                        unit2 = self.top_level_app.lookups_units_dict[param2]
 
+                    cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
+                                                                      show_plot=True, new_plot=new_plot,
+                                                                      roar_plot_widget=self.plot_widget,
+                                                                      color=color, legend_str=None, enable_3d=False,
+                                                                      pen=graph_pen, unit1=unit1, unit2=unit2)
+                else:
+                    unit1 = ""
+                    unit2 = ""
+                    equation_solver = ROAREquationSolver(top_level_app=self.top_level_app)
+                    expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
+                    for expression_sym in expressions:
+                        expression = expressions[expression_sym]
+                        equation_solver.add_equation(expression_sym, expression)
+                    result_matrix = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=[cid_corner.df])
+                    params1 = result_matrix[param1]
+                    params2 = result_matrix[param2]
+                    params1 = params1.squeeze()
+                    params2 = params2.squeeze()
+                    # Select color
+                    #if pen is None:
+                    #    pen = color_list[color_index % len(color_list)]
+                    #    color_index += 1
+                        # Plot on pg.PlotWidget
+                    curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=None)
+                    # Add to legend if legend_str is provided
+                    #if legend_str:
+                    #    self.plot_widget.legend.addItem(curve, legend_str)
 
-                cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
-                                                                  show_plot=True, new_plot=new_plot,
-                                                                  roar_plot_widget=self.plot_widget,
-                                                                  color=color, legend_str=None, enable_3d=False,
-                                                                  pen=graph_pen, unit1=unit1, unit2=unit2)
+                    # Set labels
+                    xlabel = param1 + "  [" + unit1 + "]"
+                    ylabel = param2 + "  [" + unit2 + "]"
+                    self.plot_widget.setLabel('bottom', xlabel)
+                    self.plot_widget.setLabel('left', ylabel)
+                    self.plot_widget.setTitle(f"{param2} vs {param1}")
+                    self.plot_widget.getAxis('left').setStyle(autoExpandTextSpace=True)
+                    self.plot_widget.getAxis('left').enableAutoSIPrefix(False)
+                    #print(result_matrix)
+                    #print("Design Equations plotting not yet implemented.")
+                    #continue
                 new_plot = False
                 self.plot_widget.showGrid(x=True, y=True)
                 self.current_color_index += 1
@@ -861,7 +902,6 @@ class ROARPlotWidget(pg.PlotWidget):
         self.h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
         self.plotItem.addItem(self.v_line, ignoreBounds=True)
         self.plotItem.addItem(self.h_line, ignoreBounds=True)
-
         # Add text item for coordinates
         self.coord_text = pg.TextItem(anchor=(0, 1))
         self.plotItem.addItem(self.coord_text)
@@ -1262,10 +1302,11 @@ class ROARApp(QMainWindow):
         #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
         self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
         # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
-        self.equation_solver = ROAREquationSolver(top_level_app=self,data_frames=[])
+        #self.equation_solver = ROAREquationSolver(top_level_app=self,data_frames=[])
 
         if DEBUG_DESIGN:
-            design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "cs2.json")
+            #design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "cs2.json")
+            design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "single_transistor_basic_variables.json")
             self.editor_window.load_all_data(file_path=design_path, show_success_message=False)
 
     def update_lookup_windows(self, symbols):
@@ -1402,13 +1443,13 @@ class ROARApp(QMainWindow):
 
     def show_about_dialog(self):
         """Displays an About dialog."""
-        QMessageBox.about(self, "About ROAR", "ROAR - Robust Optimal Analog Reuse\nVersion 1.0\n© 2024 ROAR Inc.")
+        QMessageBox.about(self, "About ROAR", "ROAR - Robust Optimal Analog Reuse\nVersion 1.0\n© 2026 ROAR Inc.")
 
 
 if __name__ == "__main__":
     # qdarktheme.enable_hi_dpi()
     # app = QApplication([sys.argv])
-    app = QApplication([])
+    app = QApplication(sys.argv)
     # qdarktheme.setup_theme("light")
     # qdarktheme.setup_theme("auto")
     # qdarktheme.setup_theme()

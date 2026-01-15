@@ -862,7 +862,7 @@ class CIDCorner():
 
     def plot_processes_params_roar_plot_widget(self, param1, param2, param3=None, norm_type="",
                                                show_plot=True, new_plot=True, roar_plot_widget=None,
-                                               color=None, legend_str=None, enable_3d=False, pen=None, unit1="", unit2=""):
+                                               color=None, legend_str=None, enable_3d=False, pen=None, unit1="", unit2="", eq_data1=None, eq_data2=None):
         color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
         color_index = 0
 

@@ -21,11 +21,18 @@ class ROAREquationSolver:
         self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
                             'va', 'vds', 'vdsat', 'vgs', 'vth', 'pi')
-        self.corners = []
         if data_frames:
             for df in data_frames:
                 self.data_frames.append(df)
+
                 #self.add_variable_from_dataframe(df)
+    def clear_all_equations(self):
+        self.equations = {}
+        self.variables = {}
+        self.constants = {}
+        self.corners = []
+        self.data_frames = []
+
 
     def add_equation(self, symbol, equation):
         if ":" in equation:
@@ -79,6 +86,7 @@ class ROAREquationSolver:
         # Stack the column vectors horizontally to form a 2D matrix
         matrix = np.column_stack(column_vectors)
         return matrix, corner_dfs
+        #return matrix
 
     def add_variable_from_dataframe(self, dataframe):
         for column in dataframe.columns:

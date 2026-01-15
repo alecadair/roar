@@ -205,6 +205,25 @@ class ROAREditorWindow(QWidget):
                 symbols.append(symbol)
         return symbols
 
+    def get_expressions_and_constraints(self):
+        expressions = {}
+        for i in range(self.expression_editor.tree.topLevelItemCount()):
+            item = self.expression_editor.tree.topLevelItem(i)
+            symbol = item.text(0)
+            expr = item.text(1)
+            if symbol:
+                expressions[symbol] = expr
+
+        constraints = {}
+        for i in range(self.constraint_editor.tree.topLevelItemCount()):
+            item = self.constraint_editor.tree.topLevelItem(i)
+            symbol = item.text(0)
+            constraint_expr = item.text(1)
+            if symbol:
+                constraints[symbol] = constraint_expr
+
+        return expressions, constraints
+
     def plot_expression(self):
         selected_items = self.expression_editor.tree.selectedItems()
         if not selected_items:
