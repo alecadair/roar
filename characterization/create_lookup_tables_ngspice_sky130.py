@@ -8,6 +8,8 @@
 import os
 import shutil
 import re
+from colorama import Fore, Style, init
+init(autoreset=True)
 
 def create_netlist_from_template(netlist_template, length, corner, temperature):
     if os.path.exists(netlist_template):
@@ -32,11 +34,12 @@ def create_lookup_tables(tech_name=""):
     pdk = "sky130"
     luts_dir = "LUTs_" + tech_name
     netlists_dir = "netlists_" + tech_name
-    if os.path.exists(luts_dir):
-        shutil.rmtree(luts_dir)
-    os.system("mkdir " + luts_dir)
-    models = ["01v8"]
-
+    #if os.path.exists(luts_dir):
+    #    shutil.rmtree(luts_dir)
+    if not os.path.exists(luts_dir):
+        os.system("mkdir " + luts_dir)
+    #models = ["01v8"]
+    models = ["01v8_lvt"]
     nfet = "nfet"
     pfet = "pfet"
 
@@ -75,9 +78,11 @@ def create_lookup_tables(tech_name=""):
     ptthot = pfet + tt + hot
     pffhot = pfet + ff + hot
 
-    lengths = [".150", ".200", ".250", ".300", ".500", "1.000"]
-    lengths = [".150", "0.300", "0.600", "1.00"]
-    lengths = ["0.500"]
+    #lengths = [".150", ".200", ".250", ".300", ".500", "1.000"]
+    #lengths = [".350", ".500", "1.000"]
+    #lengths = [".150", "0.300", "0.600", "1.00"]
+    #lengths = ["0.500"]
+    lengths = [".150", ".200", ".250", ".300"]
     width = "1.0"
     ncorners = [nsscold, nttcold, nffcold,
                 nssroom, nttroom, nffroom,
@@ -134,8 +139,10 @@ def create_lookup_tables(tech_name=""):
                     with open(netlist_name, 'w') as file:
                         file.write(edited_netlist)
                     print("Running characterization...")
+                    print(f"{Fore.GREEN}Temperature: {temp}°C, Corner: {corner}, Length: {length}µm{Style.RESET_ALL}")
                     os.system("ngspice -b -n " + netlist_name)
                     if os.path.exists(n_length_dir) and os.path.exists("nfet_cid_characterization.csv"):
+                        #shutil.copy("nfet_cid_characterization.csv", "nfet_cid_characterization_preprocess.csv")
                         with open("nfet_cid_characterization.csv", 'r') as file:
                             lines = file.readlines()
                         with open("nfet_cid_characterization.csv", 'w') as file:
@@ -146,7 +153,7 @@ def create_lookup_tables(tech_name=""):
                                     file.write(line)
                                 else:
                                     #file.write(line.rstrip('\n') + "0.42," + str(length) + "," + pdk + "\n")
-                                    file.write(line.rstrip('\n') + "0.840," + str(length) + "," + pdk + "\n")
+                                    file.write(line.rstrip('\n') + "1.00," + str(length) + "," + pdk + "\n")
                         with open("pfet_cid_characterization.csv", 'r') as file:
                             lines = file.readlines()
                         with open("pfet_cid_characterization.csv", 'w') as file:
@@ -157,7 +164,7 @@ def create_lookup_tables(tech_name=""):
                                     #file.write(line.rstrip('\n') + ",W,L,pdk,\n")
                                 else:
                                     #file.write(line.rstrip('\n') + "0.42," + str(length) + "," + pdk + "\n")
-                                    file.write(line.rstrip('\n') + "0.840," + str(length) + "," + pdk + "\n")
+                                    file.write(line.rstrip('\n') + "1.00," + str(length) + "," + pdk + "\n")
                         os.system("mv nfet_cid_characterization.csv " + n_length_dir + "/nfet" + corner_name + ".csv")
                     if os.path.exists(n_length_dir) and os.path.exists("pfet_cid_characterization.csv"):
                         os.system("mv pfet_cid_characterization.csv " + p_length_dir + "/pfet" + corner_name + ".csv")

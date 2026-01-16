@@ -213,7 +213,7 @@ class CIDDevice:
                 i = i + 1
         if len(self.corners) != 0:
             pdk_col = self.corners[0].df["pdk"]
-            l_col = self.corners[0].df["L"]
+            l_col = self.corners[0].df["l"]
             self.pdk = pdk_col[0]
             self.length = l_col[0]
 
@@ -361,12 +361,19 @@ class CIDCorner():
             return(False)
         self.vdd = vdd
         self.df = pd.read_csv(lut_csv, skipinitialspace=True)
+        self.df.columns = self.df.columns.str.lower()
         pdk_col = self.df["pdk"]
         self.pdk = pdk_col[0]
         self.lut_csv = lut_csv
-        length_col = self.df["L"]
+        #length_col = None
+        #if "L" in self.df.columns:
+        #    length_col = self.df["L"]
+        #else:
+        length_col = self.df["l"]
         if "ids" not in self.df.columns:
             self.df["ids"] = self.df["id"]
+        if "gm_id" in self.df.columns and "kgm" not in self.df.columns:
+            self.df["kgm"] = self.df["gm_id"]
         self.length = length_col[0]
         if corner_name == "":
             self.corner_name = corner_name
@@ -465,7 +472,7 @@ class CIDCorner():
         if not self.check_if_param_exists("iden"):
             iden_array = []
             ids_col = self.df["ids"]
-            width = self.df["W"][0]
+            width = self.df["w"][0]
             if self.pdk == "sky130":
                 width = width*1e-6
             for i in range(len(ids_col)):
