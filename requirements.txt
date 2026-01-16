@@ -7,5 +7,5 @@ sympy
 PyQt6==6.8
 pyqtgraph>=0.13
 PyOpenGL
-# PySide6
+colorama
 pyqtdarktheme
