@@ -31,7 +31,7 @@ def fix_data_line(text):
     return text
 
 def create_lookup_tables(tech_name=""):
-    pdk = "sky130"
+    pdk = "ihp-sg13g2"
     luts_dir = "LUTs_" + tech_name
     netlists_dir = "netlists_" + tech_name
     #if os.path.exists(luts_dir):
@@ -39,15 +39,15 @@ def create_lookup_tables(tech_name=""):
     if not os.path.exists(luts_dir):
         os.system("mkdir " + luts_dir)
     #models = ["01v8"]
-    models = ["01v8_hvt"]
+    models = ["sg13_lv"]
     nfet = "nfet"
     pfet = "pfet"
 
     #models = [nfet, pfet]
 
-    ss = "ss"
-    tt = "tt"
-    ff = "ff"
+    ss = "mos_ss"
+    tt = "mos_tt"
+    ff = "mos_ff"
 
     corners = [ss, tt, ff]
     #corners = [tt]
@@ -57,7 +57,7 @@ def create_lookup_tables(tech_name=""):
     hot = "75"
 
     temperatures = [cold, room, hot]
-
+    #temperatures = [room]
     nsscold = nfet + ss + cold
     nttcold = nfet + tt + cold
     nffcold = nfet + ff + cold
@@ -78,7 +78,7 @@ def create_lookup_tables(tech_name=""):
     ptthot = pfet + tt + hot
     pffhot = pfet + ff + hot
 
-    lengths = [".150", ".200", ".250", ".300", ".500", "1.000"]
+    lengths = [".130u", "0.150u", ".200u", ".250u", ".300u", ".500u", "1.000u"]
     #lengths = [".350", ".500", "1.000"]
     #lengths = [".150", "0.300", "0.600", "1.00"]
     #lengths = ["0.500"]
@@ -172,5 +172,5 @@ def create_lookup_tables(tech_name=""):
 
 
 if __name__ == "__main__":
-    create_lookup_tables("SKY130")
+    create_lookup_tables("IHP130")
 print("characterization done")

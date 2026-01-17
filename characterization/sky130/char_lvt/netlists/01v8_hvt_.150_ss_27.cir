@@ -12,8 +12,8 @@ xpn npdrain npdrain psource psource sky130_fd_pr__pfet_01v8_hvt L=length_n W=wid
 * geometry parameters
 .param width_p = 1
 .param width_n = 1
-.param length_p = _LENGTH // in micrometers
-.param length_n = _LENGTH // in micrometers
+.param length_p = .150 // in micrometers
+.param length_n = .150 // in micrometers
 .param w = 1
 
 * sweep parameters
@@ -21,9 +21,9 @@ xpn npdrain npdrain psource psource sky130_fd_pr__pfet_01v8_hvt L=length_n W=wid
 * .param stop = 1m
 * .param points_per_decade 25
 
-.temp _TEMPERATURE
+.temp 27
 
-.lib /opt/pdk/open_pdks/sky130/sky130A/libs.tech/ngspice/sky130.lib.spice _CORNER
+.lib /opt/pdk/open_pdks/sky130/sky130A/libs.tech/ngspice/sky130.lib.spice ss
 .control
 
 let start = 1n
