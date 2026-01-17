@@ -78,7 +78,10 @@ def create_lookup_tables(tech_name=""):
     ptthot = pfet + tt + hot
     pffhot = pfet + ff + hot
 
-    lengths = [".130u", "0.150u", ".200u", ".250u", ".300u", ".500u", "1.000u"]
+    lengths = [".130u", ".150u", ".200u", ".250u", ".300u", ".500u", "1.000u", "2.000u", "5.000u"]
+    #lengths = [".720u", "1.000u", "2.000u", "3.000u", "5.000u"]
+
+
     #lengths = [".350", ".500", "1.000"]
     #lengths = [".150", "0.300", "0.600", "1.00"]
     #lengths = ["0.500"]
@@ -164,7 +167,7 @@ def create_lookup_tables(tech_name=""):
                                     #file.write(line.rstrip('\n') + ",W,L,pdk,\n")
                                 else:
                                     #file.write(line.rstrip('\n') + "0.42," + str(length) + "," + pdk + "\n")
-                                    file.write(line.rstrip('\n') + "1.00," + str(length) + "," + pdk + "\n")
+                                    file.write(line.rstrip('\n') + "2.00," + str(length) + "," + pdk + "\n")
                         os.system("mv nfet_cid_characterization.csv " + n_length_dir + "/nfet" + corner_name + ".csv")
                     if os.path.exists(n_length_dir) and os.path.exists("pfet_cid_characterization.csv"):
                         os.system("mv pfet_cid_characterization.csv " + p_length_dir + "/pfet" + corner_name + ".csv")

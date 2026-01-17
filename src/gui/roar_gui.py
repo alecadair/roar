@@ -1299,9 +1299,9 @@ class ROARApp(QMainWindow):
 
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
         predictive_28 = ROAR_CHARACTERIZATION + "/predictive_28/LUTs_1V8_mac"
-        ihp130_luts = ROAR_CHARACTERIZATION + "/ihp130/LUTS_IHP130"
+        ihp130_luts = ROAR_CHARACTERIZATION + "/ihp130/LUTs_IHP130"
         #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
-        self.add_tech_luts(dir=sky130_luts, pdk_name="sky130")
+        self.add_tech_luts(dir=sky130_luts, pdk_name="SKY130A")
         self.add_tech_luts(dir=ihp130_luts, pdk_name="IHP-SG13G2")
 
         # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
