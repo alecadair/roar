@@ -876,13 +876,13 @@ class CIDCorner():
         if roar_plot_widget is None:
             raise ValueError("A valid pg.PlotWidget instance must be provided.")
 
-        if new_plot:
-            print("TODO: NEW PLOT")
+        #if new_plot:
+            #print("TODO: NEW PLOT")
             #roar_plot_widget.clear()
 
         # Ensure the plot widget has a legend
-        if not hasattr(roar_plot_widget, "legend"):
-            print("TODO: Create legend on plot")
+        #if not hasattr(roar_plot_widget, "legend"):
+            #print("TODO: Create legend on plot")
             #roar_plot_widget.legend = pg.LegendItem(offset=(10, 10))  # Create legend
             #roar_plot_widget.legend.setParentItem(roar_plot_widget.getPlotItem())  # Attach legend to the plot
 
