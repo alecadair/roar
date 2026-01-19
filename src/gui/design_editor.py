@@ -169,12 +169,18 @@ class BaseEditor(QWidget):
         self.enable_disable_button.clicked.connect(self.toggle_enable_disable_row)
         button_layout.addWidget(self.enable_disable_button)
 
-        self.plot_button = QPushButton(self.plot_button_text)
-        if self.plot_command is not None:
-            self.plot_button.clicked.connect(self.plot_command)
+        # Only create the plot button if a label was provided. This allows
+        # callers to suppress the button by passing None/'' for
+        # `plot_button_text` (used for expression editor / constraint editor).
+        if self.plot_button_text:
+            self.plot_button = QPushButton(self.plot_button_text)
+            if self.plot_command is not None:
+                self.plot_button.clicked.connect(self.plot_command)
+            else:
+                self.plot_button.clicked.connect(self.plot_row)
+            button_layout.addWidget(self.plot_button)
         else:
-            self.plot_button.clicked.connect(self.plot_row)
-        button_layout.addWidget(self.plot_button)
+            self.plot_button = None
 
         container_layout.addLayout(button_layout)
 
@@ -510,6 +516,27 @@ class ROAREditorWindow(QWidget):
         super().__init__()
         self.setWindowTitle("Editor Window")
         self.top_level_app = top_level_app
+        # Snapping behavior configuration
+        # When the window width reaches this fraction of the available
+        # parent/screen width, the editor will "snap" to fill horizontally.
+        # Set between 0.0 and 1.0. Default 0.75 (75%).
+        self._snap_threshold_ratio = 0.75
+        self._snapped = False
+
+        # Make the editor skinnier by default: set a reasonable minimum size
+        # and start the window at that minimum so the editor opens compact.
+        # Tweak these values if you want a different compact size.
+        try:
+            # Make the editor skinnier by default: smaller minimum width.
+            self.setMinimumSize(300, 300)
+        except Exception:
+            pass
+        try:
+            # Start the window at the minimum size so the editor opens compact.
+            self.resize(self.minimumSize())
+        except Exception:
+            pass
+
         layout = QVBoxLayout()
         # COPILOT EDITS
         layout.setContentsMargins(0, 0, 0, 0)
@@ -519,9 +546,11 @@ class ROAREditorWindow(QWidget):
 
         splitter = QSplitter(Qt.Orientation.Vertical)  # Create a vertical splitter
 
-        self.expression_editor = BaseEditor("Expression Editor", ["Symbol", "Expression"])
-        self.constraint_editor = BaseEditor("Constraint Editor", ["Symbol", "Constraint Expression"], plot_button_text="Show Constraint")
-        self.instance_table = BaseEditor("Instance Table", ["Instance Name", "kgm", "ID", "W", "L"], plot_button_text="Set LUTs")
+        # Create editors without plot buttons for Expression and Constraint
+        self.expression_editor = BaseEditor("Expression Editor", ["Symbol", "Expression"], plot_button_text=None)
+        self.constraint_editor = BaseEditor("Constraint Editor", ["Symbol", "Constraint Expression"], plot_button_text=None)
+        # Create instance table without the Set LUTs plot button
+        self.instance_table = BaseEditor("Instance Table", ["Instance Name", "kgm", "ID", "W", "L"], plot_button_text=None)
 
         splitter.addWidget(self.expression_editor)
         splitter.addWidget(self.constraint_editor)
@@ -533,15 +562,13 @@ class ROAREditorWindow(QWidget):
         self.save_button = QPushButton("Save")
         self.evaluate_button = QPushButton("Evaluate")
         self.open_editor_button = QPushButton("Open Editor")
-        self.plot_equation_button = QPushButton("Plot Equation")
+        # Removed the Plot Equation button per request
         self.save_button.clicked.connect(self.save_all_data)
-        self.plot_equation_button.clicked.connect(self.plot_expression)
 
         self.load_button = QPushButton("Load")
         self.load_button.clicked.connect(self.load_all_data)
         button_layout.addWidget(self.evaluate_button)
         button_layout.addWidget(self.open_editor_button)
-        button_layout.addWidget(self.plot_equation_button)
         button_layout.addWidget(self.load_button)
         button_layout.addWidget(self.save_button)
 
@@ -631,6 +658,38 @@ class ROAREditorWindow(QWidget):
                 QMessageBox.critical(self, "Error", f"Error decoding JSON from {file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Get the available width from the parent or screen
+        available_width = self.parent().width() if self.parent() else QApplication.primaryScreen().availableGeometry().width()
+
+        # Calculate the threshold width for snapping
+        threshold_width = available_width * self._snap_threshold_ratio
+
+        if self.width() > threshold_width and not self._snapped:
+            # Snap to fill the available width
+            new_width = available_width
+            self.resize(new_width, self.height())
+            self._snapped = True
+        elif self.width() <= threshold_width and self._snapped:
+            # Unsnap if the window is resized smaller than the threshold
+            self._snapped = False
+
+    def set_snap_threshold_ratio(self, ratio: float):
+        """Set the snap threshold ratio (0.0 - 1.0). When the editor width
+        exceeds available_width * ratio it will snap to fill the available width.
+        """
+        try:
+            r = float(ratio)
+        except Exception:
+            return
+        if r < 0.0:
+            r = 0.0
+        if r > 1.0:
+            r = 1.0
+        self._snap_threshold_ratio = r
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
