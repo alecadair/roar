@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout,
     QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem,
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
-    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton)
+    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton, QTabBar)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen
 os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
@@ -284,9 +284,13 @@ class ROARLookupWindow(QWidget):
         # Create the vertical splitter to split tech browser (top) from controls (bottom)
         self.tech_splitter = QSplitter(Qt.Orientation.Vertical, self)
 
-        # Initialize the tech browser widget
-        self.tech_browser = ROARTechBrowser(self, lookup_window=self, top_level_app=self.top_level_app,
-                                            tech_dict=tech_dict)
+        # Initialize the tech browser widget. Use the top-level app's tech_dict
+        # when available to avoid referencing a possibly undefined global `tech_dict`.
+        try:
+            td = self.top_level_app.tech_dict if (self.top_level_app and hasattr(self.top_level_app, 'tech_dict')) else None
+        except Exception:
+            td = None
+        self.tech_browser = ROARTechBrowser(self, lookup_window=self, top_level_app=self.top_level_app, tech_dict=td)
 
         # if DEBUG == False:
         self.tech_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -1296,8 +1300,28 @@ class ROARApp(QMainWindow):
         self.editor_window = ROAREditorWindow(top_level_app=self)
         splitter_h.addWidget(self.editor_window)
 
-        self.graph_grid = ROARGraphGrid(parent=self, top_level_app=self)
-        splitter_h.addWidget(self.graph_grid)
+        # Create a tab widget to hold multiple ROARGraphGrid instances (one per tab)
+        from PyQt6.QtWidgets import QTabWidget, QPushButton
+
+        self.graph_tabs = QTabWidget()
+        self.graph_tabs.setMovable(True)
+        self.graph_tabs.setTabsClosable(True)
+        self.graph_tabs.tabCloseRequested.connect(lambda idx: self.close_graph_tab(idx))
+
+        splitter_h.addWidget(self.graph_tabs)
+
+        # Create first default tab and ensure a '+' tab exists at the far right
+        self._graph_tab_count = 0
+        # Create an initial real tab
+        self.create_new_graph_tab()
+        # Ensure the add-tab ('+') exists as the last tab
+        self.ensure_plus_tab()
+
+        # Keep a reference to the active ROARGraphGrid for backward compatibility
+        self.graph_grid = self.graph_tabs.currentWidget()
+
+        # When the active tab changes, update self.graph_grid
+        self.graph_tabs.currentChanged.connect(self._on_active_tab_changed)
 
         # Connect the expressions_changed signal to a slot in ROARApp
         self.editor_window.expressions_changed.connect(self.update_lookup_windows)
@@ -1318,7 +1342,7 @@ class ROARApp(QMainWindow):
         self.add_tech_luts(dir=sky130_luts, pdk_name="SKY130A")
         #self.add_tech_luts(dir=ihp130_luts, pdk_name="IHP-SG13G2")
 
-        # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
+        # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")i
         #self.equation_solver = ROAREquationSolver(top_level_app=self,data_frames=[])
 
         if DEBUG_DESIGN:
@@ -1327,8 +1351,23 @@ class ROARApp(QMainWindow):
             self.editor_window.load_all_data(file_path=design_path, show_success_message=False)
 
     def update_lookup_windows(self, symbols):
-        for window in self.graph_grid.lookup_windows:
-            window.update_expression_symbols(symbols)
+        # Broadcast the updated expression symbols to all lookup windows on all tabs
+        try:
+            for i in range(self.graph_tabs.count()):
+                widget = self.graph_tabs.widget(i)
+                if isinstance(widget, ROARGraphGrid):
+                    for window in getattr(widget, 'lookup_windows', []):
+                        try:
+                            window.update_expression_symbols(symbols)
+                        except Exception:
+                            pass
+        except Exception:
+            # Fall back to updating the active graph_grid if any error occurs
+            try:
+                for window in getattr(self.graph_grid, 'lookup_windows', []):
+                    window.update_expression_symbols(symbols)
+            except Exception:
+                pass
 
     def add_tech_luts(self, dir, pdk_name):
         print("Adding technology from directory" + str(dir))
@@ -1339,7 +1378,11 @@ class ROARApp(QMainWindow):
             if os.path.isdir(f):
                 model_name = filename
                 self.create_devices_from_model_dir(pdk_name=pdk_name, model_name=model_name, model_dir=f)
-        self.graph_grid.add_tech_luts(dirname=dir, pdk_name=pdk_name)
+        # Update all tabs with the new technology LUTs
+        for i in range(self.graph_tabs.count()):
+            widget = self.graph_tabs.widget(i)
+            if isinstance(widget, ROARGraphGrid):
+                widget.add_tech_luts(dirname=dir, pdk_name=pdk_name)
         return (self.tech_dict)
 
     def create_devices_from_model_dir(self, pdk_name, model_name, model_dir):
@@ -1464,47 +1507,197 @@ class ROARApp(QMainWindow):
         """Displays an About dialog."""
         QMessageBox.about(self, "About ROAR", "ROAR - Robust Optimal Analog Reuse\nVersion 1.0\n© 2026 ROAR Inc.")
 
+    # ----------------- Tab management for graph grids -----------------
+    def create_new_graph_tab(self):
+        """Create a new tab containing its own ROARGraphGrid."""
+        try:
+            self._graph_tab_count += 1
+            tab_name = f"Graph {self._graph_tab_count}"
+            grid = ROARGraphGrid(parent=self, top_level_app=self)
+            # If a '+' tab exists at the end, insert before it so '+' stays last
+            plus_exists = (self.graph_tabs.count() > 0 and self.graph_tabs.tabText(self.graph_tabs.count() - 1) == '+')
+            insert_pos = self.graph_tabs.count() - 1 if plus_exists else self.graph_tabs.count()
+            self.graph_tabs.insertTab(insert_pos, grid, tab_name)
+            # Make the new tab the current tab
+            self.graph_tabs.setCurrentIndex(insert_pos)
+            # Update active reference
+            self.graph_grid = grid
+            # Ensure '+' tab remains at the end
+            self.ensure_plus_tab()
+            return grid
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to create graph tab: {e}")
+            return None
+
+    def close_graph_tab(self, index: int):
+        """Close the tab at `index`. Always ensure at least one tab remains."""
+        try:
+            if index < 0 or index >= self.graph_tabs.count():
+                return
+            # Do not allow closing the '+' add-tab
+            if self.graph_tabs.tabText(index) == '+':
+                return
+            widget = self.graph_tabs.widget(index)
+            self.graph_tabs.removeTab(index)
+            try:
+                widget.deleteLater()
+            except Exception:
+                pass
+            # If no tabs left, create a new one
+            # Ensure there's at least one real tab (not counting '+')
+            real_tabs = [i for i in range(self.graph_tabs.count()) if self.graph_tabs.tabText(i) != '+']
+            if not real_tabs:
+                self.create_new_graph_tab()
+            # Update active reference
+            cur = self.graph_tabs.currentWidget()
+            self.graph_grid = cur
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to close tab: {e}")
+
+    def _on_tab_context_menu(self, pos):
+        """Show context menu for tab operations: Rename, Close, Set Color."""
+        try:
+            tab_bar = self.graph_tabs.tabBar()
+            idx = tab_bar.tabAt(pos)
+            if idx < 0:
+                return
+            # Do not allow context menu on the '+' add-tab
+            if self.graph_tabs.tabText(idx) == '+':
+                return
+            menu = QMenu()
+            rename_act = menu.addAction("Rename")
+            close_act = menu.addAction("Close")
+            color_act = menu.addAction("Set Color")
+            action = menu.exec(tab_bar.mapToGlobal(pos))
+            if action == rename_act:
+                text, ok = QInputDialog.getText(self, "Rename Tab", "New name:", text=self.graph_tabs.tabText(idx))
+                if ok and text:
+                    self.graph_tabs.setTabText(idx, text)
+            elif action == close_act:
+                self.close_graph_tab(idx)
+            elif action == color_act:
+                color = QColorDialog.getColor()
+                if color.isValid():
+                    # show a colored icon on the tab
+                    pix = QPixmap(16, 16)
+                    pix.fill(color)
+                    self.graph_tabs.setTabIcon(idx, QIcon(pix))
+        except Exception:
+            pass
+
+    def _on_active_tab_changed(self, index: int):
+        """Update active graph_grid reference when the selected tab changes."""
+        try:
+            # If the user activated the special '+' tab, create a new tab and switch to it
+            if index >= 0 and self.graph_tabs.tabText(index) == '+':
+                new_grid = self.create_new_graph_tab()
+                # create_new_graph_tab sets current and graph_grid already
+                return
+            widget = self.graph_tabs.widget(index)
+            self.graph_grid = widget
+        except Exception:
+            self.graph_grid = None
+
+    def ensure_plus_tab(self):
+        """Ensure there's a '+' tab at the end of the tab bar. If one exists elsewhere, normalize it to the end."""
+        try:
+            count = self.graph_tabs.count()
+            if count == 0:
+                # No tabs: just add a '+' placeholder
+                placeholder = QWidget()
+                placeholder.setEnabled(False)
+                self.graph_tabs.addTab(placeholder, '+')
+                # Remove the close ('x') button for the '+' tab
+                try:
+                    tab_bar = self.graph_tabs.tabBar()
+                    last = self.graph_tabs.count() - 1
+                    tab_bar.setTabButton(last, QTabBar.ButtonPosition.RightSide, None)
+                except Exception:
+                    pass
+                return
+            # If last tab is already '+', we're done
+            if self.graph_tabs.tabText(count - 1) == '+':
+                return
+            # If '+' exists elsewhere, remove it
+            plus_index = None
+            for i in range(count):
+                if self.graph_tabs.tabText(i) == '+':
+                    plus_index = i
+                    break
+            if plus_index is not None:
+                w = self.graph_tabs.widget(plus_index)
+                self.graph_tabs.removeTab(plus_index)
+                try:
+                    w.deleteLater()
+                except Exception:
+                    pass
+            # Add a disabled placeholder tab labeled '+' at the end
+            placeholder = QWidget()
+            placeholder.setEnabled(False)
+            self.graph_tabs.addTab(placeholder, '+')
+            # Remove the close ('x') button for the '+' tab
+            try:
+                tab_bar = self.graph_tabs.tabBar()
+                last = self.graph_tabs.count() - 1
+                tab_bar.setTabButton(last, QTabBar.ButtonPosition.RightSide, None)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
 if __name__ == "__main__":
-    # qdarktheme.enable_hi_dpi()
-    # app = QApplication([sys.argv])
-    print("\nInitializing ROAR GUI Application...\n")
-    app = QApplication(sys.argv)
-    # qdarktheme.setup_theme("light")
-    # qdarktheme.setup_theme("auto")
-    # qdarktheme.setup_theme()
-    # test = "test_tech_browser"
-    # test = "test_plot_widget"
-    # test = "test_lookup_window"
-    # test = "test_window_grid"
-    # window = QMainWindow()
-    # sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
-    # tech_dict = ROARTechBrowser.create_tech_dict_from_dir(sky130_luts, "Skywater130A")
-    tech_dict = None
-    window = None
-    test = ""
+    # Wrap execution in a try/except to surface any exceptions when running
+    # from environments (like PyCharm) that might otherwise swallow them.
+    try:
+        print("\nInitializing ROAR GUI Application...\n")
+        # If running on Linux without a DISPLAY or Wayland session, Qt may exit
+        # silently. Detect that and print a helpful message rather than failing
+        # with no output.
+        if sys.platform.startswith('linux'):
+            has_display = bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
+            if not has_display:
+                print("ERROR: No X11/Wayland display found (DISPLAY or WAYLAND_DISPLAY not set).")
+                print("If you're running headless, start with Xvfb: e.g.")
+                print("  xvfb-run -s \"-screen 0 1280x800x24\" python3 src/gui/roar_gui.py")
+                print("Or run this from a desktop session where DISPLAY is set.")
+                sys.exit(1)
 
-    window = None
+        app = QApplication(sys.argv)
+        # qdarktheme.setup_theme("light")
+        # qdarktheme.setup_theme("auto")
+        # qdarktheme.setup_theme()
 
-    if test in ["test_tech_browser", "test_plot_widget", "test_lookup_window", "test_window_grid"]:
-        window = QMainWindow()
+        tech_dict = None
+        window = None
+        test = ""
 
-    if test == "test_tech_browser":
-        test_widget = ROARTechBrowser(window, None, None, tech_dict={})
-        test_widget.add_tech_luts(dirname=sky130_luts, pdk_name="Skywater130A")
-        window.setCentralWidget(test_widget)
-    elif test == "test_plot_widget":
-        test_widget = ROARPlotWidget(window)
-        window.setCentralWidget(test_widget)
-    elif test == "test_lookup_window":
-        test_widget = ROARLookupWindow(window, None, None, tech_dict=tech_dict)
-        window.setCentralWidget(test_widget)
-    elif test == "test_window_grid":
-        test_widget = ROARGraphGrid(window, None, tech_dict=tech_dict)
-        window.setCentralWidget(test_widget)
-    else:
-        window = ROARApp()
-        # window = ROARApp(tech_dict)
+        if test in ["test_tech_browser", "test_plot_widget", "test_lookup_window", "test_window_grid"]:
+            window = QMainWindow()
 
-    window.show()
-    sys.exit(app.exec())
+        if test == "test_tech_browser":
+            test_widget = ROARTechBrowser(window, None, None, tech_dict={})
+            test_widget.add_tech_luts(dirname=sky130_luts, pdk_name="Skywater130A")
+            window.setCentralWidget(test_widget)
+        elif test == "test_plot_widget":
+            test_widget = ROARPlotWidget(window)
+            window.setCentralWidget(test_widget)
+        elif test == "test_lookup_window":
+            test_widget = ROARLookupWindow(window, None, None, tech_dict=tech_dict)
+            window.setCentralWidget(test_widget)
+        elif test == "test_window_grid":
+            test_widget = ROARGraphGrid(window, None, tech_dict=tech_dict)
+            window.setCentralWidget(test_widget)
+        else:
+            window = ROARApp()
+
+        print("Showing main window...")
+        window.show()
+        print("Starting Qt event loop...")
+        ret = app.exec()
+        print(f"Qt event loop exited with return code: {ret}")
+        sys.exit(ret)
+    except Exception:
+        import traceback, sys as _sys
+        traceback.print_exc()
+        # Ensure non-zero exit on exception
+        _sys.exit(1)
