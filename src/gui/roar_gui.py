@@ -257,6 +257,49 @@ class ROARTechBrowser(QWidget):
                     corner_item.setCheckState(0, Qt.CheckState.Unchecked)
                     length_item.addChild(corner_item)
 
+    def populate_from_tech_dict(self):
+        """Rebuild the tree widget from the current self.tech_dict.
+
+        This is used when a new tab is created so its tech browser shows the
+        same PDK/model/length/corner structure as other tabs.
+        """
+        try:
+            self.tree.clear()
+            # Recreate a root PDK container to match previous behavior
+            self.pdk_item = QTreeWidgetItem(self.tree, ["PDK"])
+            self.pdk_item.setFlags(self.pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            self.pdk_item.setCheckState(0, Qt.CheckState.Unchecked)
+            self.tree.addTopLevelItem(self.pdk_item)
+
+            if not self.tech_dict:
+                return
+
+            for pdk_name, models in self.tech_dict.items():
+                pdk_item = QTreeWidgetItem([pdk_name])
+                pdk_item.setFlags(pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                pdk_item.setCheckState(0, Qt.CheckState.Unchecked)
+                self.pdk_item.addChild(pdk_item)
+
+                for model, model_dict in models.items():
+                    model_item = QTreeWidgetItem([model])
+                    model_item.setFlags(model_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                    model_item.setCheckState(0, Qt.CheckState.Unchecked)
+                    pdk_item.addChild(model_item)
+
+                    for length, length_dict in model_dict.items():
+                        length_item = QTreeWidgetItem([length])
+                        length_item.setFlags(length_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                        length_item.setCheckState(0, Qt.CheckState.Unchecked)
+                        model_item.addChild(length_item)
+
+                        for corner_name in length_dict.get("corners", {}).keys():
+                            corner_item = QTreeWidgetItem([corner_name])
+                            corner_item.setFlags(corner_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                            corner_item.setCheckState(0, Qt.CheckState.Unchecked)
+                            length_item.addChild(corner_item)
+        except Exception:
+            pass
+
 
 class ROARLookupWindow(QWidget):
     def __init__(self, parent, expand_callback, top_level_app, graph_grid=None):
@@ -753,36 +796,105 @@ class ROARLookupWindow(QWidget):
                     unit1 = ""
                     unit2 = ""
                     equation_solver = ROAREquationSolver(top_level_app=self.top_level_app)
+                    # Give the solver access to the current corner data frames for lookup substitution
+                    equation_solver.corners = [cid_corner.df]
                     expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
                     for expression_sym in expressions:
                         expression = expressions[expression_sym]
                         equation_solver.add_equation(expression_sym, expression)
                     result_matrix = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=[cid_corner.df])
+                    # Defensive checks: ensure result_matrix exists and contains the requested params
+                    if not result_matrix or not isinstance(result_matrix, dict):
+                        msg = f"Design Eq solver returned no results for {param1},{param2}"
+                        print(msg)
+                        try:
+                            if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
+                                self.top_level_app.statusBar().showMessage(msg, 5000)
+                        except Exception:
+                            pass
+                        continue
+                    if param1 not in result_matrix or param2 not in result_matrix:
+                        msg = f"Design Eq results missing requested symbols: {param1} or {param2}. Available: {list(result_matrix.keys())}"
+                        print(msg)
+                        try:
+                            if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
+                                self.top_level_app.statusBar().showMessage(msg, 5000)
+                        except Exception:
+                            pass
+                        continue
                     params1 = result_matrix[param1]
                     params2 = result_matrix[param2]
-                    params1 = params1.squeeze()
-                    params2 = params2.squeeze()
-                    # Select color
-                    #if pen is None:
-                    #    pen = color_list[color_index % len(color_list)]
-                    #    color_index += 1
-                        # Plot on pg.PlotWidget
-                    curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=None)
-                    # Add to legend if legend_str is provided
-                    #if legend_str:
-                    #    self.plot_widget.legend.addItem(curve, legend_str)
-
-                    # Set labels
-                    xlabel = param1 + "  [" + unit1 + "]"
-                    ylabel = param2 + "  [" + unit2 + "]"
-                    self.plot_widget.setLabel('bottom', xlabel)
-                    self.plot_widget.setLabel('left', ylabel)
-                    self.plot_widget.setTitle(f"{param2} vs {param1}")
-                    self.plot_widget.getAxis('left').setStyle(autoExpandTextSpace=True)
-                    self.plot_widget.getAxis('left').enableAutoSIPrefix(False)
-                    #print(result_matrix)
-                    #print("Design Equations plotting not yet implemented.")
-                    #continue
+                    # Coerce to 1-D numpy arrays for plotting
+                    try:
+                        arr1 = np.asarray(params1)
+                        arr2 = np.asarray(params2)
+                        # If scalar, expand to vector with length of dataframe rows
+                        if arr1.ndim == 0:
+                            nrows = cid_corner.df.shape[0] if hasattr(cid_corner, 'df') else (arr1.size if hasattr(arr1, 'size') else 1)
+                            arr1 = np.full(nrows, float(arr1))
+                        if arr2.ndim == 0:
+                            nrows = cid_corner.df.shape[0] if hasattr(cid_corner, 'df') else (arr2.size if hasattr(arr2, 'size') else 1)
+                            arr2 = np.full(nrows, float(arr2))
+                        # If shape is (N,1) or (N,1,1) collapse to (N,)
+                        if arr1.ndim > 1:
+                            arr1 = arr1.reshape(arr1.shape[0], -1)
+                            if arr1.shape[1] == 1:
+                                arr1 = arr1[:, 0]
+                            else:
+                                arr1 = arr1.ravel()
+                        if arr2.ndim > 1:
+                            arr2 = arr2.reshape(arr2.shape[0], -1)
+                            if arr2.shape[1] == 1:
+                                arr2 = arr2[:, 0]
+                            else:
+                                arr2 = arr2.ravel()
+                        params1 = arr1.ravel()
+                        params2 = arr2.ravel()
+                    except Exception:
+                        try:
+                            params1 = np.asarray(params1).squeeze()
+                            params2 = np.asarray(params2).squeeze()
+                        except Exception:
+                            pass
+                    # After coercion, ensure both are 1-D numpy arrays of same length
+                    try:
+                        params1 = np.asarray(params1)
+                        params2 = np.asarray(params2)
+                        if params1.size == 0 or params2.size == 0:
+                            msg = f"Design Eq plotting: empty data for {param1}/{param2}"
+                            print(msg)
+                            try:
+                                if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
+                                    self.top_level_app.statusBar().showMessage(msg, 5000)
+                            except Exception:
+                                pass
+                            continue
+                        # If lengths differ, trim to the smaller length
+                        if params1.shape[0] != params2.shape[0]:
+                            nmin = min(params1.shape[0], params2.shape[0])
+                            params1 = params1[:nmin]
+                            params2 = params2[:nmin]
+                    except Exception:
+                        pass
+                    # Now plot the design-equation results
+                    try:
+                        curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=None)
+                        # Set labels
+                        xlabel = param1 + "  [" + unit1 + "]"
+                        ylabel = param2 + "  [" + unit2 + "]"
+                        self.plot_widget.setLabel('bottom', xlabel)
+                        self.plot_widget.setLabel('left', ylabel)
+                        self.plot_widget.setTitle(f"{param2} vs {param1}")
+                        self.plot_widget.getAxis('left').setStyle(autoExpandTextSpace=True)
+                        self.plot_widget.getAxis('left').enableAutoSIPrefix(False)
+                    except Exception as e:
+                        msg = f"Plotting error for design eq {param1} vs {param2}: {e}"
+                        print(msg)
+                        try:
+                            if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
+                                self.top_level_app.statusBar().showMessage(msg, 5000)
+                        except Exception:
+                            pass
                 new_plot = False
                 self.plot_widget.showGrid(x=True, y=True)
                 self.current_color_index += 1
@@ -1227,6 +1339,40 @@ class ROARGraphGrid(QWidget):
         for lookup_window in self.lookup_windows:
             lookup_window.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
 
+    def populate_from_app(self):
+        """Populate this grid's lookup windows from the top-level app's tech_dict.
+
+        This is used when a new tab is created, to initialize its lookup windows
+        with the same technology LUTs and expression symbols as existing tabs.
+        """
+        try:
+            # Ensure we have the latest tech_dict and expressions from the top-level app
+            app_tech = getattr(self.top_level_app, 'tech_dict', None)
+            # Get expression symbols from editor window if available
+            expr_symbols = []
+            try:
+                expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
+                expr_symbols = list(expressions.keys()) if expressions else []
+            except Exception:
+                expr_symbols = []
+
+            for lookup_window in self.lookup_windows:
+                try:
+                    tb = getattr(lookup_window, 'tech_browser', None)
+                    if tb is not None:
+                        tb.tech_dict = app_tech if app_tech is not None else {}
+                        tb.populate_from_tech_dict()
+                        tb.startup = False
+
+                    # Update the lookup window's expression symbols and refresh comboboxes
+                    lookup_window.update_expression_symbols(expr_symbols)
+                    lookup_window.update_combobox_items()
+                except Exception:
+                    # Continue initializing other lookup windows even if one fails
+                    pass
+        except Exception:
+            pass
+
 
 class ROARApp(QMainWindow):
     def __init__(self, tech_dict=None):
@@ -1537,6 +1683,10 @@ class ROARApp(QMainWindow):
             self.graph_grid = grid
             # Ensure '+' tab remains at the end
             self.ensure_plus_tab()
+
+            # Populate the new tab's lookup windows from the app's tech_dict
+            grid.populate_from_app()
+
             return grid
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to create graph tab: {e}")

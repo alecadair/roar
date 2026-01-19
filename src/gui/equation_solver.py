@@ -131,7 +131,23 @@ class ROAREquationSolver:
                 continue
             equation_to_evaluate = self.equations[equation]
             if self.is_number(equation_to_evaluate):
-                results[equation] = float(equation_to_evaluate)
+                # If corner_dfs provided, create a 2D array (nrows x n_corners)
+                # where every entry equals the constant. This keeps result
+                # shapes consistent for downstream code that expects arrays.
+                val = float(equation_to_evaluate)
+                if corner_dfs:
+                    try:
+                        # Determine number of rows from the first corner dataframe
+                        first = corner_dfs[0]
+                        # pandas DataFrame -> use shape[0], otherwise try len()
+                        nrows = first.shape[0] if hasattr(first, 'shape') else len(first)
+                    except Exception:
+                        nrows = 1
+                    ncols = len(corner_dfs)
+                    arr = np.full((nrows, ncols), val, dtype=float)
+                    results[equation] = arr
+                else:
+                    results[equation] = val
                 continue
             result = self.evaluate_equation(equation_to_evaluate, results)
             if result is not None:
@@ -158,11 +174,30 @@ class ROAREquationSolver:
     def evaluate_equation(self, symbolic_equation, results):
         try:
             # Convert the symbolic equation to a lambda function
-            func = lambdify(list(symbolic_equation.free_symbols), symbolic_equation, modules="numpy")
+            free_syms = list(symbolic_equation.free_symbols)
+            func = lambdify(free_syms, symbolic_equation, modules="numpy")
 
-            # Evaluate the lambda function with results
-            evaluated_equation = func(*[results.get(str(var), var) for var in symbolic_equation.free_symbols])
+            # Build argument list for lambdify: prefer already-computed results; if a free symbol
+            # corresponds to a lookup column (or contains ':'), create matrix(s) from corner_dfs.
+            args = []
+            for var in free_syms:
+                name = str(var)
+                if name in results:
+                    args.append(results[name])
+                elif (name in self.lookup_vals) or (":" in name):
+                    # Pull lookup column arrays from corner_dfs
+                    try:
+                        mat, _ = self.create_matrix_from_lookup(name, corner_dfs=self.corners if self.corners else [])
+                    except Exception:
+                        # fall back to empty list
+                        mat = None
+                    args.append(mat)
+                else:
+                    # Unknown variable: pass the symbol itself so lambdify may error or treat as scalar
+                    args.append(var)
 
+            # Evaluate the lambda function with prepared args
+            evaluated_equation = func(*args)
             return evaluated_equation
         except Exception as e:
             if symbolic_equation in results:
