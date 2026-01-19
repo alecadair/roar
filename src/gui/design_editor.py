@@ -165,7 +165,20 @@ class BaseEditor(QWidget):
         self.move_down_button.clicked.connect(self.move_row_down)
         button_layout.addWidget(self.move_down_button)
 
-        self.enable_disable_button = QPushButton("Enable/Disable")
+        # Use a shorter label so the button remains readable at narrow widths
+        self.enable_disable_button = QPushButton("Toggle")
+        self.enable_disable_button.setToolTip("Enable or disable selected row(s)")
+        try:
+            # Keep the sizing simple: let the layout size this button like the others.
+            from PyQt6.QtWidgets import QSizePolicy
+            self.enable_disable_button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            # Remove any custom stylesheet so appearance matches other buttons
+            try:
+                self.enable_disable_button.setStyleSheet("")
+            except Exception:
+                pass
+        except Exception:
+            pass
         self.enable_disable_button.clicked.connect(self.toggle_enable_disable_row)
         button_layout.addWidget(self.enable_disable_button)
 
@@ -184,12 +197,24 @@ class BaseEditor(QWidget):
 
         container_layout.addLayout(button_layout)
 
-        # Keyboard shortcuts for moving rows
+        # Keep toolbar buttons consistent: give them the same size policy so
+        # layouts size them naturally (no forced min widths to avoid overflow).
         try:
-            from PyQt6.QtGui import QKeySequence
-            from PyQt6.QtWidgets import QShortcut
-            QShortcut(QKeySequence("Ctrl+Up"), self).activated.connect(self.move_row_up)
-            QShortcut(QKeySequence("Ctrl+Down"), self).activated.connect(self.move_row_down)
+            from PyQt6.QtWidgets import QSizePolicy
+            btns = [self.add_button, self.delete_button, self.move_up_button, self.move_down_button, self.enable_disable_button]
+            if getattr(self, 'plot_button', None):
+                btns.append(self.plot_button)
+            for b in btns:
+                try:
+                    b.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+                    # Remove any previously set min/max widths so sizing is natural
+                    try:
+                        b.setMinimumWidth(0)
+                        b.setMaximumWidth(16777215)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -520,15 +545,21 @@ class ROAREditorWindow(QWidget):
         # When the window width reaches this fraction of the available
         # parent/screen width, the editor will "snap" to fill horizontally.
         # Set between 0.0 and 1.0. Default 0.75 (75%).
-        self._snap_threshold_ratio = 0.75
+        # Increase the snap threshold so the window has to be very large before snapping
+        # (0.0 - 1.0). Setting near 1.0 makes snapping happen only when the editor
+        # is almost the full available width.
+        #self._snap_threshold_ratio = 0.995
+        # Use a more forgiving snap threshold so snapping happens later but not only
+        # at near-total width. 0.90 means snap when the editor is >90% of available width.
+        self._snap_threshold_ratio = 0.90
         self._snapped = False
 
         # Make the editor skinnier by default: set a reasonable minimum size
         # and start the window at that minimum so the editor opens compact.
         # Tweak these values if you want a different compact size.
         try:
-            # Make the editor skinnier by default: smaller minimum width.
-            self.setMinimumSize(300, 300)
+            # Make the editor narrower by default so it starts compact but usable.
+            self.setMinimumSize(320, 300)
         except Exception:
             pass
         try:
