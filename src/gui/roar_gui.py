@@ -153,6 +153,7 @@ class ROARTechBrowser(QWidget):
                 tech_dict[pdk_name][model_name][length]["corners"][corner_name] = corner
         return tech_dict
 
+
     def get_checked_item_paths(self):
         checked_paths = []
 
@@ -1307,6 +1308,18 @@ class ROARApp(QMainWindow):
         self.graph_tabs.setMovable(True)
         self.graph_tabs.setTabsClosable(True)
         self.graph_tabs.tabCloseRequested.connect(lambda idx: self.close_graph_tab(idx))
+        # Enable right-click context menu on the tab bar for Rename/Close/Set Color
+        try:
+            self.graph_tabs.tabBar().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            self.graph_tabs.tabBar().customContextMenuRequested.connect(self._on_tab_context_menu)
+        except Exception:
+            pass
+        # Use the custom tab bar that forwards right-clicks to ROARApp._on_tab_context_menu
+        try:
+            custom_bar = ROARTabBar(owner=self)
+            self.graph_tabs.setTabBar(custom_bar)
+        except Exception:
+            pass
 
         splitter_h.addWidget(self.graph_tabs)
 
@@ -1644,6 +1657,24 @@ class ROARApp(QMainWindow):
                 pass
         except Exception:
             pass
+
+# Custom QTabBar that forwards right-clicks to the application's tab context menu
+class ROARTabBar(QTabBar):
+    def __init__(self, owner=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.owner = owner
+
+    def mousePressEvent(self, event):
+        # If right-click, forward to owner context menu handler with tab-local position
+        try:
+            if event.button() == Qt.MouseButton.RightButton and self.owner is not None:
+                # Call the owner's context menu handler with the tab-bar-local position
+                self.owner._on_tab_context_menu(event.pos())
+                # consume event
+                return
+        except Exception:
+            pass
+        super().mousePressEvent(event)
 
 if __name__ == "__main__":
     # Wrap execution in a try/except to surface any exceptions when running
