@@ -1316,7 +1316,7 @@ class ROARApp(QMainWindow):
         ihp130_luts = ROAR_CHARACTERIZATION + "/ihp130/LUTs_IHP130"
         #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
         self.add_tech_luts(dir=sky130_luts, pdk_name="SKY130A")
-        self.add_tech_luts(dir=ihp130_luts, pdk_name="IHP-SG13G2")
+        #self.add_tech_luts(dir=ihp130_luts, pdk_name="IHP-SG13G2")
 
         # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")
         #self.equation_solver = ROAREquationSolver(top_level_app=self,data_frames=[])
