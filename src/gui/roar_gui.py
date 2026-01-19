@@ -212,8 +212,6 @@ class ROARTechBrowser(QWidget):
         self.graphing_widget = graphing_widget
 
     def add_tech_luts(self, dirname=None, pdk_name=None):
-        print("Adding technology from directory" + dirname)
-        print("PDK Name: " + pdk_name)
         if dirname is None:
             dirname = QFileDialog.getExistingDirectory(self, "Select Directory")
             if not dirname:
@@ -224,40 +222,39 @@ class ROARTechBrowser(QWidget):
             if not ok or not pdk_name.strip():
                 return  # User canceled or empty input
 
-        # pdk_item = QTreeWidgetItem([pdk_name])
-        # self.tree.addTopLevelItem(pdk_item)
-        pdk_dict = None
-        if self.top_level_app is not None:
-            pdk_dict = self.top_level_app.tech_dict
-            # pdk_dict = self.top_level_app.tech_dict.get(pdk_name, {})
+        # Build a dict that contains only the single PDK we're adding. This avoids
+        # iterating all PDKs (and reparenting items) which caused devices from
+        # previously added PDKs to appear under new PDK entries.
+        if self.top_level_app is not None and hasattr(self.top_level_app, 'tech_dict') and pdk_name in self.top_level_app.tech_dict:
+            pdk_dict = {pdk_name: self.top_level_app.tech_dict[pdk_name]}
         else:
             pdk_dict = ROARTechBrowser.create_tech_dict_from_dir(dirname, pdk_name)
 
-        delim = ">"
+        # Create top-level PDK item for the tree
         pdk_item = QTreeWidgetItem([pdk_name])
         pdk_item.setFlags(pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         pdk_item.setCheckState(0, Qt.CheckState.Unchecked)
         self.pdk_item.addChild(pdk_item)
-        for pdk, pdk_subdict in pdk_dict.items():
-            pdk_subitem = QTreeWidgetItem([pdk])
-            pdk_subitem.setFlags(pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            pdk_subitem.setCheckState(0, Qt.CheckState.Unchecked)
-            pdk_subitem.addChild(pdk_item)
-            for model, model_dict in pdk_subdict.items():
-                model_item = QTreeWidgetItem([model])
-                model_item.setFlags(model_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                model_item.setCheckState(0, Qt.CheckState.Unchecked)
-                pdk_item.addChild(model_item)
-                for length, length_dict in model_dict.items():
-                    length_item = QTreeWidgetItem([length])
-                    length_item.setFlags(length_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                    length_item.setCheckState(0, Qt.CheckState.Unchecked)
-                    model_item.addChild(length_item)
-                    for corner, corners_dict in length_dict["corners"].items():
-                        corner_item = QTreeWidgetItem([corner])
-                        corner_item.setFlags(corner_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                        corner_item.setCheckState(0, Qt.CheckState.Unchecked)
-                        length_item.addChild(corner_item)
+
+        # Only iterate the models inside this single PDK
+        models = pdk_dict.get(pdk_name, {})
+        for model, model_dict in models.items():
+            model_item = QTreeWidgetItem([model])
+            model_item.setFlags(model_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            model_item.setCheckState(0, Qt.CheckState.Unchecked)
+            pdk_item.addChild(model_item)
+
+            for length, length_dict in model_dict.items():
+                length_item = QTreeWidgetItem([length])
+                length_item.setFlags(length_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                length_item.setCheckState(0, Qt.CheckState.Unchecked)
+                model_item.addChild(length_item)
+
+                for corner_name, corner_obj in length_dict.get("corners", {}).items():
+                    corner_item = QTreeWidgetItem([corner_name])
+                    corner_item.setFlags(corner_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                    corner_item.setCheckState(0, Qt.CheckState.Unchecked)
+                    length_item.addChild(corner_item)
 
 
 class ROARLookupWindow(QWidget):
@@ -352,10 +349,10 @@ class ROARLookupWindow(QWidget):
         self.spin_z.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.checkbox_logz = QCheckBox("LogZ")
 
-        # Clear markers when changing axes
-        self.combo_x.currentIndexChanged.connect(self.clear_markers)
-        self.combo_y.currentIndexChanged.connect(self.clear_markers)
-        self.combo_z.currentIndexChanged.connect(self.clear_markers)
+        # Clear markers / update graph when changing axes
+        self.combo_x.currentIndexChanged.connect(self.on_axis_selection_changed)
+        self.combo_y.currentIndexChanged.connect(self.on_axis_selection_changed)
+        self.combo_z.currentIndexChanged.connect(self.on_axis_selection_changed)
 
         self.controls_layout.addWidget(self.label_x, 1, 0)
         self.controls_layout.addWidget(self.combo_x, 1, 1)
@@ -562,6 +559,23 @@ class ROARLookupWindow(QWidget):
     def update_log_scale(self):
         self.plot_widget.getPlotItem().setLogMode(x=self.checkbox_logx.isChecked(), y=self.checkbox_logy.isChecked())
         self.update_graph_from_tech_browser()
+
+    def on_axis_selection_changed(self, _idx=None):
+        """Called when X/Y/Z selection changes: clear markers, update graph, then autofit (same as 'F' hotkey)."""
+        try:
+            self.clear_markers()
+        except Exception:
+            pass
+        try:
+            self.update_graph_from_tech_browser()
+        except Exception:
+            pass
+        # Auto-fit view (same as F hotkey)
+        try:
+            if hasattr(self, 'plot_widget') and self.plot_widget is not None:
+                self.plot_widget.plotItem.autoRange()
+        except Exception:
+            pass
 
     def toggle_expand(self):
         """
@@ -1317,6 +1331,8 @@ class ROARApp(QMainWindow):
             window.update_expression_symbols(symbols)
 
     def add_tech_luts(self, dir, pdk_name):
+        print("Adding technology from directory" + str(dir))
+        print("PDK: " + str(pdk_name) + "\n")
         self.tech_dict[pdk_name] = {}
         for filename in os.listdir(dir):
             f = os.path.join(dir, filename)
@@ -1452,6 +1468,7 @@ class ROARApp(QMainWindow):
 if __name__ == "__main__":
     # qdarktheme.enable_hi_dpi()
     # app = QApplication([sys.argv])
+    print("\nInitializing ROAR GUI Application...\n")
     app = QApplication(sys.argv)
     # qdarktheme.setup_theme("light")
     # qdarktheme.setup_theme("auto")
