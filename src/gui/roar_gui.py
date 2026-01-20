@@ -1738,9 +1738,9 @@ class ROARApp(QMainWindow):
         predictive_28 = ROAR_CHARACTERIZATION + "/predictive_28/LUTs_1V8_mac"
         ihp130_luts = ROAR_CHARACTERIZATION + "/ihp130/LUTs_IHP130"
         #self.add_tech_luts(dir=predictive_28, pdk_name="jp28")
-        self.add_tech_luts(dir=sky130_luts, pdk_name="SKY130A")
+        #self.add_tech_luts(dir=sky130_luts, pdk_name="SKY130A")
         #self.add_tech_luts(dir=ihp130_luts, pdk_name="IHP-SG13G2")
-
+        self.add_tech_luts_from_tech_list()
         # self.add_tech_luts(dir=predictive_28, pdk_name="predictive28_1v8")i
         #self.equation_solver = ROAREquationSolver(top_level_app=self,data_frames=[])
 
@@ -1748,6 +1748,53 @@ class ROARApp(QMainWindow):
             #design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "cs2.json")
             design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "single_transistor_basic_variables.json")
             self.editor_window.load_all_data(file_path=design_path, show_success_message=False)
+
+    def add_tech_luts_from_tech_list(self):
+        import os, shlex
+        path = os.path.join(ROAR_HOME or "", "tech_list.txt")
+        if not os.path.isfile(path):
+            # Nothing to do if list missing
+            return
+
+        with open(path, "r", encoding="utf-8") as fh:
+            for lineno, raw in enumerate(fh, 1):
+                s = raw.strip()
+                if not s or s.startswith('#'):
+                    continue
+                try:
+                    parts = shlex.split(raw)
+                except Exception as e:
+                    print(f"Skipping malformed line {lineno} in {path}: {e}")
+                    continue
+                if len(parts) < 2:
+                    print(f"Skipping invalid line {lineno} in {path}: expected 'pdk_name dir'")
+                    continue
+                pdk = parts[0]
+                # Join remaining tokens to form the directory token (allow quoted paths)
+                raw_dir = " ".join(parts[1:])
+                # Support ${VAR} syntax by replacing with env var or module-level var (e.g., ${ROAR_HOME})
+                import re
+                def _replace_braced(match):
+                    key = match.group(1)
+                    if key in os.environ:
+                        return os.environ[key]
+                    # fall back to module-level variables (like ROAR_HOME)
+                    val = globals().get(key)
+                    return val if isinstance(val, str) else ""
+
+                dir_after_braces = re.sub(r"\$\{([^}]+)\}", _replace_braced, raw_dir)
+                # Also allow $VAR forms and expand ~
+                dirpath = os.path.expanduser(os.path.expandvars(dir_after_braces))
+                if not os.path.isdir(dirpath):
+                    print(f"Warning: tech dir not found for {pdk}: {dirpath}")
+                try:
+                    self.add_tech_luts(dir=dirpath, pdk_name=pdk)
+                except TypeError:
+                    # older signature might expect 'dirname' kwarg
+                    try:
+                        self.add_tech_luts(dirname=dirpath, pdk_name=pdk)
+                    except Exception as e:
+                        print(f"Error adding {pdk} from line {lineno}: {e}")
 
     def update_lookup_windows(self, symbols):
         # Broadcast the updated expression symbols to all lookup windows on all tabs
@@ -1942,32 +1989,36 @@ class ROARApp(QMainWindow):
             if self.graph_tabs.tabText(index) == '+':
                 return
 
-            # Remove the tab and its widget
+            # Remove the tab and its widget while blocking tab signals to avoid
+            # the '+' activation handler creating a new tab mid-rearrangement.
             widget = self.graph_tabs.widget(index)
-            self.graph_tabs.removeTab(index)
             try:
-                widget.deleteLater()
-            except Exception:
-                pass
-
-            # After removal, ensure '+' placeholder remains at end and recreate if no real tabs exist
-            self.ensure_plus_tab()
-
-            # Find first real tab and set it current; if none exist, create one
-            real_idx = None
-            for i in range(self.graph_tabs.count()):
-                if self.graph_tabs.tabText(i) != '+':
-                    real_idx = i
-                    break
-            if real_idx is None:
-                # No real tabs: create one
-                self.create_new_graph_tab()
-            else:
-                # Set a reasonable current tab (the one to the left of the closed tab if possible)
                 try:
-                    # prefer the tab at index-1 if it exists and is real
+                    self.graph_tabs.currentChanged.disconnect(self._on_active_tab_changed)
+                except Exception:
+                    # if already disconnected, ignore
+                    pass
+                self.graph_tabs.removeTab(index)
+                try:
+                    widget.deleteLater()
+                except Exception:
+                    pass
+
+                # Ensure '+' placeholder remains at the end
+                self.ensure_plus_tab()
+
+                # Find first real tab and set it current; if none exist, create one
+                real_idx = None
+                for i in range(self.graph_tabs.count()):
+                    if self.graph_tabs.tabText(i) != '+':
+                        real_idx = i
+                        break
+                if real_idx is None:
+                    # No real tabs: create one
+                    self.create_new_graph_tab()
+                else:
+                    # Choose a reasonable tab to select (prefer left neighbor of closed index)
                     preferred = max(0, min(real_idx, index - 1))
-                    # find nearest real tab from preferred
                     found = None
                     for delta in range(0, self.graph_tabs.count()):
                         for cand in (preferred - delta, preferred + delta):
@@ -1978,12 +2029,15 @@ class ROARApp(QMainWindow):
                             break
                     if found is not None:
                         self.graph_tabs.setCurrentIndex(found)
+                # Update active reference to the now-current widget
+                cur = self.graph_tabs.currentWidget()
+                self.graph_grid = cur
+            finally:
+                try:
+                    # Reconnect the handler; ignore if it fails
+                    self.graph_tabs.currentChanged.connect(self._on_active_tab_changed)
                 except Exception:
                     pass
-
-            # Update active reference
-            cur = self.graph_tabs.currentWidget()
-            self.graph_grid = cur
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to close tab: {e}")
 
