@@ -1,0 +1,12 @@
+#######################################################################################
+#
+# Technology list file for LUTs to be imported into ROAR
+# Author: Alec S. Adair
+#
+#######################################################################################
+
+SKY130A ${ROAR_HOME}/characterization/sky130/LUTs_SKY130
+
+# PREDICTIVE-28 ${ROAR_HOME}/characterization/predictive_28/LUTS_1V8_mac
+
+IHP-SG13G2 ${ROAR_HOME}/characterization/ihp130/LUTs_IHP130
