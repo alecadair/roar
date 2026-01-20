@@ -319,14 +319,13 @@ class ROARLookupWindow(QWidget):
         self.expression_symbols = []
         self._is_updating = False
 
-        # Create the main layout
-        self.main_layout = QVBoxLayout(self)
-        left, top, right, bottom = self.main_layout.getContentsMargins()
 
-        # Set a new left margin value, keeping the others unchanged
-        new_left_margin = 3
-        self.main_layout.setContentsMargins(new_left_margin, top, right, bottom)
-        #self.main_layout.setSpacing(0)
+
+        # Create the main layout and restore moderate margins so the rest of the app spacing is preserved
+        self.main_layout = QVBoxLayout(self)
+        # Use comfortable default margins so other UI areas don't appear too tight
+        self.main_layout.setContentsMargins(6, 6, 6, 6)
+        self.main_layout.setSpacing(6)
         self.setLayout(self.main_layout)
 
         # Create the horizontal splitter for tech browser + controls (left) and graphing window (right)
@@ -347,9 +346,13 @@ class ROARLookupWindow(QWidget):
         self.tech_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.tech_browser.startup = False
 
-        # Create a container for control widgets
+        # Create a container for control widgets and use moderate internal spacing
         self.controls_container = QWidget()
         self.controls_layout = QGridLayout(self.controls_container)
+        # Restore moderate internal margins so the rest of the controls keep their original spacing
+        self.controls_layout.setContentsMargins(2, 2, 2, 2)
+        self.controls_layout.setHorizontalSpacing(6)
+        self.controls_layout.setVerticalSpacing(4)
 
         # Radio buttons for parameter source
         self.radio_device_params = QRadioButton("Device Params")
@@ -361,6 +364,9 @@ class ROARLookupWindow(QWidget):
 
         # store the radio layout on the instance so other methods can reference it
         self.radio_layout = QHBoxLayout()
+        # Tighten radio layout margins so it doesn't add extra vertical padding
+        self.radio_layout.setContentsMargins(0, 0, 0, 0)
+        self.radio_layout.setSpacing(2)
         self.radio_layout.addWidget(self.radio_device_params)
         self.radio_layout.addWidget(self.radio_design_eq)
         self.radio_layout.addStretch()
@@ -449,27 +455,25 @@ class ROARLookupWindow(QWidget):
         self.settings_container = QWidget()
         s_layout = QHBoxLayout(self.settings_container)
         s_layout.setContentsMargins(0, 0, 0, 0)
-        # Keep the lock and checkbox grid tightly grouped and vertically centered
-        # Use zero spacing so the checkboxes appear as close together as possible
+        # Keep the lock and checkbox grid tightly grouped and vertically centered within their row
         s_layout.setSpacing(0)
         s_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        # Ensure the container does not expand to fill layout columns (prevents extra spacing
-        # when placed into an expanding grid cell). We'll keep it a fixed-size widget.
-        self.settings_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         # Small lock icon button (icon-only appearance) + tight 2x2 checkbox grid.
         # Define the visual sizes once and reuse to ensure consistent layout.
         indicator_size = 12
         cb_widget_size = 14
 
-        # Lock button sized to match two stacked checkbox widgets
+        # Lock button sized to match exactly the height of the two stacked checkbox widgets
         self.settings_lock_button = QPushButton("🔒")
-        lock_h = (cb_widget_size * 2) + 2
-        lock_w = max(20, cb_widget_size * 2)
+        # make the lock button same height as the checkbox grid (two stacked checkbox heights)
+        lock_h = cb_widget_size * 2
+        lock_w = lock_h
         self.settings_lock_button.setFixedSize(lock_w, lock_h)
         self.settings_lock_button.setToolTip("Lock / Settings")
         self.settings_lock_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.settings_lock_button.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        # increase the font size so the unicode lock glyph fills the button better
+        self.settings_lock_button.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 18px; }")
         s_layout.addWidget(self.settings_lock_button)
 
         # 2x2 grid of compact checkboxes (visual only for now)
@@ -504,10 +508,10 @@ class ROARLookupWindow(QWidget):
         g_layout.addWidget(self.setting_checkboxes[2], 1, 0)
         g_layout.addWidget(self.setting_checkboxes[3], 1, 1)
 
-        # Fix the grid size to exactly fit the four small checkbox widgets
+        # Fix the grid size to exactly fit the four small checkbox widgets (no extra padding)
         grid_w = cb_widget_size * 2
         grid_h = cb_widget_size * 2
-        self.settings_grid.setFixedSize(grid_w + 1, grid_h + 1)
+        self.settings_grid.setFixedSize(grid_w, grid_h)
 
         s_layout.addWidget(self.settings_grid)
 
@@ -525,6 +529,12 @@ class ROARLookupWindow(QWidget):
         # update_combobox_items will reposition them as needed when modes change.
         self.controls_layout.addWidget(self.copy_button, 5, 2, alignment=Qt.AlignmentFlag.AlignRight)
         self.controls_layout.addWidget(self.right_group, 5, 3, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # Ensure the controls row that contains the lock + checkboxes is tight vertically
+        try:
+            self.controls_layout.setRowMinimumHeight(5, lock_h)
+        except Exception:
+            pass
 
         # Expand button spanning the bottom row
         self.expand_button = QPushButton("Expand")
