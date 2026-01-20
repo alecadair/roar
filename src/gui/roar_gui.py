@@ -515,20 +515,38 @@ class ROARLookupWindow(QWidget):
 
         s_layout.addWidget(self.settings_grid)
 
-        # Add copy button and our new settings container into the controls layout
-        # Create a small fixed-size group that holds only the Settings container so it stays compact
-        self.right_group = QWidget()
-        rg_layout = QHBoxLayout(self.right_group)
-        rg_layout.setContentsMargins(0, 0, 0, 0)
-        rg_layout.setSpacing(0)
-        # Put only the settings container inside the right_group; the copy button will be placed in col 2
-        rg_layout.addWidget(self.settings_container)
-        self.right_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # Create the Expand button (define it before adding to the row)
+        # Do NOT set a fixedSize here so it can be allowed to expand dynamically.
+        self.expand_button = QPushButton("Expand")
+        # Default to a fixed-looking button via SizePolicy.Fixed; we'll switch to Expanding in Device Params mode
+        self.expand_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # Match the Copy button height so both appear visually aligned
+        try:
+            self.expand_button.setFixedHeight(22)
+        except Exception:
+            pass
+        try:
+            self.expand_button.setStyleSheet("QPushButton { margin: 0px; padding: 0px; }")
+        except Exception:
+            pass
 
-        # Initially place copy_button at col 2 (right-aligned) and right_group at col 3 (left-aligned).
-        # update_combobox_items will reposition them as needed when modes change.
-        self.controls_layout.addWidget(self.copy_button, 5, 2, alignment=Qt.AlignmentFlag.AlignRight)
-        self.controls_layout.addWidget(self.right_group, 5, 3, alignment=Qt.AlignmentFlag.AlignLeft)
+        # Build a single horizontal row for the bottom controls so we can precisely control
+        # ordering and spacing: [3-D] [Contour] [Copy] [Expand] [Settings(lock+2x2)]. This keeps Copy
+        # immediately next to Expand and the settings regardless of column stretches elsewhere.
+        self.row5_layout = QHBoxLayout()
+        self.row5_layout.setContentsMargins(0, 0, 0, 0)
+        # Small spacing so widgets sit close together but are not overlapping
+        self.row5_layout.setSpacing(2)
+        # Add the 3-D and Contour checkboxes first (they may be hidden in Device Params mode)
+        self.row5_layout.addWidget(self.checkbox_3d)
+        self.row5_layout.addWidget(self.checkbox_contour)
+        # Then the Copy button, the Expand button, and the compact settings container so they sit adjacent
+        self.row5_layout.addWidget(self.copy_button)
+        self.row5_layout.addWidget(self.expand_button)
+        self.row5_layout.addWidget(self.settings_container)
+
+        # Put the HBox into the grid layout spanning the full width of the controls area
+        self.controls_layout.addLayout(self.row5_layout, 5, 0, 1, 4)
 
         # Ensure the controls row that contains the lock + checkboxes is tight vertically
         try:
@@ -536,9 +554,6 @@ class ROARLookupWindow(QWidget):
         except Exception:
             pass
 
-        # Expand button spanning the bottom row
-        self.expand_button = QPushButton("Expand")
-        self.controls_layout.addWidget(self.expand_button, 6, 0, 1, 4)
 
         # Add widgets to the vertical splitter
         self.tech_splitter.addWidget(self.tech_browser)  # Tech browser (top)
@@ -637,36 +652,44 @@ class ROARLookupWindow(QWidget):
         # and the buttons shift left without leaving blank space.
         try:
             # Remove previous placements (safe to call repeatedly)
-            self.controls_layout.removeWidget(self.right_group)
-            self.controls_layout.removeWidget(self.copy_button)
             self.controls_layout.removeWidget(self.checkbox_3d)
             self.controls_layout.removeWidget(self.checkbox_contour)
         except Exception:
             pass
 
         if is_device_params:
-            # Hide the 3-D/Contour checkboxes and place Copy (right-aligned in spinner column)
-            # and Settings (left-aligned in the non-stretch column) so they sit immediately adjacent.
+            # Hide the 3-D/Contour checkboxes and let the expand_button take leftover space
             self.checkbox_3d.hide()
             self.checkbox_contour.hide()
-            self.controls_layout.addWidget(self.copy_button, 5, 2, alignment=Qt.AlignmentFlag.AlignRight)
-            self.controls_layout.addWidget(self.right_group, 5, 3, alignment=Qt.AlignmentFlag.AlignLeft)
+            try:
+                # Allow the expand button to grow horizontally but keep its fixed height to match Copy
+                self.expand_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                # Remove any previous fixed width limits so the Expanding policy can take effect
+                self.expand_button.setMinimumWidth(0)
+                self.expand_button.setMaximumWidth(16777215)
+                self.expand_button.setFixedHeight(22)
+            except Exception:
+                pass
         else:
-            # Show checkboxes and place them to the left of the Copy/Settings buttons
+            # Show checkboxes and keep the expand_button compact
             self.checkbox_3d.show()
             self.checkbox_contour.show()
-            self.controls_layout.addWidget(self.checkbox_3d, 5, 0)
-            self.controls_layout.addWidget(self.checkbox_contour, 5, 1)
-            # In design-eqs mode keep the copy button at col 2 (right-aligned) and settings at col 3 (left-aligned)
-            self.controls_layout.addWidget(self.copy_button, 5, 2, alignment=Qt.AlignmentFlag.AlignRight)
-            self.controls_layout.addWidget(self.right_group, 5, 3, alignment=Qt.AlignmentFlag.AlignLeft)
+            try:
+                self.expand_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                # Restore compact visual by setting an explicit width similar to Copy while keeping the matched height
+                self.expand_button.setFixedWidth(56)
+                self.expand_button.setFixedHeight(22)
+            except Exception:
+                pass
 
-        # Ensure the settings container's visibility matches the current mode
-        # Keep the settings container visible in both modes (user requested it present for both)
+        # Ensure the settings container's visibility matches the current mode (always visible)
         self.settings_container.setVisible(True)
 
-        # Do a layout update to apply any changes
-        self.controls_layout.update()
+        # Do a layout update to apply any visibility changes
+        try:
+            self.controls_layout.update()
+        except Exception:
+            pass
 
     def on_mode_changed(self, _checked):
         """Keep the boolean mode in sync with the radio buttons and refresh UI."""
