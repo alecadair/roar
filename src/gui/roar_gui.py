@@ -30,6 +30,13 @@ ROAR_SRC = os.environ.get("ROAR_SRC", "")
 ROAR_CHARACTERIZATION = os.environ.get("ROAR_CHARACTERIZATION", "")
 ROAR_DESIGN_SCRIPTS = os.environ.get("ROAR_DESIGN", "")
 
+# Module-level defaults for LUT directories (used by test harness at bottom of file).
+# These mirror the values constructed inside ROARApp.__init__ so that running
+# small isolated tests at module import doesn't fail with NameError.
+sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
+predictive_28 = ROAR_CHARACTERIZATION + "/predictive_28/LUTs_1V8_mac"
+ihp130_luts = ROAR_CHARACTERIZATION + "/ihp130/LUTs_IHP130"
+
 DEBUG = False
 DEBUG_DESIGN = True
 
@@ -433,9 +440,92 @@ class ROARLookupWindow(QWidget):
         # inside update_combobox_items() so their positions change depending on
         # whether Device Params or Design Eqs is selected.
         self.copy_button = QPushButton("Copy")
-        self.settings_button = QPushButton("Settings")
-        self.controls_layout.addWidget(self.copy_button, 5, 0, 1, 2)
-        self.controls_layout.addWidget(self.settings_button, 5, 2, 1, 2)
+        # Keep copy button compact and fixed so it stays next to the spinners without expanding
+        self.copy_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.copy_button.setFixedSize(56, 22)
+
+        # Replace previous single "Settings" button with a compact settings container
+        # that contains a small lock icon/button and a visible 2x2 grid of checkboxes.
+        self.settings_container = QWidget()
+        s_layout = QHBoxLayout(self.settings_container)
+        s_layout.setContentsMargins(0, 0, 0, 0)
+        # Keep the lock and checkbox grid tightly grouped and vertically centered
+        # Use zero spacing so the checkboxes appear as close together as possible
+        s_layout.setSpacing(0)
+        s_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        # Ensure the container does not expand to fill layout columns (prevents extra spacing
+        # when placed into an expanding grid cell). We'll keep it a fixed-size widget.
+        self.settings_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        # Small lock icon button (icon-only appearance) + tight 2x2 checkbox grid.
+        # Define the visual sizes once and reuse to ensure consistent layout.
+        indicator_size = 12
+        cb_widget_size = 14
+
+        # Lock button sized to match two stacked checkbox widgets
+        self.settings_lock_button = QPushButton("🔒")
+        lock_h = (cb_widget_size * 2) + 2
+        lock_w = max(20, cb_widget_size * 2)
+        self.settings_lock_button.setFixedSize(lock_w, lock_h)
+        self.settings_lock_button.setToolTip("Lock / Settings")
+        self.settings_lock_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.settings_lock_button.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        s_layout.addWidget(self.settings_lock_button)
+
+        # 2x2 grid of compact checkboxes (visual only for now)
+        self.settings_grid = QWidget()
+        g_layout = QGridLayout(self.settings_grid)
+        # Remove all internal margins/spacings so indicators tightly abut
+        g_layout.setContentsMargins(0, 0, 0, 0)
+        g_layout.setHorizontalSpacing(0)
+        g_layout.setVerticalSpacing(0)
+        self.settings_grid.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        self.setting_checkboxes = []
+        cb_style = (
+            "QCheckBox { margin: 0px; padding: 0px; spacing: 0px; }"
+            f"QCheckBox::indicator {{ width: {indicator_size}px; height: {indicator_size}px; margin: 0px; }}"
+        )
+        for i in range(4):
+            cb = QCheckBox()
+            cb.setToolTip(f"Option {i+1}")
+            cb.setStyleSheet(cb_style)
+            try:
+                cb.setContentsMargins(0, 0, 0, 0)
+            except Exception:
+                pass
+            cb.setFixedSize(cb_widget_size, cb_widget_size)
+            cb.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            self.setting_checkboxes.append(cb)
+
+        # Place checkboxes in a 2x2 grid with no spacing
+        g_layout.addWidget(self.setting_checkboxes[0], 0, 0)
+        g_layout.addWidget(self.setting_checkboxes[1], 0, 1)
+        g_layout.addWidget(self.setting_checkboxes[2], 1, 0)
+        g_layout.addWidget(self.setting_checkboxes[3], 1, 1)
+
+        # Fix the grid size to exactly fit the four small checkbox widgets
+        grid_w = cb_widget_size * 2
+        grid_h = cb_widget_size * 2
+        self.settings_grid.setFixedSize(grid_w + 1, grid_h + 1)
+
+        s_layout.addWidget(self.settings_grid)
+
+        # Add copy button and our new settings container into the controls layout
+        # Create a small fixed-size group that holds only the Settings container so it stays compact
+        self.right_group = QWidget()
+        rg_layout = QHBoxLayout(self.right_group)
+        rg_layout.setContentsMargins(0, 0, 0, 0)
+        rg_layout.setSpacing(0)
+        # Put only the settings container inside the right_group; the copy button will be placed in col 2
+        rg_layout.addWidget(self.settings_container)
+        self.right_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        # Initially place copy_button at col 2 (right-aligned) and right_group at col 3 (left-aligned).
+        # update_combobox_items will reposition them as needed when modes change.
+        self.controls_layout.addWidget(self.copy_button, 5, 2, alignment=Qt.AlignmentFlag.AlignRight)
+        self.controls_layout.addWidget(self.right_group, 5, 3, alignment=Qt.AlignmentFlag.AlignLeft)
+
         # Expand button spanning the bottom row
         self.expand_button = QPushButton("Expand")
         self.controls_layout.addWidget(self.expand_button, 6, 0, 1, 4)
@@ -536,31 +626,37 @@ class ROARLookupWindow(QWidget):
         # on the same row, and when Device Params is selected the checkboxes are hidden
         # and the buttons shift left without leaving blank space.
         try:
-            # Remove widgets from any previous positions (safe to call repeatedly)
+            # Remove previous placements (safe to call repeatedly)
+            self.controls_layout.removeWidget(self.right_group)
             self.controls_layout.removeWidget(self.copy_button)
-            self.controls_layout.removeWidget(self.settings_button)
             self.controls_layout.removeWidget(self.checkbox_3d)
             self.controls_layout.removeWidget(self.checkbox_contour)
         except Exception:
             pass
 
         if is_device_params:
-            # Hide the 3-D/Contour checkboxes and place Copy/Settings left-aligned
+            # Hide the 3-D/Contour checkboxes and place Copy (right-aligned in spinner column)
+            # and Settings (left-aligned in the non-stretch column) so they sit immediately adjacent.
             self.checkbox_3d.hide()
             self.checkbox_contour.hide()
-            self.controls_layout.addWidget(self.copy_button, 5, 0, 1, 2)
-            self.controls_layout.addWidget(self.settings_button, 5, 2, 1, 2)
+            self.controls_layout.addWidget(self.copy_button, 5, 2, alignment=Qt.AlignmentFlag.AlignRight)
+            self.controls_layout.addWidget(self.right_group, 5, 3, alignment=Qt.AlignmentFlag.AlignLeft)
         else:
             # Show checkboxes and place them to the left of the Copy/Settings buttons
             self.checkbox_3d.show()
             self.checkbox_contour.show()
             self.controls_layout.addWidget(self.checkbox_3d, 5, 0)
             self.controls_layout.addWidget(self.checkbox_contour, 5, 1)
-            self.controls_layout.addWidget(self.copy_button, 5, 2)
-            self.controls_layout.addWidget(self.settings_button, 5, 3)
+            # In design-eqs mode keep the copy button at col 2 (right-aligned) and settings at col 3 (left-aligned)
+            self.controls_layout.addWidget(self.copy_button, 5, 2, alignment=Qt.AlignmentFlag.AlignRight)
+            self.controls_layout.addWidget(self.right_group, 5, 3, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        if not is_device_params:
-            self._update_z_controls_state()
+        # Ensure the settings container's visibility matches the current mode
+        # Keep the settings container visible in both modes (user requested it present for both)
+        self.settings_container.setVisible(True)
+
+        # Do a layout update to apply any changes
+        self.controls_layout.update()
 
     def on_mode_changed(self, _checked):
         """Keep the boolean mode in sync with the radio buttons and refresh UI."""
@@ -1815,7 +1911,7 @@ class ROARTabBar(QTabBar):
         self.owner = owner
 
     def mousePressEvent(self, event):
-        # If right-click, forward to owner context menu handler with tab-local position
+        # If right-click, forward to owner context menu with tab-local position
         try:
             if event.button() == Qt.MouseButton.RightButton and self.owner is not None:
                 # Call the owner's context menu handler with the tab-bar-local position
