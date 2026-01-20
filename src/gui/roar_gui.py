@@ -15,6 +15,7 @@ os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 
 # from PySide6.QtCore import Qt
 import pyqtgraph as pg
+import pyqtgraph.opengl as gl
 import qdarktheme
 
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -564,6 +565,21 @@ class ROARLookupWindow(QWidget):
         self.tech_splitter.setStretchFactor(1, 1)
         # self.plot_widget = pg.PlotWidget()
         self.plot_widget = ROARPlotWidget(parent_lookup_window=self, top_level_app=self.top_level_app)
+        # 3D OpenGL view for 3-D plotting (hidden by default)
+        try:
+            self.gl_widget = gl.GLViewWidget()
+            self.gl_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            # Basic GL view setup
+            try:
+                self.gl_widget.opts['distance'] = 40
+            except Exception:
+                pass
+            self.gl_widget.setVisible(False)
+            # Keep a list of GL items we've added so we can remove them reliably
+            self.gl_items = []
+        except Exception:
+            self.gl_widget = None
+            self.gl_items = []
         # Uncomment the following when not debugging
         # if DEBUG == False:
 
@@ -573,7 +589,15 @@ class ROARLookupWindow(QWidget):
         # self.test_widget = QWidget()
         # self.plot_widget = self.test_widget
         # self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
-        self.top_level_pane.addWidget(self.plot_widget)  # Right side (graphing window)
+        # Put both plot widgets into a container so we can switch between 2D and 3D views
+        right_container = QWidget()
+        right_layout = QVBoxLayout(right_container)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
+        right_layout.addWidget(self.plot_widget)
+        if self.gl_widget is not None:
+            right_layout.addWidget(self.gl_widget)
+        self.top_level_pane.addWidget(right_container)  # Right side (graphing window container)
 
         # Adjust stretch factors for main splitter (tech section gets less space than graphing)
         self.top_level_pane.setStretchFactor(0, 1)
@@ -1007,6 +1031,82 @@ class ROARLookupWindow(QWidget):
                         pass
                     # Now plot the design-equation results
                     try:
+                        # If 3-D mode is requested, evaluate Z and plot in the GL view
+                        if not self.is_device_params_mode and getattr(self, 'checkbox_3d', None) is not None and self.checkbox_3d.isChecked():
+                            param3 = self.combo_z.currentText()
+                            # Ask solver to compute the third parameter as well
+                            results_3d = None
+                            try:
+                                result_matrix_3d = equation_solver.evaluate_equations(symbols_to_add=[param1, param2, param3], corner_dfs=[cid_corner.df])
+                                if result_matrix_3d is not None and param1 in result_matrix_3d and param2 in result_matrix_3d and param3 in result_matrix_3d:
+                                    p1 = np.asarray(result_matrix_3d[param1]).ravel()
+                                    p2 = np.asarray(result_matrix_3d[param2]).ravel()
+                                    p3 = np.asarray(result_matrix_3d[param3]).ravel()
+                                    results_3d = (p1, p2, p3)
+                            except Exception:
+                                results_3d = None
+
+                            if results_3d and self.gl_widget is not None:
+                                # Clear 2D view and show 3D view
+                                try:
+                                    self.plot_widget.hide()
+                                except Exception:
+                                    pass
+                                try:
+                                    self.gl_widget.setVisible(True)
+                                except Exception:
+                                    pass
+
+                                # Remove previous GL items we've added
+                                try:
+                                    for item in list(self.gl_items):
+                                        try:
+                                            if self.gl_widget is not None:
+                                                self.gl_widget.removeItem(item)
+                                        except Exception:
+                                            pass
+                                    self.gl_items = []
+                                except Exception:
+                                    self.gl_items = []
+
+                                # Build Nx3 array and add a scatter plot to the GL view
+                                p1, p2, p3 = results_3d
+                                try:
+                                    pts = np.vstack((p1, p2, p3)).T.astype(float)
+                                    scatter = gl.GLScatterPlotItem(pos=pts, size=3, color=(1.0, 0.5, 0.0, 1.0), pxMode=False)
+                                    if self.gl_widget is not None:
+                                        self.gl_widget.addItem(scatter)
+                                        self.gl_items.append(scatter)
+                                except Exception as e:
+                                    msg = f"3D plotting error: {e}"
+                                    print(msg)
+                                    try:
+                                        if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
+                                            self.top_level_app.statusBar().showMessage(msg, 5000)
+                                    except Exception:
+                                        pass
+                                # continue to next model
+                                new_plot = False
+                                self.current_color_index += 1
+                                continue
+
+                        # Default 2D plotting path: ensure GL view hidden and 2D visible
+                        try:
+                            if self.gl_widget is not None:
+                                # remove any previous GL items and hide
+                                for item in list(self.gl_items):
+                                    try:
+                                        self.gl_widget.removeItem(item)
+                                    except Exception:
+                                        pass
+                                self.gl_items = []
+                                self.gl_widget.setVisible(False)
+                        except Exception:
+                            pass
+                        try:
+                            self.plot_widget.show()
+                        except Exception:
+                            pass
                         curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=None)
                         # Set labels
                         xlabel = param1 + "  [" + unit1 + "]"
@@ -1582,7 +1682,13 @@ class ROARApp(QMainWindow):
         self.graph_tabs = QTabWidget()
         self.graph_tabs.setMovable(True)
         self.graph_tabs.setTabsClosable(True)
-        self.graph_tabs.tabCloseRequested.connect(lambda idx: self.close_graph_tab(idx))
+        # Ensure the underlying tabBar also shows close buttons (helps when using a custom tabbar)
+        try:
+            self.graph_tabs.tabBar().setTabsClosable(True)
+        except Exception:
+            pass
+        self.graph_tabs.tabCloseRequested.connect(lambda idx:
+                                                  self.close_graph_tab(idx))
         # Enable right-click context menu on the tab bar for Rename/Close/Set Color
         try:
             self.graph_tabs.tabBar().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -1592,6 +1698,11 @@ class ROARApp(QMainWindow):
         # Use the custom tab bar that forwards right-clicks to ROARApp._on_tab_context_menu
         try:
             custom_bar = ROARTabBar(owner=self)
+            # Make sure custom bar also exposes closable tabs if we replace the tab bar
+            try:
+                custom_bar.setTabsClosable(True)
+            except Exception:
+                pass
             self.graph_tabs.setTabBar(custom_bar)
         except Exception:
             pass
@@ -1824,22 +1935,52 @@ class ROARApp(QMainWindow):
     def close_graph_tab(self, index: int):
         """Close the tab at `index`. Always ensure at least one tab remains."""
         try:
+            # Validate index
             if index < 0 or index >= self.graph_tabs.count():
                 return
             # Do not allow closing the '+' add-tab
             if self.graph_tabs.tabText(index) == '+':
                 return
+
+            # Remove the tab and its widget
             widget = self.graph_tabs.widget(index)
             self.graph_tabs.removeTab(index)
             try:
                 widget.deleteLater()
             except Exception:
                 pass
-            # If no tabs left, create a new one
-            # Ensure there's at least one real tab (not counting '+')
-            real_tabs = [i for i in range(self.graph_tabs.count()) if self.graph_tabs.tabText(i) != '+']
-            if not real_tabs:
+
+            # After removal, ensure '+' placeholder remains at end and recreate if no real tabs exist
+            self.ensure_plus_tab()
+
+            # Find first real tab and set it current; if none exist, create one
+            real_idx = None
+            for i in range(self.graph_tabs.count()):
+                if self.graph_tabs.tabText(i) != '+':
+                    real_idx = i
+                    break
+            if real_idx is None:
+                # No real tabs: create one
                 self.create_new_graph_tab()
+            else:
+                # Set a reasonable current tab (the one to the left of the closed tab if possible)
+                try:
+                    # prefer the tab at index-1 if it exists and is real
+                    preferred = max(0, min(real_idx, index - 1))
+                    # find nearest real tab from preferred
+                    found = None
+                    for delta in range(0, self.graph_tabs.count()):
+                        for cand in (preferred - delta, preferred + delta):
+                            if 0 <= cand < self.graph_tabs.count() and self.graph_tabs.tabText(cand) != '+':
+                                found = cand
+                                break
+                        if found is not None:
+                            break
+                    if found is not None:
+                        self.graph_tabs.setCurrentIndex(found)
+                except Exception:
+                    pass
+
             # Update active reference
             cur = self.graph_tabs.currentWidget()
             self.graph_grid = cur
@@ -1866,6 +2007,7 @@ class ROARApp(QMainWindow):
                 if ok and text:
                     self.graph_tabs.setTabText(idx, text)
             elif action == close_act:
+                # Close the specified tab (guarded inside close_graph_tab)
                 self.close_graph_tab(idx)
             elif action == color_act:
                 color = QColorDialog.getColor()
