@@ -60,6 +60,192 @@ class EngSpinBox(QDoubleSpinBox):
             return super().sizeHint()
 
 
+class ROARPlotWidget(pg.PlotWidget):
+    def __init__(self, *args, top_level_app=None, parent_lookup_window=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.top_level_app = top_level_app
+        self.parent_lookup_window = parent_lookup_window
+        self._mouse_inside = False
+
+        # Add legend and crosshair lines
+        self.plotItem.addLegend()
+        self.v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
+        self.h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
+        self.plotItem.addItem(self.v_line, ignoreBounds=True)
+        self.plotItem.addItem(self.h_line, ignoreBounds=True)
+        # Add text item for coordinates
+        self.coord_text = pg.TextItem(anchor=(0, 1))
+        self.plotItem.addItem(self.coord_text)
+        self.coord_text.setZValue(100)
+
+        # Initialize markers list
+        self.markers = []
+
+        # Connect mouse events
+        try:
+            self.scene().sigMouseMoved.connect(self.on_mouse_moved)
+            self.scene().sigMouseClicked.connect(self.on_mouse_clicked)
+            self.plotItem.vb.sigStateChanged.connect(self.on_state_changed)
+        except Exception:
+            pass
+
+    def on_state_changed(self, _):
+        if self.parent_lookup_window:
+            self.parent_lookup_window.sync_log_checkboxes()
+
+    def enterEvent(self, event):
+        self._mouse_inside = True
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._mouse_inside = False
+        if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
+            self.top_level_app.coord_label.setText("Coordinates: ")
+        super().leaveEvent(event)
+
+    def on_mouse_moved(self, pos):
+        if self._mouse_inside and self.plotItem.sceneBoundingRect().contains(pos):
+            # Only update coordinates if there are items in the plot
+            if not getattr(self.plotItem, 'curves', None):
+                return
+
+            mouse_point = self.plotItem.vb.mapSceneToView(pos)
+            x, y = mouse_point.x(), mouse_point.y()
+
+            x_log = self.plotItem.getAxis('bottom').logMode
+            y_log = self.plotItem.getAxis('left').logMode
+
+            display_x = 10**x if x_log else x
+            display_y = 10**y if y_log else y
+
+            if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
+                try:
+                    self.top_level_app.coord_label.setText(f"Coordinates: ({format_eng(display_x)}, {format_eng(display_y)})")
+                except Exception:
+                    pass
+
+            try:
+                self.coord_text.setText(f"x={format_eng(display_x)}, y={format_eng(display_y)}")
+                self.coord_text.setPos(mouse_point)
+                self.v_line.setPos(x)
+                self.h_line.setPos(y)
+            except Exception:
+                pass
+
+    def on_mouse_clicked(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            scene_pos = event.scenePos()
+            if self.plotItem.sceneBoundingRect().contains(scene_pos):
+                mouse_point = self.plotItem.vb.mapSceneToView(scene_pos)
+
+                for marker_info in list(self.markers):
+                    marker_item = marker_info.get("marker")
+                    try:
+                        if marker_item and self.is_close(marker_item.getData()[0][0], marker_item.getData()[1][0], mouse_point.x(), mouse_point.y()):
+                            self.plotItem.removeItem(marker_info.get("marker"))
+                            self.plotItem.removeItem(marker_info.get("text"))
+                            self.markers.remove(marker_info)
+                            return
+                    except Exception:
+                        pass
+
+                closest_curve, closest_point_index = self.find_closest_point(mouse_point)
+
+                if closest_curve is not None and closest_point_index is not None:
+                    x_data, y_data = closest_curve.getData()
+                    x, y = x_data[closest_point_index], y_data[closest_point_index]
+
+                    x_log = self.plotItem.getAxis('bottom').logMode
+                    y_log = self.plotItem.getAxis('left').logMode
+
+                    # Store the true linear value of the marker
+                    store_x = 10**x if x_log else x
+                    store_y = 10**y if y_log else y
+
+                    marker = pg.ScatterPlotItem(x=[x], y=[y], symbol='o', size=10, pen=pg.mkPen('r'), brush=pg.mkBrush('r'))
+                    self.plotItem.addItem(marker)
+
+                    text = pg.TextItem(f"({format_eng(store_x)}, {format_eng(store_y)})", anchor=(0.5, 1.5))
+                    text.setPos(x, y)
+                    self.plotItem.addItem(text)
+
+                    self.markers.append({"marker": marker, "text": text, "pos": (store_x, store_y)})
+
+                    plw = getattr(self, "parent_lookup_window", None)
+                    if plw:
+                        try:
+                            spinx = getattr(plw, "spin_x", None)
+                            spiny = getattr(plw, "spin_y", None)
+                            if isinstance(spinx, QDoubleSpinBox):
+                                try:
+                                    cur_min = spinx.minimum(); cur_max = spinx.maximum()
+                                    if store_x < cur_min:
+                                        spinx.setMinimum(store_x)
+                                    if store_x > cur_max:
+                                        spinx.setMaximum(store_x)
+                                except Exception:
+                                    pass
+                                try:
+                                    spinx.setValue(store_x)
+                                except Exception:
+                                    pass
+                            if isinstance(spiny, QDoubleSpinBox):
+                                try:
+                                    cur_min = spiny.minimum(); cur_max = spiny.maximum()
+                                    if store_y < cur_min:
+                                        spiny.setMinimum(store_y)
+                                    if store_y > cur_max:
+                                        spiny.setMaximum(store_y)
+                                except Exception:
+                                    pass
+                                try:
+                                    spiny.setValue(store_y)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+
+    def find_closest_point(self, mouse_point):
+        closest_curve = None
+        closest_point_index = None
+        min_dist_sq = float('inf')
+
+        mouse_pos_scene = self.plotItem.vb.mapViewToScene(mouse_point)
+
+        for curve in getattr(self.getPlotItem(), 'curves', []):
+            try:
+                x_data, y_data = curve.getData()
+            except Exception:
+                continue
+            if x_data is None or y_data is None:
+                continue
+
+            for i in range(len(x_data)):
+                point_view = pg.Point(x_data[i], y_data[i])
+                point_scene = self.plotItem.vb.mapViewToScene(point_view)
+
+                dist_sq = (point_scene.x() - mouse_pos_scene.x())**2 + (point_scene.y() - mouse_pos_scene.y())**2
+
+                if dist_sq < min_dist_sq:
+                    min_dist_sq = dist_sq
+                    closest_curve = curve
+                    closest_point_index = i
+
+        # Check if the closest point is reasonably close to the mouse click (in pixels)
+        if min_dist_sq > 75**2: # 75 pixels tolerance
+            return None, None
+
+        return closest_curve, closest_point_index
+
+    def is_close(self, x1, y1, x2, y2):
+        try:
+            p1 = self.plotItem.vb.mapViewToScene(pg.Point(x1, y1))
+            p2 = self.plotItem.vb.mapViewToScene(pg.Point(x2, y2))
+            return (p1.x() - p2.x())**2 + (p1.y() - p2.y())**2 < 10**2 # 10 pixels tolerance
+        except Exception:
+            return False
+
+
 class ROARLookupWindow(QWidget):
     def __init__(self, parent, expand_callback, top_level_app, graph_grid=None):
         super().__init__(parent)
@@ -308,12 +494,6 @@ class ROARLookupWindow(QWidget):
         # Adjust stretch factors for tech splitter (tech browser gets more space than controls)
         self.tech_splitter.setStretchFactor(0, 3)
         self.tech_splitter.setStretchFactor(1, 1)
-
-        # Delayed import of ROARPlotWidget to avoid circular import problems
-        try:
-            from .roar_gui import ROARPlotWidget
-        except Exception:
-            from roar_gui import ROARPlotWidget
 
         self.plot_widget = ROARPlotWidget(parent_lookup_window=self, top_level_app=self.top_level_app)
 
@@ -586,6 +766,8 @@ class ROARLookupWindow(QWidget):
         self._is_updating = True
 
         try:
+            # Top-level try to ensure the finally block below always executes
+            # (this was missing and caused a SyntaxError during import).
             models_selected = self.tech_browser.get_checked_item_paths()
 
             marker_positions = []
@@ -844,3 +1026,77 @@ class ROARLookupWindow(QWidget):
 
     def add_tech_luts(self, dirname, pdk_name):
         self.tech_browser.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
+
+
+class ROARGraphGrid(QWidget):
+    """Graph grid that contains four ROARLookupWindow instances arranged in a 2x2 splitter layout.
+
+    This implementation was moved here to avoid circular imports between modules.
+    """
+    def __init__(self, parent=None, top_level_app=None, tech_dict=None):
+        super().__init__(parent)
+        self.lookup_windows = []
+        layout = QVBoxLayout(self)
+        self.top_level_app = top_level_app
+
+        self.grid_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.grid_splitter.setChildrenCollapsible(True)
+
+        self.top_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.top_splitter.setChildrenCollapsible(True)
+
+        self.bottom_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.bottom_splitter.setChildrenCollapsible(True)
+
+        # instantiate four lookup windows
+        self.lookup_window_1 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_window_2 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_window_3 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_window_4 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+
+        self.lookup_windows.extend([self.lookup_window_1, self.lookup_window_2, self.lookup_window_3, self.lookup_window_4])
+
+        self.top_splitter.addWidget(self.lookup_window_1)
+        self.top_splitter.addWidget(self.lookup_window_2)
+
+        self.bottom_splitter.addWidget(self.lookup_window_3)
+        self.bottom_splitter.addWidget(self.lookup_window_4)
+
+        self.grid_splitter.addWidget(self.top_splitter)
+        self.grid_splitter.setStretchFactor(0, 1)
+        self.grid_splitter.addWidget(self.bottom_splitter)
+        self.grid_splitter.setStretchFactor(1, 1)
+
+        layout.addWidget(self.grid_splitter)
+
+    def add_tech_luts(self, dirname, pdk_name):
+        for lookup_window in self.lookup_windows:
+            try:
+                lookup_window.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
+            except Exception:
+                pass
+
+    def populate_from_app(self):
+        try:
+            app_tech = getattr(self.top_level_app, 'tech_dict', None)
+            expr_symbols = []
+            try:
+                expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
+                expr_symbols = list(expressions.keys()) if expressions else []
+            except Exception:
+                expr_symbols = []
+
+            for lookup_window in self.lookup_windows:
+                try:
+                    tb = getattr(lookup_window, 'tech_browser', None)
+                    if tb is not None:
+                        tb.tech_dict = app_tech if app_tech is not None else {}
+                        tb.populate_from_tech_dict()
+                        tb.startup = False
+                    lookup_window.update_expression_symbols(expr_symbols)
+                    lookup_window.update_combobox_items()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+

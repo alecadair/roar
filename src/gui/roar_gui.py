@@ -3,14 +3,65 @@ import os
 os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 import numpy as np
 #import pyqtgraph.opengl as gl
+try:
+    with open('/tmp/roar_debug.log', 'a', encoding='utf-8') as _fh:
+        _fh.write('roar_gui imported\n')
+except Exception:
+    pass
 
 from PyQt6.QtWidgets import (
     QDoubleSpinBox, QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout,
     QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem,
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
     QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton, QTabBar)
-from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen
+from PyQt6.QtCore import Qt, QSize, QObject, QEvent
+from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen, QKeySequence
+# QShortcut historically lives in QtWidgets but some PyQt6 builds expose it in QtGui.
+# Import with a fallback so the module works across environments.
+try:
+    from PyQt6.QtWidgets import QShortcut  # preferred location
+except Exception:
+    try:
+        from PyQt6.QtGui import QShortcut  # fallback for some builds
+    except Exception:
+        QShortcut = None
+# QActionGroup may be exposed in QtWidgets on some builds; try QtWidgets then QtGui, else provide shim
+try:
+    from PyQt6.QtWidgets import QActionGroup
+except Exception:
+    try:
+        from PyQt6.QtGui import QActionGroup
+    except Exception:
+        # Minimal shim for QActionGroup used in this module: we only need addAction and setExclusive
+        class QActionGroup:
+            def __init__(self, parent=None):
+                self._actions = []
+                self._exclusive = False
+
+            def addAction(self, action):
+                try:
+                    action.setCheckable(True)
+                except Exception:
+                    pass
+                self._actions.append(action)
+
+            def setExclusive(self, exclusive):
+                self._exclusive = bool(exclusive)
+                if self._exclusive and self._actions:
+                    # ensure only one action is checked: make first one checked if none
+                    any_checked = False
+                    for a in self._actions:
+                        try:
+                            if a.isChecked():
+                                any_checked = True
+                                break
+                        except Exception:
+                            pass
+                    if not any_checked:
+                        try:
+                            self._actions[0].setChecked(True)
+                        except Exception:
+                            pass
 os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 
 # from PySide6.QtCore import Qt
@@ -330,191 +381,42 @@ class ROARTechBrowser(QWidget):
             pass
 
 
-class ROARPlotWidget(pg.PlotWidget):
-    def __init__(self, *args, top_level_app=None, parent_lookup_window=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.top_level_app = top_level_app
-        self.parent_lookup_window = parent_lookup_window
-        self._mouse_inside = False
 
-        # Add legend and crosshair lines
-        self.plotItem.addLegend()
-        self.v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
-        self.h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
-        self.plotItem.addItem(self.v_line, ignoreBounds=True)
-        self.plotItem.addItem(self.h_line, ignoreBounds=True)
-        # Add text item for coordinates
-        self.coord_text = pg.TextItem(anchor=(0, 1))
-        self.plotItem.addItem(self.coord_text)
-        self.coord_text.setZValue(100)
 
-        # Initialize markers list
-        self.markers = []
-
-        # Connect mouse events
-        self.scene().sigMouseMoved.connect(self.on_mouse_moved)
-        self.scene().sigMouseClicked.connect(self.on_mouse_clicked)
-        self.plotItem.vb.sigStateChanged.connect(self.on_state_changed)
-
-    def on_state_changed(self, _):
-        if self.parent_lookup_window:
-            self.parent_lookup_window.sync_log_checkboxes()
-
-    def enterEvent(self, event):
-        self._mouse_inside = True
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self._mouse_inside = False
-        if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
-            self.top_level_app.coord_label.setText("Coordinates: ")
-        super().leaveEvent(event)
-
-    def on_mouse_moved(self, pos):
-        if self._mouse_inside and self.plotItem.sceneBoundingRect().contains(pos):
-            # Only update coordinates if there are items in the plot
-            if not self.plotItem.curves:
-                return
-
-            mouse_point = self.plotItem.vb.mapSceneToView(pos)
-            x, y = mouse_point.x(), mouse_point.y()
-
-            x_log = self.plotItem.getAxis('bottom').logMode
-            y_log = self.plotItem.getAxis('left').logMode
-
-            display_x = 10**x if x_log else x
-            display_y = 10**y if y_log else y
-
-            if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
-                self.top_level_app.coord_label.setText(f"Coordinates: ({format_eng(display_x)}, {format_eng(display_y)})")
-
-            self.coord_text.setText(f"x={format_eng(display_x)}, y={format_eng(display_y)}")
-            self.coord_text.setPos(mouse_point)
-            self.v_line.setPos(x)
-            self.h_line.setPos(y)
-
-    def on_mouse_clicked(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            scene_pos = event.scenePos()
-            if self.plotItem.sceneBoundingRect().contains(scene_pos):
-                mouse_point = self.plotItem.vb.mapSceneToView(scene_pos)
-
-                for marker_info in self.markers:
-                    marker_item = marker_info["marker"]
-                    if self.is_close(marker_item.getData()[0][0], marker_item.getData()[1][0], mouse_point.x(), mouse_point.y()):
-                        self.plotItem.removeItem(marker_info["marker"])
-                        self.plotItem.removeItem(marker_info["text"])
-                        self.markers.remove(marker_info)
-                        return
-
-                closest_curve, closest_point_index = self.find_closest_point(mouse_point)
-
-                if closest_curve is not None and closest_point_index is not None:
-                    x_data, y_data = closest_curve.getData()
-                    x, y = x_data[closest_point_index], y_data[closest_point_index]
-
-                    x_log = self.plotItem.getAxis('bottom').logMode
-                    y_log = self.plotItem.getAxis('left').logMode
-
-                    # Store the true linear value of the marker
-                    store_x = 10**x if x_log else x
-                    store_y = 10**y if y_log else y
-
-                    marker = pg.ScatterPlotItem(x=[x], y=[y], symbol='o', size=10, pen=pg.mkPen('r'), brush=pg.mkBrush('r'))
-                    self.plotItem.addItem(marker)
-
-                    text = pg.TextItem(f"({format_eng(store_x)}, {format_eng(store_y)})", anchor=(0.5, 1.5))
-                    text.setPos(x, y)
-                    self.plotItem.addItem(text)
-
-                    self.markers.append({"marker": marker, "text": text, "pos": (store_x, store_y)})
-
-                    # Update parent lookup window spinboxes (expand ranges if needed)
-                    plw = getattr(self, "parent_lookup_window", None)
-                    if plw:
-                        try:
-                            spinx = getattr(plw, "spin_x", None)
-                            spiny = getattr(plw, "spin_y", None)
-                            if isinstance(spinx, QDoubleSpinBox):
-                                self._ensure_spinbox_range(spinx, store_x)
-                                spinx.setValue(store_x)
-                            if isinstance(spiny, QDoubleSpinBox):
-                                self._ensure_spinbox_range(spiny, store_y)
-                                spiny.setValue(store_y)
-                        except Exception:
-                            # Don't raise on UI update errors
-                            pass
-
-    def _ensure_spinbox_range(self, spinbox: QDoubleSpinBox, value: float, margin: float = 0.1):
-        """
-        Expand the given QDoubleSpinBox range so `value` can be set without being clamped.
-        """
+# ROARGraphGrid implementation moved to `roar_lookup_window.py` to reduce circular imports.
+try:
+    # Try package-relative import first
+    from .roar_lookup_window import ROARGraphGrid
+except Exception:
+    try:
+        from gui.roar_lookup_window import ROARGraphGrid
+    except Exception:
         try:
-            cur_min = spinbox.minimum()
-            cur_max = spinbox.maximum()
-            # If the incoming value is outside current range, expand by a small margin
-            if value < cur_min:
-                new_min = value - max(abs(value) * margin, 1e-12)
-                spinbox.setMinimum(new_min)
-            if value > cur_max:
-                new_max = value + max(abs(value) * margin, 1e-12)
-                spinbox.setMaximum(new_max)
+            from roar_lookup_window import ROARGraphGrid
         except Exception:
-            # Be defensive: don't let a spinbox error break marker placement
-            pass
+            # Leave a minimal placeholder so the module continues to import without failing.
+            class ROARGraphGrid(QWidget):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    lbl = QLabel('ROARGraphGrid not available')
+                    l = QVBoxLayout(self)
+                    l.addWidget(lbl)
 
-    def find_closest_point(self, mouse_point):
-        closest_curve = None
-        closest_point_index = None
-        min_dist_sq = float('inf')
 
-        mouse_pos_scene = self.plotItem.vb.mapViewToScene(mouse_point)
 
-        for curve in self.getPlotItem().curves:
-            x_data, y_data = curve.getData()
-            if x_data is None or y_data is None:
-                continue
 
-            for i in range(len(x_data)):
-                point_view = pg.Point(x_data[i], y_data[i])
-                point_scene = self.plotItem.vb.mapViewToScene(point_view)
 
-                dist_sq = (point_scene.x() - mouse_pos_scene.x())**2 + (point_scene.y() - mouse_pos_scene.y())**2
-
-                if dist_sq < min_dist_sq:
-                    min_dist_sq = dist_sq
-                    closest_curve = curve
-                    closest_point_index = i
-
-        # Check if the closest point is reasonably close to the mouse click (in pixels)
-        if min_dist_sq > 75**2: # 75 pixels tolerance
-            return None, None
-
-        return closest_curve, closest_point_index
-
-    def is_close(self, x1, y1, x2, y2):
-        p1 = self.plotItem.vb.mapViewToScene(pg.Point(x1, y1))
-        p2 = self.plotItem.vb.mapViewToScene(pg.Point(x2, y2))
-        return (p1.x() - p2.x())**2 + (p1.y() - p2.y())**2 < 10**2 # 10 pixels tolerance
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_F and self._mouse_inside:
-            self.plotItem.autoRange()
-        elif event.key() == Qt.Key.Key_X and self._mouse_inside:
-            if self.parent_lookup_window:
-                self.parent_lookup_window.checkbox_logx.toggle()
-        elif event.key() == Qt.Key.Key_Y and self._mouse_inside:
-            if self.parent_lookup_window:
-                self.parent_lookup_window.checkbox_logy.toggle()
-        elif event.key() == Qt.Key.Key_L and self._mouse_inside:
-            if self.parent_lookup_window:
-                log_x_checked = self.parent_lookup_window.checkbox_logx.isChecked()
-                log_y_checked = self.parent_lookup_window.checkbox_logy.isChecked()
-                new_state = not (log_x_checked and log_y_checked)
-                self.parent_lookup_window.checkbox_logx.setChecked(new_state)
-                self.parent_lookup_window.checkbox_logy.setChecked(new_state)
-        else:
-            super().keyPressEvent(event)
+# Import ROARPlotWidget from the lookup module (moved there to avoid circular import)
+try:
+    from .roar_lookup_window import ROARPlotWidget
+except Exception:
+    try:
+        from gui.roar_lookup_window import ROARPlotWidget
+    except Exception:
+        try:
+            from roar_lookup_window import ROARPlotWidget
+        except Exception:
+            ROARPlotWidget = None
 
 
 class ROARHeader(QWidget):
@@ -598,101 +500,20 @@ class ROARHeader(QWidget):
         self.setLayout(layout)
 
 
-class ROARGraphGrid(QWidget):
-    def __init__(self, parent=None, top_level_app=None, tech_dict=None):
-        super().__init__(parent)
-        self.lookup_windows = []
-        layout = QVBoxLayout(self)
-        self.top_level_app = top_level_app
-
-        self.grid_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.grid_splitter.setChildrenCollapsible(True)
-
-        self.top_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.top_splitter.setChildrenCollapsible(True)
-
-        self.bottom_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.bottom_splitter.setChildrenCollapsible(True)
-
-        # Top left lookup window in grid
-        self.lookup_window_1 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app,
-                                                graph_grid=self)
-        # Top right lookup window in grid
-        self.lookup_window_2 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app,
-                                                graph_grid=self)
-        # Bottom left lookup window in grid
-        self.lookup_window_3 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app,
-                                                graph_grid=self)
-        # Bottom right lookup window in grid
-        self.lookup_window_4 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app,
-                                                graph_grid=self)
-
-        self.lookup_windows.append(self.lookup_window_1)
-        self.lookup_windows.append(self.lookup_window_2)
-        self.lookup_windows.append(self.lookup_window_3)
-        self.lookup_windows.append(self.lookup_window_4)
-
-        self.top_splitter.addWidget(self.lookup_window_1)
-        self.top_splitter.addWidget(self.lookup_window_2)
-
-        self.bottom_splitter.addWidget(self.lookup_window_3)
-        self.bottom_splitter.addWidget(self.lookup_window_4)
-
-        self.grid_splitter.addWidget(self.top_splitter)
-        self.grid_splitter.setStretchFactor(0, 1)
-        self.grid_splitter.addWidget(self.bottom_splitter)
-        self.grid_splitter.setStretchFactor(1, 1)
-
-        layout.addWidget(self.grid_splitter)
-
-    def add_tech_luts(self, dirname, pdk_name):
-        for lookup_window in self.lookup_windows:
-            lookup_window.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
-
-    def populate_from_app(self):
-        """Populate this grid's lookup windows from the top-level app's tech_dict.
-
-        This is used when a new tab is created, to initialize its lookup windows
-        with the same technology LUTs and expression symbols as existing tabs.
-        """
-        try:
-            # Ensure we have the latest tech_dict and expressions from the top-level app
-            app_tech = getattr(self.top_level_app, 'tech_dict', None)
-            # Get expression symbols from editor window if available
-            expr_symbols = []
-            try:
-                expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
-                expr_symbols = list(expressions.keys()) if expressions else []
-            except Exception:
-                expr_symbols = []
-
-            for lookup_window in self.lookup_windows:
-                try:
-                    tb = getattr(lookup_window, 'tech_browser', None)
-                    if tb is not None:
-                        tb.tech_dict = app_tech if app_tech is not None else {}
-                        tb.populate_from_tech_dict()
-                        tb.startup = False
-
-                    # Update the lookup window's expression symbols and refresh comboboxes
-                    lookup_window.update_expression_symbols(expr_symbols)
-                    lookup_window.update_combobox_items()
-                except Exception:
-                    # Continue initializing other lookup windows even if one fails
-                    pass
-        except Exception:
-            pass
-
-
 class ROARApp(QMainWindow):
     def __init__(self, tech_dict=None):
+        try:
+            with open('/tmp/roar_debug.log', 'a', encoding='utf-8') as _fh:
+                _fh.write('ROARApp.__init__ start\n')
+        except Exception:
+            pass
         super().__init__()
-        self.roar_design = ROARDesign()
-        roar_images = ROAR_HOME + "/images/png/"
-        self.setWindowIcon(QIcon(roar_images + "ROAR_ICON.png"))
+
+        # Set up the status bar with a QLabel for coordinates
         self.setStatusBar(QStatusBar())
         self.coord_label = QLabel("Coordinates: ")
         self.statusBar().addPermanentWidget(self.coord_label)
+
         # Define lookup variables
         self.lookups = ['cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'csb', 'css', 'ft', 'gds', 'gm', 'gmb',
                         'gmidft', 'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm',
@@ -737,6 +558,9 @@ class ROARApp(QMainWindow):
         else:
             self.tech_dict = tech_dict
         self.roar_teal = '#1C8091'
+
+        # Initialize plot log state tracking
+        self._plot_log_state = {}
 
         # Window properties
         self.setWindowTitle("ROAR - Robust Optimal Analog Reuse")
@@ -815,6 +639,27 @@ class ROARApp(QMainWindow):
         # Initialize menu bar
         self.init_menu_bar()
 
+        # Install application-wide event filter so keys are seen regardless of which widget has focus.
+        # If the QApplication exists, install the filter now; otherwise log and rely on ROARApp.keyPressEvent.
+        try:
+            qapp = QApplication.instance()
+            if qapp is not None:
+                try:
+                    qapp.installEventFilter(_GlobalKeyFilter(self))
+                    with open('/tmp/roar_debug.log', 'a', encoding='utf-8') as _fh:
+                        _fh.write('global key filter installed\n')
+                except Exception:
+                    pass
+            else:
+                try:
+                    with open('/tmp/roar_debug.log', 'a', encoding='utf-8') as _fh:
+                        _fh.write('QApplication.instance() returned None; event filter not installed at init\n')
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
         sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
         predictive_28 = ROAR_CHARACTERIZATION + "/predictive_28/LUTs_1V8_mac"
         ihp130_luts = ROAR_CHARACTERIZATION + "/ihp130/LUTs_IHP130"
@@ -829,6 +674,11 @@ class ROARApp(QMainWindow):
             #design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "cs2.json")
             design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "single_transistor_basic_variables.json")
             self.editor_window.load_all_data(file_path=design_path, show_success_message=False)
+        try:
+            with open('/tmp/roar_debug.log', 'a', encoding='utf-8') as _fh:
+                _fh.write('ROARApp.__init__ end\n')
+        except Exception:
+            pass
 
     def add_tech_luts_from_tech_list(self):
         import os, shlex
@@ -981,6 +831,40 @@ class ROARApp(QMainWindow):
         window_menu.addAction(maximize_action)
         window_menu.addAction(window_prefs_action)
 
+        # Theme submenu: choose between Dark and Light themes
+        try:
+            theme_menu = window_menu.addMenu("Theme")
+            theme_group = QActionGroup(self)
+            # Dark theme action
+            dark_act = QAction("Dark", self, checkable=True)
+            dark_act.triggered.connect(lambda: self.set_theme('dark'))
+            theme_group.addAction(dark_act)
+            theme_menu.addAction(dark_act)
+
+            # Light theme action
+            light_act = QAction("Light", self, checkable=True)
+            light_act.triggered.connect(lambda: self.set_theme('light'))
+            theme_group.addAction(light_act)
+            theme_menu.addAction(light_act)
+
+            # Make them behave like radio buttons
+            try:
+                theme_group.setExclusive(True)
+            except Exception:
+                pass
+
+            # Initialize selection: try to default to dark if qdarktheme available
+            try:
+                import qdarktheme as _qt
+                dark_act.setChecked(True)
+                self._current_theme = 'dark'
+            except Exception:
+                # default to light
+                light_act.setChecked(True)
+                self._current_theme = 'light'
+        except Exception:
+            pass
+
         # ----- EXPORT MENU -----
         export_menu = menubar.addMenu("Export")
         export_action = QAction("Export Data", self)
@@ -1034,6 +918,133 @@ class ROARApp(QMainWindow):
         """Displays an About dialog."""
         QMessageBox.about(self, "About ROAR", "ROAR - Robust Optimal Analog Reuse\nVersion 1.0\n© 2026 ROAR Inc.")
 
+    def set_theme(self, theme_name: str):
+        """Apply 'dark' or 'light' theme to the application.
+
+        Preference: try to use qdarktheme.setup_theme(), otherwise fall back
+        to a simple QPalette-based swap.
+        """
+        try:
+            qapp = QApplication.instance() or QApplication(sys.argv)
+            # Use qdarktheme if available (provides nicer styling)
+            try:
+                import qdarktheme
+                if theme_name == 'dark':
+                    qdarktheme.setup_theme('dark')
+                else:
+                    qdarktheme.setup_theme('light')
+                self._current_theme = theme_name
+                return
+            except Exception:
+                pass
+
+            # Fallback: manual palette
+            if theme_name == 'dark':
+                pal = QPalette()
+                pal.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
+                pal.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
+                pal.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
+                pal.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
+                pal.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
+                pal.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
+                pal.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
+                pal.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
+                pal.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
+                pal.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
+                qapp.setPalette(pal)
+                qapp.setStyleSheet("")
+            else:
+                # restore default
+                qapp.setPalette(QApplication.style().standardPalette())
+                qapp.setStyleSheet("")
+            self._current_theme = theme_name
+        except Exception:
+            pass
+
+    def keyPressEvent(self, event):
+        """Handle global hotkeys directly on the main window: L (toggle both log axes),
+        X (toggle log X), Y (toggle log Y), F (auto-fit).
+        This method is a reliable fallback when QShortcut/QAction registration fails
+        or when focus handling prevents application-wide shortcuts from firing.
+        """
+        # Debug trace: record every keyPressEvent seen by the main window for diagnosis
+        try:
+            try:
+                txt = event.text() or ''
+            except Exception:
+                txt = ''
+            try:
+                with open('/tmp/roar_keypress_event.log', 'a', encoding='utf-8') as _fh:
+                    _fh.write(f"ROARApp.keyPressEvent: text={repr(txt)} key={event.key()} mods={int(event.modifiers())}\n")
+            except Exception:
+                pass
+        except Exception:
+            pass
+        try:
+            # Prefer event.text() so lowercase letters work without Shift
+            try:
+                ch = event.text().lower()
+            except Exception:
+                ch = None
+            if ch == 'x':
+                try:
+                    self._shortcut_toggle_log_x()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            if ch == 'y':
+                try:
+                    self._shortcut_toggle_log_y()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            if ch == 'f':
+                try:
+                    self._shortcut_auto_fit()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            # fallback to raw key constant
+            key = event.key()
+            if key == Qt.Key.Key_L:
+                try:
+                    self._shortcut_toggle_log_both()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            if key == Qt.Key.Key_X:
+                try:
+                    self._shortcut_toggle_log_x()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            if key == Qt.Key.Key_Y:
+                try:
+                    self._shortcut_toggle_log_y()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            if key == Qt.Key.Key_F:
+                try:
+                    self._shortcut_auto_fit()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # fallback to base class for other keys
+        try:
+            super().keyPressEvent(event)
+        except Exception:
+            pass
+
     # ----------------- Tab management for graph grids -----------------
     def create_new_graph_tab(self):
         """Create a new tab containing its own ROARGraphGrid."""
@@ -1054,6 +1065,54 @@ class ROARApp(QMainWindow):
 
             # Populate the new tab's lookup windows from the app's tech_dict
             grid.populate_from_app()
+
+            # Robust fallback: ensure there's at least one PlotWidget in the tab so
+            # application-level shortcuts have something to operate on. This helps
+            # when the real ROARGraphGrid/ROARLookupWindow couldn't be imported and
+            # a lightweight placeholder was used instead.
+            try:
+                existing = [p for p in grid.findChildren(pg.PlotWidget)]
+                if not existing:
+                    try:
+                        pw = pg.PlotWidget()
+                        # mark initial log flags
+                        setattr(pw, '_log_x', False)
+                        setattr(pw, '_log_y', False)
+                        # help the shortcut code find context
+                        try:
+                            setattr(pw, 'parent_lookup_window', grid)
+                        except Exception:
+                            pass
+                        try:
+                            pi = pw.getPlotItem()
+                            setattr(pw, 'plotItem', pi)
+                        except Exception:
+                            pass
+                        # attach to grid's layout or create one
+                        if isinstance(grid.layout(), QVBoxLayout) or hasattr(grid, 'layout'):
+                            try:
+                                l = grid.layout()
+                                if l is None:
+                                    l = QVBoxLayout(grid)
+                                    grid.setLayout(l)
+                                l.addWidget(pw)
+                            except Exception:
+                                try:
+                                    l = QVBoxLayout()
+                                    l.addWidget(pw)
+                                    grid.setLayout(l)
+                                except Exception:
+                                    pass
+                        else:
+                            try:
+                                l = QVBoxLayout(grid)
+                                l.addWidget(pw)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
             return grid
         except Exception as e:
@@ -1214,6 +1273,255 @@ class ROARApp(QMainWindow):
         except Exception:
             pass
 
+    def _apply_to_plotwidgets(self, handler):
+        """Find PlotWidget-like objects in the active graph tab and call handler(pw).
+
+        This looks for:
+        - plot_widget attribute on each lookup window (ROARLookupWindow.plot_widget)
+        - direct pg.PlotWidget descendants via findChildren
+        - wrappers exposing getPlotItem() (duck-typing)
+        """
+        try:
+            grid = getattr(self, 'graph_grid', None)
+            if grid is None:
+                return
+
+            found = []
+
+            # Direct: if graph_grid exposes lookup_windows (ROARGraphGrid does)
+            try:
+                for lw in getattr(grid, 'lookup_windows', []) or []:
+                    try:
+                        # common attribute used by ROARLookupWindow
+                        pw = getattr(lw, 'plot_widget', None)
+                        if pw is not None and pw not in found:
+                            found.append(pw)
+                            continue
+                    except Exception:
+                        pass
+
+                    # fallback: discover any PlotWidget children under the lookup window
+                    try:
+                        found.extend([p for p in lw.findChildren(pg.PlotWidget) if p not in found])
+                    except Exception:
+                        pass
+
+            except Exception:
+                pass
+
+            # Also scan the grid itself for PlotWidget descendants
+            try:
+                found.extend([p for p in grid.findChildren(pg.PlotWidget) if p not in found])
+            except Exception:
+                pass
+
+            # As a final fallback, walk QWidget descendants and accept wrappers exposing getPlotItem()
+            try:
+                for w in grid.findChildren(QWidget):
+                    try:
+                        if w in found:
+                            continue
+                        if hasattr(w, 'getPlotItem') and callable(getattr(w, 'getPlotItem')):
+                            found.append(w)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Build a small proxy that exposes the minimal plot API the handlers expect.
+            class _PlotProxy:
+                def __init__(self, src):
+                    self._src = src
+                    try:
+                        self._pi = self.getPlotItem()
+                        self._pi_id = id(self._pi) if self._pi is not None else None
+                    except Exception:
+                        self._pi = None
+                        self._pi_id = None
+
+                def getPlotItem(self):
+                    # Prefer direct PlotItem access
+                    try:
+                        if hasattr(self._src, 'getPlotItem') and callable(getattr(self._src, 'getPlotItem')):
+                            return self._src.getPlotItem()
+                    except Exception:
+                        pass
+                    try:
+                        # Some wrappers expose .plotItem
+                        if hasattr(self._src, 'plotItem'):
+                            return getattr(self._src, 'plotItem')
+                    except Exception:
+                        pass
+                    try:
+                        # If it's already a PlotItem, return it
+                        import pyqtgraph as _pg
+                        if isinstance(self._src, _pg.PlotItem):
+                            return self._src
+                    except Exception:
+                        pass
+                    return None
+
+                def setLogMode(self, x=False, y=False):
+                    # Try to call setLogMode on the source or on the PlotItem
+                    try:
+                        if hasattr(self._src, 'setLogMode') and callable(self._src.setLogMode):
+                            self._src.setLogMode(x=x, y=y)
+                            return
+                    except Exception:
+                        pass
+                    try:
+                        pi = self.getPlotItem()
+                        if pi is not None and hasattr(pi, 'setLogMode') and callable(pi.setLogMode):
+                            pi.setLogMode(x=x, y=y)
+                            return
+                    except Exception:
+                        pass
+
+                def getViewBox(self):
+                    try:
+                        if hasattr(self._src, 'getViewBox') and callable(self._src.getViewBox):
+                            return self._src.getViewBox()
+                    except Exception:
+                        pass
+                    try:
+                        pi = self.getPlotItem()
+                        if pi is not None and hasattr(pi, 'getViewBox') and callable(pi.getViewBox):
+                            return pi.getViewBox()
+                    except Exception:
+                        pass
+                    return None
+
+                def enableAutoRange(self):
+                    try:
+                        if hasattr(self._src, 'enableAutoRange') and callable(self._src.enableAutoRange):
+                            return self._src.enableAutoRange()
+                    except Exception:
+                        pass
+                    try:
+                        pi = self.getPlotItem()
+                        if pi is not None and hasattr(pi, 'enableAutoRange') and callable(pi.enableAutoRange):
+                            return pi.enableAutoRange()
+                    except Exception:
+                        pass
+                    return None
+
+                def __repr__(self):
+                    return f"_PlotProxy({type(self._src)})"
+
+            for pw in found:
+                try:
+                    proxy = _PlotProxy(pw)
+                    handler(proxy)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _shortcut_toggle_log_both(self):
+        def h(pw):
+            try:
+                try:
+                    with open('/tmp/roar_shortcuts.log', 'a', encoding='utf-8') as fh:
+                        fh.write(f"TOGGLE_BOTH target={type(pw)} id={getattr(pw,'_pi_id',None)}\n")
+                except Exception:
+                    pass
+
+                pi = pw.getPlotItem()
+                if pi is not None:
+                    cur_x = pi.getAxis('bottom').logMode
+                    cur_y = pi.getAxis('left').logMode
+                    if cur_x and cur_y:
+                        # Both on log, turn both off
+                        new_x = False
+                        new_y = False
+                    elif not cur_x and not cur_y:
+                        # Both off log, turn both on
+                        new_x = True
+                        new_y = True
+                    else:
+                        # One on, one off, turn both on to make consistent
+                        new_x = True
+                        new_y = True
+                    pi.setLogMode(x=new_x, y=new_y)
+                    pi_id = id(pi)
+                    self._plot_log_state[pi_id] = {'x': new_x, 'y': new_y}
+
+                # Sync checkboxes
+                plw = getattr(pw, 'parent_lookup_window', None)
+                if plw and hasattr(plw, 'sync_log_checkboxes'):
+                    plw.sync_log_checkboxes()
+            except Exception:
+                pass
+        self._apply_to_plotwidgets(h)
+
+    def _shortcut_toggle_log_x(self):
+        def h(pw):
+            try:
+                try:
+                    with open('/tmp/roar_shortcuts.log', 'a', encoding='utf-8') as fh:
+                        fh.write(f"TOGGLE_X target={type(pw)} id={getattr(pw,'_pi_id',None)}\n")
+                except Exception:
+                    pass
+
+                pi = pw.getPlotItem()
+                if pi is not None:
+                    cur_x = pi.getAxis('bottom').logMode
+                    cur_y = pi.getAxis('left').logMode
+                    new_x = not cur_x
+                    pi.setLogMode(x=new_x, y=cur_y)
+                    pi_id = id(pi)
+                    self._plot_log_state[pi_id] = {'x': new_x, 'y': cur_y}
+
+                # Sync checkboxes
+                plw = getattr(pw, 'parent_lookup_window', None)
+                if plw and hasattr(plw, 'sync_log_checkboxes'):
+                    plw.sync_log_checkboxes()
+            except Exception:
+                pass
+        self._apply_to_plotwidgets(h)
+
+    def _shortcut_toggle_log_y(self):
+        def h(pw):
+            try:
+                try:
+                    with open('/tmp/roar_shortcuts.log', 'a', encoding='utf-8') as fh:
+                        fh.write(f"TOGGLE_Y target={type(pw)} id={getattr(pw,'_pi_id',None)}\n")
+                except Exception:
+                    pass
+
+                pi = pw.getPlotItem()
+                if pi is not None:
+                    cur_x = pi.getAxis('bottom').logMode
+                    cur_y = pi.getAxis('left').logMode
+                    new_y = not cur_y
+                    pi.setLogMode(x=cur_x, y=new_y)
+                    pi_id = id(pi)
+                    self._plot_log_state[pi_id] = {'x': cur_x, 'y': new_y}
+
+                # Sync checkboxes
+                plw = getattr(pw, 'parent_lookup_window', None)
+                if plw and hasattr(plw, 'sync_log_checkboxes'):
+                    plw.sync_log_checkboxes()
+            except Exception:
+                pass
+        self._apply_to_plotwidgets(h)
+
+    def _shortcut_auto_fit(self):
+        def h(pw):
+            try:
+                try:
+                    with open('/tmp/roar_shortcuts.log', 'a', encoding='utf-8') as fh:
+                        fh.write(f"AUTO_FIT target={type(pw)} id={getattr(pw,'_pi_id',None)}\n")
+                except Exception:
+                    pass
+
+                vb = pw.getViewBox()
+                if vb is not None:
+                    vb.enableAutoRange()
+            except Exception:
+                pass
+        self._apply_to_plotwidgets(h)
+
 # Custom QTabBar that forwards right-clicks to the application's tab context menu
 class ROARTabBar(QTabBar):
     def __init__(self, owner=None, *args, **kwargs):
@@ -1232,59 +1540,95 @@ class ROARTabBar(QTabBar):
             pass
         super().mousePressEvent(event)
 
-if __name__ == "__main__":
-    # Wrap execution in a try/except to surface any exceptions when running
-    # from environments (like PyCharm) that might otherwise swallow them.
+
+# Global event filter to capture key presses application-wide (L/X/Y/F)
+class _GlobalKeyFilter(QObject):
+    def __init__(self, owner):
+        super().__init__()
+        self.owner = owner
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QEvent.Type.KeyPress:
+                # log what we see for debugging (text() may be empty depending on IME/focus)
+                try:
+                    txt = event.text() or ''
+                except Exception:
+                    txt = ''
+                key = event.key()
+                try:
+                    with open('/tmp/roar_keys.log', 'a', encoding='utf-8') as fh:
+                        fh.write(f"GlobalKeyFilter: text={repr(txt)} key={key} mods={int(event.modifiers())}\n")
+                except Exception:
+                    pass
+
+                ch = txt.lower() if txt else None
+                # Prefer textual match (lowercase) but fall back to key constants
+                if ch == 'l' or key == Qt.Key.Key_L:
+                    try:
+                        self.owner._shortcut_toggle_log_both()
+                        event.accept()
+                        return True
+                    except Exception:
+                        pass
+                if ch == 'x' or key == Qt.Key.Key_X:
+                    try:
+                        self.owner._shortcut_toggle_log_x()
+                        event.accept()
+                        return True
+                    except Exception:
+                        pass
+                if ch == 'y' or key == Qt.Key.Key_Y:
+                    try:
+                        self.owner._shortcut_toggle_log_y()
+                        event.accept()
+                        return True
+                    except Exception:
+                        pass
+                if ch == 'f' or key == Qt.Key.Key_F:
+                    try:
+                        self.owner._shortcut_auto_fit()
+                        event.accept()
+                        return True
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return False
+
+
+if __name__ == '__main__':
+    # Run the application when executed as a script. Use a defensive wrapper
+    # so any exceptions print to stderr instead of causing a silent exit.
     try:
-        print("\nInitializing ROAR GUI Application...\n")
-        # If running on Linux without a DISPLAY or Wayland session, Qt may exit
-        # silently. Detect that and print a helpful message rather than failing
-        # with no output.
-        if sys.platform.startswith('linux'):
-            has_display = bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
-            if not has_display:
-                print("ERROR: No X11/Wayland display found (DISPLAY or WAYLAND_DISPLAY not set).")
-                print("If you're running headless, start with Xvfb: e.g.")
-                print("  xvfb-run -s \"-screen 0 1280x800x24\" python3 src/gui/roar_gui.py")
-                print("Or run this from a desktop session where DISPLAY is set.")
-                sys.exit(1)
+        try:
+            with open('/tmp/roar_debug.log', 'a', encoding='utf-8') as _fh:
+                _fh.write('entrypoint start\n')
+        except Exception:
+            pass
+         # Ensure Qt uses the same binding selected earlier
+        try:
+            from PyQt6.QtWidgets import QApplication
+        except Exception:
+            # fallback: try importing from separate module
+            from PyQt6.QtWidgets import QApplication
 
         app = QApplication(sys.argv)
-        # qdarktheme.setup_theme("light")
-        # qdarktheme.setup_theme("auto")
-        # qdarktheme.setup_theme()
+        # optional: set a dark theme if qdarktheme available
+        try:
+            import qdarktheme
+            qdarktheme.setup_theme()
+        except Exception:
+            pass
 
-        tech_dict = None
-        window = None
-        test = ""
-
-        if test in ["test_tech_browser", "test_plot_widget", "test_lookup_window", "test_window_grid"]:
-            window = QMainWindow()
-
-        if test == "test_tech_browser":
-            test_widget = ROARTechBrowser(window, None, None, tech_dict={})
-            test_widget.add_tech_luts(dirname=sky130_luts, pdk_name="Skywater130A")
-            window.setCentralWidget(test_widget)
-        elif test == "test_plot_widget":
-            test_widget = ROARPlotWidget(window)
-            window.setCentralWidget(test_widget)
-        elif test == "test_lookup_window":
-            test_widget = ROARLookupWindow(window, None, None, tech_dict=tech_dict)
-            window.setCentralWidget(test_widget)
-        elif test == "test_window_grid":
-            test_widget = ROARGraphGrid(window, None, tech_dict=tech_dict)
-            window.setCentralWidget(test_widget)
-        else:
-            window = ROARApp()
-
-        print("Showing main window...")
-        window.show()
-        print("Starting Qt event loop...")
-        ret = app.exec()
-        print(f"Qt event loop exited with return code: {ret}")
-        sys.exit(ret)
-    except Exception:
+        main_win = ROARApp()
+        main_win.show()
+        # start event loop
+        exit_code = app.exec()
+        sys.exit(exit_code)
+    except Exception as e:
+        # Print full traceback to stderr to aid debugging
         import traceback, sys as _sys
         traceback.print_exc()
-        # Ensure non-zero exit on exception
         _sys.exit(1)
+
