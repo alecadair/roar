@@ -806,15 +806,9 @@ class ROARLookupWindow(QWidget):
                 param1 = self.combo_x.currentText()
                 param2 = self.combo_y.currentText()
 
-                if self.current_color_index >= len(self.color_list):
-                    self.current_color_index = 0
-                    self.current_style_index += 1
-                    if self.current_style_index >= len(self.style_list):
-                        self.current_style_index = 0
-
-                color = self.color_list[self.current_color_index]
-                style = self.style_list[self.current_style_index]
-                graph_pen = pg.mkPen(color=QColor(color), style=style, width=1)
+                color = self.tech_browser.get_color_for_path(model)
+                style = Qt.PenStyle.SolidLine
+                graph_pen = pg.mkPen(color=color, style=style, width=1)
 
                 if self.is_device_params_mode:
                     unit1 = ""
@@ -962,7 +956,6 @@ class ROARLookupWindow(QWidget):
                                     except Exception:
                                         pass
                                 new_plot = False
-                                self.current_color_index += 1
                                 continue
 
                         try:
@@ -998,7 +991,6 @@ class ROARLookupWindow(QWidget):
                             pass
                 new_plot = False
                 self.plot_widget.showGrid(x=True, y=True)
-                self.current_color_index += 1
 
             if auto_fit:
                 self.plot_widget.plotItem.autoRange()

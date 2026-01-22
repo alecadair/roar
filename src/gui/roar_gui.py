@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout,
     QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem,
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
-    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton, QTabBar)
+    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton, QTabBar, QAbstractItemView)
 from PyQt6.QtCore import Qt, QSize, QObject, QEvent
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen, QKeySequence
 # QShortcut historically lives in QtWidgets but some PyQt6 builds expose it in QtGui.
@@ -190,10 +190,15 @@ class ROARTechBrowser(QWidget):
         # self.tree.itemClicked.connect(self.select_item)
         self.startup = True
         self.tree.itemChanged.connect(self.handle_item_changed)
+        self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.show_context_menu)
         layout.addWidget(self.tree)
 
         self.tree_item_counter = 0
         self.tech_dict = tech_dict if tech_dict is not None else top_level_app.tech_dict
+        self.color_map = {}
+        self.path_to_item = {}
 
         self.pdk_item = QTreeWidgetItem(self.tree, ["PDK"])
         self.pdk_item.setFlags(self.pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -336,6 +341,47 @@ class ROARTechBrowser(QWidget):
                     corner_item.setFlags(corner_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                     corner_item.setCheckState(0, Qt.CheckState.Unchecked)
                     length_item.addChild(corner_item)
+                    full_path = self.build_full_path(corner_item)
+                    self.path_to_item[full_path] = corner_item
+                    self.set_item_icon(corner_item, self.get_color_for_path(full_path))
+
+    def show_context_menu(self, pos):
+        item = self.tree.itemAt(pos)
+        if item and not item.childCount():  # corner item
+            menu = QMenu()
+            set_color_action = menu.addAction("Set Color")
+            action = menu.exec(self.tree.mapToGlobal(pos))
+            if action == set_color_action:
+                selected_items = self.tree.selectedItems()
+                corners = [self.build_full_path(i) for i in selected_items if not i.childCount()]
+
+                if corners:
+                    color = QColorDialog.getColor()
+                    if color.isValid():
+                        for path in corners:
+                            self.color_map[path] = color
+                        # update graph
+                        self.lookup_window.update_graph_from_tech_browser()
+
+                        # update icons
+                        for path in corners:
+                            if path in self.path_to_item:
+                                self.set_item_icon(self.path_to_item[path], color)
+
+    def get_color_for_path(self, path):
+        if path in self.color_map:
+            return self.color_map[path]
+        else:
+            # assign a default color
+            import random
+            color = QColor.fromHsv(random.randint(0, 255), 200, 200)
+            self.color_map[path] = color
+            return color
+
+    def set_item_icon(self, item, color):
+        pix = QPixmap(16, 16)
+        pix.fill(color)
+        item.setIcon(0, QIcon(pix))
 
     def populate_from_tech_dict(self):
         """Rebuild the tree widget from the current self.tech_dict.
@@ -377,6 +423,9 @@ class ROARTechBrowser(QWidget):
                             corner_item.setFlags(corner_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                             corner_item.setCheckState(0, Qt.CheckState.Unchecked)
                             length_item.addChild(corner_item)
+                            full_path = self.build_full_path(corner_item)
+                            self.path_to_item[full_path] = corner_item
+                            self.set_item_icon(corner_item, self.get_color_for_path(full_path))
         except Exception:
             pass
 
