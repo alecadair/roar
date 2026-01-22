@@ -835,17 +835,18 @@ class ROARApp(QMainWindow):
         try:
             theme_menu = window_menu.addMenu("Theme")
             theme_group = QActionGroup(self)
+            # Light theme action first
+            light_act = QAction("Light", self, checkable=True)
+            light_act.triggered.connect(lambda: self.set_theme('light'))
+            theme_group.addAction(light_act)
+            theme_menu.addAction(light_act)
+
             # Dark theme action
             dark_act = QAction("Dark", self, checkable=True)
             dark_act.triggered.connect(lambda: self.set_theme('dark'))
             theme_group.addAction(dark_act)
             theme_menu.addAction(dark_act)
 
-            # Light theme action
-            light_act = QAction("Light", self, checkable=True)
-            light_act.triggered.connect(lambda: self.set_theme('light'))
-            theme_group.addAction(light_act)
-            theme_menu.addAction(light_act)
 
             # Make them behave like radio buttons
             try:
@@ -853,15 +854,9 @@ class ROARApp(QMainWindow):
             except Exception:
                 pass
 
-            # Initialize selection: try to default to dark if qdarktheme available
-            try:
-                import qdarktheme as _qt
-                dark_act.setChecked(True)
-                self._current_theme = 'dark'
-            except Exception:
-                # default to light
-                light_act.setChecked(True)
-                self._current_theme = 'light'
+            # Initialize selection: default to light theme
+            light_act.setChecked(True)
+            self._current_theme = 'light'
         except Exception:
             pass
 
@@ -921,24 +916,26 @@ class ROARApp(QMainWindow):
     def set_theme(self, theme_name: str):
         """Apply 'dark' or 'light' theme to the application.
 
-        Preference: try to use qdarktheme.setup_theme(), otherwise fall back
-        to a simple QPalette-based swap.
+        For 'light', use the default PyQt6 theme. For 'dark', use qdarktheme if available, else manual palette.
         """
         try:
             qapp = QApplication.instance() or QApplication(sys.argv)
-            # Use qdarktheme if available (provides nicer styling)
+            # Use qdarktheme for dark theme only
             try:
                 import qdarktheme
                 if theme_name == 'dark':
                     qdarktheme.setup_theme('dark')
-                else:
-                    qdarktheme.setup_theme('light')
-                self._current_theme = theme_name
-                return
+                    self._current_theme = theme_name
+                    return
             except Exception:
                 pass
 
-            # Fallback: manual palette
+            # For light or fallback, set standard palette
+            qapp.setPalette(QApplication.style().standardPalette())
+            qapp.setStyleSheet("")
+            self._current_theme = theme_name
+
+            # Manual dark palette as last resort if qdarktheme failed for dark
             if theme_name == 'dark':
                 pal = QPalette()
                 pal.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
@@ -953,11 +950,6 @@ class ROARApp(QMainWindow):
                 pal.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
                 qapp.setPalette(pal)
                 qapp.setStyleSheet("")
-            else:
-                # restore default
-                qapp.setPalette(QApplication.style().standardPalette())
-                qapp.setStyleSheet("")
-            self._current_theme = theme_name
         except Exception:
             pass
 
@@ -1614,12 +1606,6 @@ if __name__ == '__main__':
             from PyQt6.QtWidgets import QApplication
 
         app = QApplication(sys.argv)
-        # optional: set a dark theme if qdarktheme available
-        try:
-            import qdarktheme
-            qdarktheme.setup_theme()
-        except Exception:
-            pass
 
         main_win = ROARApp()
         main_win.show()
