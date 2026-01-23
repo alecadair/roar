@@ -5,10 +5,10 @@ import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QSplitter, QSizePolicy, QGridLayout, QRadioButton, QCheckBox, QHBoxLayout,
-    QComboBox, QLabel, QPushButton, QColorDialog, QDoubleSpinBox
+    QComboBox, QLabel, QPushButton, QColorDialog, QDoubleSpinBox, QGraphicsItem
 )
-from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import Qt, QSize, QPoint
+from PyQt6.QtGui import QColor, QCursor
 
 
 def format_eng(num):
@@ -79,13 +79,17 @@ class ROARPlotWidget(pg.PlotWidget):
         self.coord_text.setZValue(100)
 
         # Initialize markers list
-        self.markers = []
+        self.markers = []  # for scatter markers
+        self.line_markers = []  # for line markers
+        self.difference_items = []  # for difference lines and texts
 
         # Connect mouse events
         try:
             self.scene().sigMouseMoved.connect(self.on_mouse_moved)
             self.scene().sigMouseClicked.connect(self.on_mouse_clicked)
             self.plotItem.vb.sigStateChanged.connect(self.on_state_changed)
+            self.plotItem.sigRangeChanged.connect(self.on_range_changed)
+            self.plotItem.scene().itemChanged.connect(self.on_item_changed)
         except Exception:
             pass
 
@@ -168,6 +172,7 @@ class ROARPlotWidget(pg.PlotWidget):
                     text = pg.TextItem(f"({format_eng(store_x)}, {format_eng(store_y)})", anchor=(0.5, 1.5))
                     text.setPos(x, y)
                     self.plotItem.addItem(text)
+                    text.setFlags(text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
 
                     self.markers.append({"marker": marker, "text": text, "pos": (store_x, store_y)})
 
@@ -204,6 +209,22 @@ class ROARPlotWidget(pg.PlotWidget):
                                     pass
                         except Exception:
                             pass
+
+                # Check for line marker selection
+                scene_pos = event.scenePos()
+                for marker in self.line_markers:
+                    line = marker['line']
+                    pos = line.value()
+                    if marker['vertical']:
+                        view_pos = self.plotItem.vb.mapViewToScene(pg.Point(pos, 0))
+                        if abs(scene_pos.x() - view_pos.x()) < 5:  # 5 pixels tolerance
+                            self.select_marker(marker)
+                            break
+                    else:
+                        view_pos = self.plotItem.vb.mapViewToScene(pg.Point(0, pos))
+                        if abs(scene_pos.y() - view_pos.y()) < 5:  # 5 pixels tolerance
+                            self.select_marker(marker)
+                            break
 
     def find_closest_point(self, mouse_point):
         closest_curve = None
@@ -245,6 +266,301 @@ class ROARPlotWidget(pg.PlotWidget):
         except Exception:
             return False
 
+    def add_vertical_marker(self, pos=None):
+        if pos is None:
+            cursor_pos = QCursor.pos()
+            global_pos = self.mapToGlobal(QPoint(0, 0))
+            local_pos = cursor_pos - global_pos
+            if not self.rect().contains(local_pos):
+                return  # not over the widget
+            mouse_point = self.plotItem.vb.mapSceneToView(self.mapToScene(local_pos))
+            pos = mouse_point.x()
+        line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=pos)
+        self.plotItem.addItem(line)
+        marker = {'line': line, 'vertical': True, 'texts': [], 'selected': False, 'linear_pos': pos}
+        self.line_markers.append(marker)
+        line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
+        line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
+        self.update_marker_labels(marker)
+
+    def add_horizontal_marker(self, pos=None):
+        if pos is None:
+            cursor_pos = QCursor.pos()
+            global_pos = self.mapToGlobal(QPoint(0, 0))
+            local_pos = cursor_pos - global_pos
+            if not self.rect().contains(local_pos):
+                return  # not over the widget
+            mouse_point = self.plotItem.vb.mapSceneToView(self.mapToScene(local_pos))
+            pos = mouse_point.y()
+        line = pg.InfiniteLine(angle=0, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=pos)
+        self.plotItem.addItem(line)
+        marker = {'line': line, 'vertical': False, 'texts': [], 'selected': False, 'linear_pos': pos}
+        self.line_markers.append(marker)
+        line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
+        line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
+        self.update_marker_labels(marker)
+
+    def update_marker_labels(self, marker):
+        line = marker['line']
+        vertical = marker['vertical']
+        # remove old texts
+        for text in marker['texts']:
+            self.plotItem.removeItem(text)
+        marker['texts'].clear()
+        if 'summary_text' in marker:
+            self.plotItem.removeItem(marker['summary_text'])
+            del marker['summary_text']
+
+        pos = line.value()
+        text_list = []
+        y_values = []
+        x_values = []
+        for curve in getattr(self.plotItem, 'curves', []):
+            try:
+                xdata, ydata = curve.getData()
+                if xdata is None or ydata is None or len(xdata) == 0 or len(ydata) == 0:
+                    continue
+                if vertical:
+                    # Vertical line at x=pos, find closest y
+                    idx = np.argmin(np.abs(xdata - pos))
+                    x = xdata[idx]
+                    y = ydata[idx]
+                    text = pg.TextItem(f"({format_eng(pos)}, {format_eng(y)})", anchor=(0.5, 0.5))
+                    text.setPos(pos, y)
+                    y_values.append(y)
+                else:
+                    # Horizontal line at y=pos, find closest x
+                    idx = np.argmin(np.abs(ydata - pos))
+                    x = xdata[idx]
+                    y = ydata[idx]
+                    text = pg.TextItem(f"({format_eng(x)}, {format_eng(pos)})", anchor=(0.5, 0.5))
+                    text.setPos(x, pos)
+                    x_values.append(x)
+                text_list.append(text)
+            except Exception:
+                pass
+
+        # Filter out overlapping texts
+        visible_texts = []
+        for text in text_list:
+            overlap = False
+            for vt in visible_texts:
+                if text.sceneBoundingRect().intersects(vt.sceneBoundingRect()):
+                    overlap = True
+                    break
+            if not overlap:
+                visible_texts.append(text)
+                self.plotItem.addItem(text)
+                text.setFlags(text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+                marker['texts'].append(text)
+
+        # Add summary text for single marker
+        if vertical and y_values:
+            min_y = min(y_values)
+            max_y = max(y_values)
+            if min_y != 0:
+                percent = (max_y - min_y) / abs(min_y) * 100
+                summary_text = pg.TextItem(f"ΔY: {percent:.1f}%", anchor=(0.5, 0.5))
+                y_center = (self.plotItem.viewRange()[1][0] + self.plotItem.viewRange()[1][1]) / 2
+                summary_text.setPos(pos, y_center)
+                self.plotItem.addItem(summary_text)
+                summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+                marker['summary_text'] = summary_text
+        elif not vertical and x_values:
+            min_x = min(x_values)
+            max_x = max(x_values)
+            if min_x != 0:
+                percent = (max_x - min_x) / abs(min_x) * 100
+                summary_text = pg.TextItem(f"ΔX: {percent:.1f}%", anchor=(0.5, 0.5))
+                x_center = (self.plotItem.viewRange()[0][0] + self.plotItem.viewRange()[0][1]) / 2
+                summary_text.setPos(x_center, pos)
+                self.plotItem.addItem(summary_text)
+                summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+                marker['summary_text'] = summary_text
+
+    def on_marker_selected(self, marker, selected):
+        # Optional: change appearance when selected
+        pass
+
+    def select_marker(self, marker):
+        if marker['selected']:
+            marker['selected'] = False
+            marker['line'].setPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=1))
+            marker['line'].setHoverPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4))
+            marker['line'].update()
+        else:
+            marker['selected'] = True
+            marker['line'].setPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=5))
+            marker['line'].setHoverPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=5))
+            marker['line'].update()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Delete:
+            to_remove = [m for m in self.line_markers if m.get('selected', False)]
+            for m in to_remove:
+                self.plotItem.removeItem(m['line'])
+                for text in m['texts']:
+                    self.plotItem.removeItem(text)
+                if 'summary_text' in m:
+                    self.plotItem.removeItem(m['summary_text'])
+                self.line_markers.remove(m)
+            event.accept()
+        elif event.key() == Qt.Key.Key_V:
+            self.add_vertical_marker()
+            event.accept()
+        elif event.key() == Qt.Key.Key_H:
+            self.add_horizontal_marker()
+            event.accept()
+        elif event.key() == Qt.Key.Key_D:
+            self.show_difference()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+    def add_vertical_marker_old(self):
+        line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen('k', style=Qt.PenStyle.DashLine))
+        self.plotItem.addItem(line)
+        line.sigPositionChanged.connect(lambda: self.update_marker_labels(line, vertical=True))
+        self.update_marker_labels(line, vertical=True)
+
+    def add_horizontal_marker_old(self):
+        line = pg.InfiniteLine(angle=0, movable=True, pen=pg.mkPen('k', style=Qt.PenStyle.DashLine))
+        self.plotItem.addItem(line)
+        line.sigPositionChanged.connect(lambda: self.update_marker_labels(line, vertical=False))
+        self.update_marker_labels(line, vertical=False)
+
+    def update_marker_labels_old(self, line, vertical):
+        # Remove old labels
+        for text in self.marker_texts:
+            self.plotItem.removeItem(text)
+        self.marker_texts.clear()
+
+        pos = line.value()
+        for curve in getattr(self.plotItem, 'curves', []):
+            try:
+                xdata, ydata = curve.getData()
+                if xdata is None or ydata is None or len(xdata) == 0 or len(ydata) == 0:
+                    continue
+                if vertical:
+                    # Vertical line at x=pos, find closest y
+                    idx = np.argmin(np.abs(xdata - pos))
+                    x = xdata[idx]
+                    y = ydata[idx]
+                    text = pg.TextItem(f"({format_eng(pos)}, {format_eng(y)})", anchor=(0.5, 0.5))
+                    text.setPos(pos, y)
+                else:
+                    # Horizontal line at y=pos, find closest x
+                    idx = np.argmin(np.abs(ydata - pos))
+                    x = xdata[idx]
+                    y = ydata[idx]
+                    text = pg.TextItem(f"({format_eng(x)}, {format_eng(pos)})", anchor=(0.5, 0.5))
+                    text.setPos(x, pos)
+                if self.should_show_texts():
+                    self.plotItem.addItem(text)
+                    self.marker_texts.append(text)
+            except Exception:
+                pass
+
+    def show_difference(self):
+        selected = [m for m in self.line_markers if m['selected']]
+        if len(selected) == 2 and selected[0]['vertical'] == selected[1]['vertical']:
+            # clear previous
+            for item in self.difference_items:
+                if isinstance(item, dict):
+                    self.plotItem.removeItem(item['line'])
+                    self.plotItem.removeItem(item['text'])
+                else:
+                    self.plotItem.removeItem(item)
+            self.difference_items.clear()
+
+            m1, m2 = selected
+            pos1 = m1['line'].value()
+            pos2 = m2['line'].value()
+
+            if m1['vertical']:
+                # vertical, difference in x
+                diff = abs(pos2 - pos1)
+                # draw horizontal line at center y
+                y_center = (self.plotItem.viewRange()[1][0] + self.plotItem.viewRange()[1][1]) / 2
+                line = pg.InfiniteLine(angle=0, movable=True, pen=pg.mkPen('blue', width=2), pos=y_center)
+                self.plotItem.addItem(line)
+
+                # text in middle
+                x_mid = (pos1 + pos2) / 2
+                text = pg.TextItem(f"ΔX: {format_eng(diff)}", anchor=(0.5, 0.5))
+                text.setPos(x_mid, y_center)
+                self.plotItem.addItem(text)
+                text.setFlags(text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+
+                diff_dict = {
+                    'line': line,
+                    'text': text,
+                    'horizontal': True,
+                    'center_x': x_mid,
+                    'center_y': y_center,
+                    'relative_x': 0,
+                    'relative_y': 0
+                }
+                self.difference_items.append(diff_dict)
+
+                def update_text():
+                    new_y = line.value()
+                    text.setPos(diff_dict['center_x'] + diff_dict['relative_x'], new_y + diff_dict['relative_y'])
+
+                line.sigPositionChanged.connect(update_text)
+
+            else:
+                # horizontal, difference in y
+                diff = abs(pos2 - pos1)
+                x_center = (self.plotItem.viewRange()[0][0] + self.plotItem.viewRange()[0][1]) / 2
+                line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen('blue', width=2), pos=x_center)
+                self.plotItem.addItem(line)
+
+                y_mid = (pos1 + pos2) / 2
+                text = pg.TextItem(f"ΔY: {format_eng(diff)}", anchor=(0.5, 0.5))
+                text.setPos(x_center, y_mid)
+                self.plotItem.addItem(text)
+                text.setFlags(text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+
+                diff_dict = {
+                    'line': line,
+                    'text': text,
+                    'horizontal': False,
+                    'center_x': x_center,
+                    'center_y': y_mid,
+                    'relative_x': 0,
+                    'relative_y': 0
+                }
+                self.difference_items.append(diff_dict)
+
+                def update_text():
+                    new_x = line.value()
+                    text.setPos(new_x + diff_dict['relative_x'], diff_dict['center_y'] + diff_dict['relative_y'])
+
+                line.sigPositionChanged.connect(update_text)
+
+    def on_item_changed(self, item):
+        # Update the position of the text items when the item is moved
+        if isinstance(item, pg.TextItem):
+            try:
+                for marker_info in self.markers:
+                    if marker_info.get("text") == item:
+                        marker_info.get("marker").setPos(item.pos())
+            except Exception:
+                pass
+            try:
+                for diff in self.difference_items:
+                    if isinstance(diff, dict) and diff.get('text') == item:
+                        if diff['horizontal']:
+                            y = diff['line'].value()
+                            diff['relative_x'] = item.pos().x() - diff['center_x']
+                            diff['relative_y'] = item.pos().y() - y
+                        else:
+                            x = diff['line'].value()
+                            diff['relative_x'] = item.pos().x() - x
+                            diff['relative_y'] = item.pos().y() - diff['center_y']
+            except Exception:
+                pass
 
 class ROARLookupWindow(QWidget):
     def __init__(self, parent, expand_callback, top_level_app, graph_grid=None):
@@ -650,6 +966,20 @@ class ROARLookupWindow(QWidget):
             except Exception:
                 pass
         pw.markers.clear()
+        for marker in pw.line_markers[:]:
+            pw.plotItem.removeItem(marker['line'])
+            for text in marker['texts']:
+                pw.plotItem.removeItem(text)
+            if 'summary_text' in marker:
+                pw.plotItem.removeItem(marker['summary_text'])
+        pw.line_markers.clear()
+        for item in pw.difference_items:
+            if isinstance(item, dict):
+                pw.plotItem.removeItem(item['line'])
+                pw.plotItem.removeItem(item['text'])
+            else:
+                pw.plotItem.removeItem(item)
+        pw.difference_items.clear()
 
     def sync_log_checkboxes(self):
         x_log = self.plot_widget.getPlotItem().getAxis('bottom').logMode
@@ -660,6 +990,22 @@ class ROARLookupWindow(QWidget):
 
     def update_log_scale(self):
         self.plot_widget.getPlotItem().setLogMode(x=self.checkbox_logx.isChecked(), y=self.checkbox_logy.isChecked())
+        # Reposition markers after log scale change
+        x_log = self.checkbox_logx.isChecked()
+        y_log = self.checkbox_logy.isChecked()
+        for marker in self.plot_widget.line_markers:
+            linear_pos = marker['linear_pos']
+            if marker['vertical']:
+                new_pos = np.log10(linear_pos) if x_log and linear_pos > 0 else linear_pos
+            else:
+                new_pos = np.log10(linear_pos) if y_log and linear_pos > 0 else linear_pos
+            marker['line'].setPos(new_pos)
+        for marker_info in self.plot_widget.markers:
+            x, y = marker_info['pos']
+            plot_x = np.log10(x) if x_log and x > 0 else x
+            plot_y = np.log10(y) if y_log and y > 0 else y
+            marker_info['marker'].setData(x=[plot_x], y=[plot_y])
+            marker_info['text'].setPos(plot_x, plot_y)
         self.update_graph_from_tech_browser()
 
     def on_axis_selection_changed(self, _idx=None):
@@ -992,8 +1338,8 @@ class ROARLookupWindow(QWidget):
                 new_plot = False
                 self.plot_widget.showGrid(x=True, y=True)
 
-            if auto_fit:
-                self.plot_widget.plotItem.autoRange()
+            # Always autorange after plotting
+            self.plot_widget.plotItem.autoRange()
 
             for marker_info in marker_positions:
                 x, y = marker_info['pos']
@@ -1010,6 +1356,7 @@ class ROARLookupWindow(QWidget):
                 text = pg.TextItem(f"({format_eng(x)}, {format_eng(y)})", anchor=(0.5, 1.5))
                 text.setPos(plot_x, plot_y)
                 self.plot_widget.plotItem.addItem(text)
+                text.setFlags(text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
 
                 self.plot_widget.markers.append({"marker": marker, "text": text, "pos": (x, y)})
         finally:

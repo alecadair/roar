@@ -1027,6 +1027,7 @@ class ROARApp(QMainWindow):
                 ch = event.text().lower()
             except Exception:
                 ch = None
+            key = event.key()
             if ch == 'x':
                 try:
                     self._shortcut_toggle_log_x()
@@ -1048,8 +1049,21 @@ class ROARApp(QMainWindow):
                     return
                 except Exception:
                     pass
+            if ch == 'v' or key == Qt.Key.Key_V:
+                try:
+                    self._shortcut_add_vertical_marker()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            if ch == 'h' or key == Qt.Key.Key_H:
+                try:
+                    self._shortcut_add_horizontal_marker()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
             # fallback to raw key constant
-            key = event.key()
             if key == Qt.Key.Key_L:
                 try:
                     self._shortcut_toggle_log_both()
@@ -1074,6 +1088,20 @@ class ROARApp(QMainWindow):
             if key == Qt.Key.Key_F:
                 try:
                     self._shortcut_auto_fit()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            if key == Qt.Key.Key_V:
+                try:
+                    self._shortcut_add_vertical_marker()
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            if key == Qt.Key.Key_H:
+                try:
+                    self._shortcut_add_horizontal_marker()
                     event.accept()
                     return
                 except Exception:
@@ -1446,6 +1474,20 @@ class ROARApp(QMainWindow):
                         pass
                     return None
 
+                def add_vertical_marker(self):
+                    try:
+                        if hasattr(self._src, 'add_vertical_marker') and callable(self._src.add_vertical_marker):
+                            return self._src.add_vertical_marker()
+                    except Exception:
+                        pass
+
+                def add_horizontal_marker(self):
+                    try:
+                        if hasattr(self._src, 'add_horizontal_marker') and callable(self._src.add_horizontal_marker):
+                            return self._src.add_horizontal_marker()
+                    except Exception:
+                        pass
+
                 def __repr__(self):
                     return f"_PlotProxy({type(self._src)})"
 
@@ -1563,107 +1605,26 @@ class ROARApp(QMainWindow):
                 pass
         self._apply_to_plotwidgets(h)
 
-# Custom QTabBar that forwards right-clicks to the application's tab context menu
-class ROARTabBar(QTabBar):
-    def __init__(self, owner=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.owner = owner
+    def _shortcut_add_vertical_marker(self):
+        def h(pw):
+            try:
+                pw.add_vertical_marker()
+            except Exception:
+                pass
+        self._apply_to_plotwidgets(h)
 
-    def mousePressEvent(self, event):
-        # If right-click, forward to owner context menu with tab-local position
-        try:
-            if event.button() == Qt.MouseButton.RightButton and self.owner is not None:
-                # Call the owner's context menu handler with the tab-bar-local position
-                self.owner._on_tab_context_menu(event.pos())
-                # consume event
-                return
-        except Exception:
-            pass
-        super().mousePressEvent(event)
+    def _shortcut_add_horizontal_marker(self):
+        def h(pw):
+            try:
+                pw.add_horizontal_marker()
+            except Exception:
+                pass
+        self._apply_to_plotwidgets(h)
 
 
-# Global event filter to capture key presses application-wide (L/X/Y/F)
-class _GlobalKeyFilter(QObject):
-    def __init__(self, owner):
-        super().__init__()
-        self.owner = owner
-
-    def eventFilter(self, obj, event):
-        try:
-            if event.type() == QEvent.Type.KeyPress:
-                # log what we see for debugging (text() may be empty depending on IME/focus)
-                try:
-                    txt = event.text() or ''
-                except Exception:
-                    txt = ''
-                key = event.key()
-                try:
-                    with open('/tmp/roar_keys.log', 'a', encoding='utf-8') as fh:
-                        fh.write(f"GlobalKeyFilter: text={repr(txt)} key={key} mods={int(event.modifiers())}\n")
-                except Exception:
-                    pass
-
-                ch = txt.lower() if txt else None
-                # Prefer textual match (lowercase) but fall back to key constants
-                if ch == 'l' or key == Qt.Key.Key_L:
-                    try:
-                        self.owner._shortcut_toggle_log_both()
-                        event.accept()
-                        return True
-                    except Exception:
-                        pass
-                if ch == 'x' or key == Qt.Key.Key_X:
-                    try:
-                        self.owner._shortcut_toggle_log_x()
-                        event.accept()
-                        return True
-                    except Exception:
-                        pass
-                if ch == 'y' or key == Qt.Key.Key_Y:
-                    try:
-                        self.owner._shortcut_toggle_log_y()
-                        event.accept()
-                        return True
-                    except Exception:
-                        pass
-                if ch == 'f' or key == Qt.Key.Key_F:
-                    try:
-                        self.owner._shortcut_auto_fit()
-                        event.accept()
-                        return True
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        return False
-
-
-if __name__ == '__main__':
-    # Run the application when executed as a script. Use a defensive wrapper
-    # so any exceptions print to stderr instead of causing a silent exit.
-    try:
-        try:
-            with open('/tmp/roar_debug.log', 'a', encoding='utf-8') as _fh:
-                _fh.write('entrypoint start\n')
-        except Exception:
-            pass
-         # Ensure Qt uses the same binding selected earlier
-        try:
-            from PyQt6.QtWidgets import QApplication
-        except Exception:
-            # fallback: try importing from separate module
-            from PyQt6.QtWidgets import QApplication
-
-        app = QApplication(sys.argv)
-
-        main_win = ROARApp()
-        main_win.show()
-        # start event loop
-        exit_code = app.exec()
-        sys.exit(exit_code)
-    except Exception as e:
-        # Print full traceback to stderr to aid debugging
-        import traceback, sys as _sys
-        traceback.print_exc()
-        _sys.exit(1)
-
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    window = ROARApp()
+    window.show()
+    sys.exit(app.exec())
