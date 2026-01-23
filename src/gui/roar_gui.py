@@ -808,7 +808,8 @@ class ROARApp(QMainWindow):
         for i in range(self.graph_tabs.count()):
             widget = self.graph_tabs.widget(i)
             if isinstance(widget, ROARGraphGrid):
-                widget.add_tech_luts(dirname=dir, pdk_name=pdk_name)
+                for lw in widget.lookup_windows:
+                    lw.add_tech_luts(dirname=dir, pdk_name=pdk_name)
         return (self.tech_dict)
 
     def create_devices_from_model_dir(self, pdk_name, model_name, model_dir):
@@ -1487,7 +1488,6 @@ class ROARApp(QMainWindow):
                             return self._src.add_horizontal_marker()
                     except Exception:
                         pass
-
                 def __repr__(self):
                     return f"_PlotProxy({type(self._src)})"
 

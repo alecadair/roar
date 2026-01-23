@@ -176,6 +176,36 @@ class ROARPlotWidget(pg.PlotWidget):
 
                     self.markers.append({"marker": marker, "text": text, "pos": (store_x, store_y)})
 
+                    # Place marker on attached graphs
+                    for attached_window in self.parent_lookup_window.get_attached_windows():
+                        closest_curve = None
+                        closest_index = None
+                        min_dist = float('inf')
+                        for curve in attached_window.plot_widget.getPlotItem().curves:
+                            try:
+                                x_data, y_data = curve.getData()
+                                if x_data is None or len(x_data) == 0:
+                                    continue
+                                idx = np.argmin(np.abs(x_data - store_x))
+                                dist = abs(x_data[idx] - store_x)
+                                if dist < min_dist:
+                                    min_dist = dist
+                                    closest_curve = curve
+                                    closest_index = idx
+                            except:
+                                pass
+                        if closest_curve and closest_index is not None:
+                            x_data, y_data = closest_curve.getData()
+                            x_att = x_data[closest_index]
+                            y_att = y_data[closest_index]
+                            marker_att = pg.ScatterPlotItem(x=[x_att], y=[y_att], symbol='o', size=10, pen=pg.mkPen('r'), brush=pg.mkBrush('r'))
+                            attached_window.plot_widget.plotItem.addItem(marker_att)
+                            text_att = pg.TextItem(f"({format_eng(store_x)}, {format_eng(y_att)})", anchor=(0.5, 1.5))
+                            text_att.setPos(x_att, y_att)
+                            attached_window.plot_widget.plotItem.addItem(text_att)
+                            text_att.setFlags(text_att.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+                            attached_window.plot_widget.markers.append({"marker": marker_att, "text": text_att, "pos": (store_x, y_att)})
+
                     plw = getattr(self, "parent_lookup_window", None)
                     if plw:
                         try:
@@ -266,18 +296,21 @@ class ROARPlotWidget(pg.PlotWidget):
         except Exception:
             return False
 
-    def add_vertical_marker(self, pos=None):
-        if pos is None:
+    def add_vertical_marker(self, linear_pos=None):
+        if linear_pos is None:
             cursor_pos = QCursor.pos()
             global_pos = self.mapToGlobal(QPoint(0, 0))
             local_pos = cursor_pos - global_pos
             if not self.rect().contains(local_pos):
                 return  # not over the widget
             mouse_point = self.plotItem.vb.mapSceneToView(self.mapToScene(local_pos))
-            pos = mouse_point.x()
-        x_log = self.plotItem.getAxis('bottom').logMode
-        linear_pos = 10**pos if x_log else pos
-        line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=pos)
+            view_pos = mouse_point.x()
+            x_log = self.plotItem.getAxis('bottom').logMode
+            linear_pos = 10**view_pos if x_log else view_pos
+        else:
+            x_log = self.plotItem.getAxis('bottom').logMode
+        view_pos = np.log10(linear_pos) if x_log and linear_pos > 0 else linear_pos
+        line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=view_pos)
         self.plotItem.addItem(line)
         marker = {'line': line, 'vertical': True, 'texts': [], 'selected': False, 'linear_pos': linear_pos}
         self.line_markers.append(marker)
@@ -285,24 +318,39 @@ class ROARPlotWidget(pg.PlotWidget):
         line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
         self.update_marker_labels(marker)
 
-    def add_horizontal_marker(self, pos=None):
-        if pos is None:
+        # Place marker on attached graphs
+        plw = getattr(self, "parent_lookup_window", None)
+        if plw:
+            for attached_window in plw.get_attached_windows():
+                attached_window.plot_widget.add_vertical_marker(linear_pos=linear_pos)
+
+    def add_horizontal_marker(self, linear_pos=None):
+        if linear_pos is None:
             cursor_pos = QCursor.pos()
             global_pos = self.mapToGlobal(QPoint(0, 0))
             local_pos = cursor_pos - global_pos
             if not self.rect().contains(local_pos):
                 return  # not over the widget
             mouse_point = self.plotItem.vb.mapSceneToView(self.mapToScene(local_pos))
-            pos = mouse_point.y()
-        y_log = self.plotItem.getAxis('left').logMode
-        linear_pos = 10**pos if y_log else pos
-        line = pg.InfiniteLine(angle=0, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=pos)
+            view_pos = mouse_point.y()
+            y_log = self.plotItem.getAxis('left').logMode
+            linear_pos = 10**view_pos if y_log else view_pos
+        else:
+            y_log = self.plotItem.getAxis('left').logMode
+        view_pos = np.log10(linear_pos) if y_log and linear_pos > 0 else linear_pos
+        line = pg.InfiniteLine(angle=0, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=view_pos)
         self.plotItem.addItem(line)
         marker = {'line': line, 'vertical': False, 'texts': [], 'selected': False, 'linear_pos': linear_pos}
         self.line_markers.append(marker)
         line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
         line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
         self.update_marker_labels(marker)
+
+        # Place marker on attached graphs
+        plw = getattr(self, "parent_lookup_window", None)
+        if plw:
+            for attached_window in plw.get_attached_windows():
+                attached_window.plot_widget.add_horizontal_marker(linear_pos=linear_pos)
 
     def update_marker_labels(self, marker):
         line = marker['line']
@@ -362,8 +410,8 @@ class ROARPlotWidget(pg.PlotWidget):
         if vertical and y_values:
             min_y = min(y_values)
             max_y = max(y_values)
-            if min_y != 0:
-                percent = (max_y - min_y) / abs(min_y) * 100
+            if (max_y + min_y) != 0:
+                percent = 200 * (max_y - min_y) / (max_y + min_y)
                 summary_text = pg.TextItem(f"ΔY: {percent:.1f}%", anchor=(0.5, 0.5))
                 y_center = (self.plotItem.viewRange()[1][0] + self.plotItem.viewRange()[1][1]) / 2
                 summary_text.setPos(pos, y_center)
@@ -373,14 +421,28 @@ class ROARPlotWidget(pg.PlotWidget):
         elif not vertical and x_values:
             min_x = min(x_values)
             max_x = max(x_values)
-            if min_x != 0:
-                percent = (max_x - min_x) / abs(min_x) * 100
+            if (max_x + min_x) != 0:
+                percent = 100 * (max_x - min_x) / ((max_x + min_x)/2)
                 summary_text = pg.TextItem(f"ΔX: {percent:.1f}%", anchor=(0.5, 0.5))
                 x_center = (self.plotItem.viewRange()[0][0] + self.plotItem.viewRange()[0][1]) / 2
                 summary_text.setPos(x_center, pos)
                 self.plotItem.addItem(summary_text)
                 summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
                 marker['summary_text'] = summary_text
+
+        # Synchronize marker position with attached plots
+        plw = getattr(self, "parent_lookup_window", None)
+        if plw:
+            for attached_window in plw.get_attached_windows():
+                for m in attached_window.plot_widget.line_markers:
+                    if m['linear_pos'] == marker['linear_pos'] and m['vertical'] == marker['vertical']:
+                        # Calculate view_pos for attached
+                        x_log_att = attached_window.plot_widget.getPlotItem().getAxis('bottom').logMode
+                        view_pos_att = np.log10(m['linear_pos']) if x_log_att and m['linear_pos'] > 0 else m['linear_pos']
+                        m['line'].setPos(view_pos_att)
+                        # Update labels for attached
+                        attached_window.plot_widget.update_marker_labels(m)
+                        break
 
     def on_marker_selected(self, marker, selected):
         # Optional: change appearance when selected
@@ -397,6 +459,15 @@ class ROARPlotWidget(pg.PlotWidget):
             marker['line'].setPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=5))
             marker['line'].setHoverPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=5))
             marker['line'].update()
+
+        # Synchronize selection with attached plots
+        plw = getattr(self, "parent_lookup_window", None)
+        if plw:
+            for attached_window in plw.get_attached_windows():
+                for m in attached_window.plot_widget.line_markers:
+                    if m['linear_pos'] == marker['linear_pos'] and m['vertical'] == marker['vertical']:
+                        attached_window.plot_widget.select_marker(m)
+                        break
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Delete:
@@ -538,6 +609,12 @@ class ROARPlotWidget(pg.PlotWidget):
                     'y_vals': y_vals
                 }
                 self.difference_items.append(diff_dict)
+
+        # Synchronize difference markers with attached plots
+        plw = getattr(self, "parent_lookup_window", None)
+        if plw:
+            for attached_window in plw.get_attached_windows():
+                attached_window.plot_widget.show_difference()
 
     def on_item_changed(self, item):
         # Update the position of the text items when the item is moved
@@ -866,6 +943,9 @@ class ROARLookupWindow(QWidget):
         # Ensure combo boxes and visibility reflect the current radio selection
         self.update_combobox_items()
 
+        # Initialize attachment checkboxes
+        self.update_attachment_checkboxes()
+
     # ...existing code...
 
     def update_combobox_items(self):
@@ -1024,6 +1104,10 @@ class ROARLookupWindow(QWidget):
                 self.plot_widget.plotItem.autoRange()
         except Exception:
             pass
+        self.update_attachment_checkboxes()
+        for other in self.graph_grid.lookup_windows:
+            if other != self:
+                other.update_attachment_checkboxes()
 
     def toggle_expand(self):
         if not self.is_expanded:
@@ -1368,6 +1452,42 @@ class ROARLookupWindow(QWidget):
     def add_tech_luts(self, dirname, pdk_name):
         self.tech_browser.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
 
+    def update_attachment_checkboxes(self):
+        if not self.graph_grid:
+            return
+        if self not in self.graph_grid.lookup_windows:
+            for cb in self.setting_checkboxes:
+                cb.setEnabled(False)
+                cb.setChecked(False)
+            return
+        my_index = self.graph_grid.lookup_windows.index(self)
+        current_x = self.combo_x.currentText()
+        for i in range(len(self.graph_grid.lookup_windows)):
+            if i == my_index:
+                self.setting_checkboxes[i].setEnabled(False)
+                self.setting_checkboxes[i].setChecked(True)
+            else:
+                other = self.graph_grid.lookup_windows[i]
+                same_x = current_x == other.combo_x.currentText()
+                self.setting_checkboxes[i].setEnabled(same_x)
+                if not same_x:
+                    self.setting_checkboxes[i].setChecked(False)
+
+    def get_attached_windows(self, visited=None):
+        if visited is None:
+            visited = set()
+        if self in visited:
+            return []
+        visited.add(self)
+        attached = []
+        my_index = self.graph_grid.lookup_windows.index(self)
+        for i, cb in enumerate(self.setting_checkboxes):
+            if i != my_index and cb.isChecked():
+                other = self.graph_grid.lookup_windows[i]
+                attached.append(other)
+                attached.extend(other.get_attached_windows(visited))
+        return list(set(attached))
+
 
 class ROARGraphGrid(QWidget):
     """Graph grid that contains four ROARLookupWindow instances arranged in a 2x2 splitter layout.
@@ -1391,11 +1511,13 @@ class ROARGraphGrid(QWidget):
 
         # instantiate four lookup windows
         self.lookup_window_1 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_windows.append(self.lookup_window_1)
         self.lookup_window_2 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_windows.append(self.lookup_window_2)
         self.lookup_window_3 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
+        self.lookup_windows.append(self.lookup_window_3)
         self.lookup_window_4 = ROARLookupWindow(parent=self, expand_callback=None, top_level_app=self.top_level_app, graph_grid=self)
-
-        self.lookup_windows.extend([self.lookup_window_1, self.lookup_window_2, self.lookup_window_3, self.lookup_window_4])
+        self.lookup_windows.append(self.lookup_window_4)
 
         self.top_splitter.addWidget(self.lookup_window_1)
         self.top_splitter.addWidget(self.lookup_window_2)
@@ -1409,13 +1531,6 @@ class ROARGraphGrid(QWidget):
         self.grid_splitter.setStretchFactor(1, 1)
 
         layout.addWidget(self.grid_splitter)
-
-    def add_tech_luts(self, dirname, pdk_name):
-        for lookup_window in self.lookup_windows:
-            try:
-                lookup_window.add_tech_luts(dirname=dirname, pdk_name=pdk_name)
-            except Exception:
-                pass
 
     def populate_from_app(self):
         try:
