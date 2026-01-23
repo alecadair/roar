@@ -355,6 +355,16 @@ class ROARPlotWidget(pg.PlotWidget):
     def update_marker_labels(self, marker):
         line = marker['line']
         vertical = marker['vertical']
+        pos = line.value()
+
+        # Update linear_pos based on current position
+        if vertical:
+            x_log = self.plotItem.getAxis('bottom').logMode
+            marker['linear_pos'] = 10**pos if x_log else pos
+        else:
+            y_log = self.plotItem.getAxis('left').logMode
+            marker['linear_pos'] = 10**pos if y_log else pos
+
         # remove old texts
         for text in marker['texts']:
             self.plotItem.removeItem(text)
@@ -433,15 +443,17 @@ class ROARPlotWidget(pg.PlotWidget):
         # Synchronize marker position with attached plots
         plw = getattr(self, "parent_lookup_window", None)
         if plw:
+            my_index = self.line_markers.index(marker)
             for attached_window in plw.get_attached_windows():
-                for m in attached_window.plot_widget.line_markers:
-                    if m['linear_pos'] == marker['linear_pos'] and m['vertical'] == marker['vertical']:
-                        # Calculate view_pos for attached
-                        x_log_att = attached_window.plot_widget.getPlotItem().getAxis('bottom').logMode
-                        view_pos_att = np.log10(m['linear_pos']) if x_log_att and m['linear_pos'] > 0 else m['linear_pos']
-                        m['line'].setPos(view_pos_att)
-                        # Update labels for attached
-                        attached_window.plot_widget.update_marker_labels(m)
+                if my_index < len(attached_window.plot_widget.line_markers):
+                    m = attached_window.plot_widget.line_markers[my_index]
+                    if m['vertical'] == marker['vertical']:
+                        m['linear_pos'] = marker['linear_pos']
+                        axis = 'bottom' if vertical else 'left'
+                        log_mode = attached_window.plot_widget.getPlotItem().getAxis(axis).logMode
+                        new_pos = np.log10(marker['linear_pos']) if log_mode and marker['linear_pos'] > 0 else marker['linear_pos']
+                        m['line'].setPos(new_pos)
+                        attached_window.plot_widget.select_marker(m)
                         break
 
     def on_marker_selected(self, marker, selected):
@@ -1206,6 +1218,10 @@ class ROARLookupWindow(QWidget):
             for marker_info in self.plot_widget.markers:
                 marker_positions.append(marker_info)
 
+            line_marker_positions = []
+            for m in self.plot_widget.line_markers:
+                line_marker_positions.append({'vertical': m['vertical'], 'linear_pos': m['linear_pos'], 'selected': m['selected']})
+
             auto_fit = not self.plot_widget.plotItem.curves
 
             self.plot_widget.clear()
@@ -1445,6 +1461,23 @@ class ROARLookupWindow(QWidget):
                 text.setFlags(text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
 
                 self.plot_widget.markers.append({"marker": marker, "text": text, "pos": (x, y)})
+
+            for lm in line_marker_positions:
+                vertical = lm['vertical']
+                linear_pos = lm['linear_pos']
+                selected = lm['selected']
+                axis = 'bottom' if vertical else 'left'
+                log_mode = self.plot_widget.getPlotItem().getAxis(axis).logMode
+                view_pos = np.log10(linear_pos) if log_mode and linear_pos > 0 else linear_pos
+                line = pg.InfiniteLine(angle=90 if vertical else 0, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=view_pos)
+                self.plot_widget.plotItem.addItem(line)
+                marker = {'line': line, 'vertical': vertical, 'texts': [], 'selected': selected, 'linear_pos': linear_pos}
+                self.line_markers.append(marker)
+                line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
+                line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
+                self.update_marker_labels(marker)
+                if selected:
+                    self.select_marker(marker)
         finally:
             self._is_updating = False
         return 0
