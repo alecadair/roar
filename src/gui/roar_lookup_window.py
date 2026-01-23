@@ -275,9 +275,11 @@ class ROARPlotWidget(pg.PlotWidget):
                 return  # not over the widget
             mouse_point = self.plotItem.vb.mapSceneToView(self.mapToScene(local_pos))
             pos = mouse_point.x()
+        x_log = self.plotItem.getAxis('bottom').logMode
+        linear_pos = 10**pos if x_log else pos
         line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=pos)
         self.plotItem.addItem(line)
-        marker = {'line': line, 'vertical': True, 'texts': [], 'selected': False, 'linear_pos': pos}
+        marker = {'line': line, 'vertical': True, 'texts': [], 'selected': False, 'linear_pos': linear_pos}
         self.line_markers.append(marker)
         line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
         line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
@@ -292,9 +294,11 @@ class ROARPlotWidget(pg.PlotWidget):
                 return  # not over the widget
             mouse_point = self.plotItem.vb.mapSceneToView(self.mapToScene(local_pos))
             pos = mouse_point.y()
+        y_log = self.plotItem.getAxis('left').logMode
+        linear_pos = 10**pos if y_log else pos
         line = pg.InfiniteLine(angle=0, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=pos)
         self.plotItem.addItem(line)
-        marker = {'line': line, 'vertical': False, 'texts': [], 'selected': False, 'linear_pos': pos}
+        marker = {'line': line, 'vertical': False, 'texts': [], 'selected': False, 'linear_pos': linear_pos}
         self.line_markers.append(marker)
         line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
         line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
@@ -480,9 +484,11 @@ class ROARPlotWidget(pg.PlotWidget):
             if m1['vertical']:
                 # vertical, difference in x
                 diff = abs(pos2 - pos1)
-                # draw horizontal line at center y
+                # draw horizontal line segment between pos1 and pos2 at center y
                 y_center = (self.plotItem.viewRange()[1][0] + self.plotItem.viewRange()[1][1]) / 2
-                line = pg.InfiniteLine(angle=0, movable=True, pen=pg.mkPen('blue', width=2), pos=y_center)
+                x_vals = [pos1, pos2]
+                y_vals = [y_center, y_center]
+                line = pg.PlotCurveItem(x=x_vals, y=y_vals, pen=pg.mkPen('gray', width=2))
                 self.plotItem.addItem(line)
 
                 # text in middle
@@ -499,21 +505,19 @@ class ROARPlotWidget(pg.PlotWidget):
                     'center_x': x_mid,
                     'center_y': y_center,
                     'relative_x': 0,
-                    'relative_y': 0
+                    'relative_y': 0,
+                    'x_vals': x_vals,
+                    'y_vals': y_vals
                 }
                 self.difference_items.append(diff_dict)
-
-                def update_text():
-                    new_y = line.value()
-                    text.setPos(diff_dict['center_x'] + diff_dict['relative_x'], new_y + diff_dict['relative_y'])
-
-                line.sigPositionChanged.connect(update_text)
 
             else:
                 # horizontal, difference in y
                 diff = abs(pos2 - pos1)
                 x_center = (self.plotItem.viewRange()[0][0] + self.plotItem.viewRange()[0][1]) / 2
-                line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen('blue', width=2), pos=x_center)
+                x_vals = [x_center, x_center]
+                y_vals = [pos1, pos2]
+                line = pg.PlotCurveItem(x=x_vals, y=y_vals, pen=pg.mkPen('gray', width=2))
                 self.plotItem.addItem(line)
 
                 y_mid = (pos1 + pos2) / 2
@@ -526,18 +530,14 @@ class ROARPlotWidget(pg.PlotWidget):
                     'line': line,
                     'text': text,
                     'horizontal': False,
-                    'center_x': x_center,
+                    'center_x': y_mid,
                     'center_y': y_mid,
                     'relative_x': 0,
-                    'relative_y': 0
+                    'relative_y': 0,
+                    'x_vals': x_vals,
+                    'y_vals': y_vals
                 }
                 self.difference_items.append(diff_dict)
-
-                def update_text():
-                    new_x = line.value()
-                    text.setPos(new_x + diff_dict['relative_x'], diff_dict['center_y'] + diff_dict['relative_y'])
-
-                line.sigPositionChanged.connect(update_text)
 
     def on_item_changed(self, item):
         # Update the position of the text items when the item is moved
@@ -552,13 +552,15 @@ class ROARPlotWidget(pg.PlotWidget):
                 for diff in self.difference_items:
                     if isinstance(diff, dict) and diff.get('text') == item:
                         if diff['horizontal']:
-                            y = diff['line'].value()
                             diff['relative_x'] = item.pos().x() - diff['center_x']
-                            diff['relative_y'] = item.pos().y() - y
-                        else:
-                            x = diff['line'].value()
-                            diff['relative_x'] = item.pos().x() - x
                             diff['relative_y'] = item.pos().y() - diff['center_y']
+                            new_y = diff['center_y'] + diff['relative_y']
+                            diff['line'].setData(x=diff['x_vals'], y=[new_y, new_y])
+                        else:
+                            diff['relative_x'] = item.pos().x() - diff['center_x']
+                            diff['relative_y'] = item.pos().y() - diff['center_y']
+                            new_x = diff['center_x'] + diff['relative_x']
+                            diff['line'].setData(x=[new_x, new_x], y=diff['y_vals'])
             except Exception:
                 pass
 

@@ -1623,8 +1623,10 @@ class ROARApp(QMainWindow):
 
 
 if __name__ == "__main__":
-    import sys
     app = QApplication(sys.argv)
     window = ROARApp()
+    window_icon = QIcon(ROAR_HOME + "/images/png/ROAR_ICON.png")
+    window.setWindowIcon(window_icon)
     window.show()
     sys.exit(app.exec())
+
