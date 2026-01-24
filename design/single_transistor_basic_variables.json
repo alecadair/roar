@@ -2,7 +2,7 @@
     "expression_editor": [
         {
             "Symbol": "cload",
-            "Expression": "10e-12",
+            "Expression": "100e-12",
             "disabled": false,
             "plot": false
         },
