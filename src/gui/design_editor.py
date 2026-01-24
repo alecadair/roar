@@ -89,7 +89,31 @@ class BaseEditor(QWidget):
         self.tree = ReorderableTreeWidget()
         self.tree.setColumnCount(len(columns))
         self.tree.setHeaderLabels(columns)
-        self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)  # Allow resizing
+        # Set header text alignment
+        header_item = self.tree.headerItem()
+        for col, col_name in enumerate(columns):
+            if col_name in ["kgm", "ID", "W", "L"]:
+                header_item.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            else:
+                header_item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)  # Allow resizing
+        # Set initial column widths for better fit
+        if "Instance Name" in columns:
+            idx = columns.index("Instance Name")
+            self.tree.header().resizeSection(idx, 150)  # Wider for Instance Name
+        if "kgm" in columns:
+            idx = columns.index("kgm")
+            self.tree.header().resizeSection(idx, 60)  # Thinner for kgm
+        if "ID" in columns:
+            idx = columns.index("ID")
+            self.tree.header().resizeSection(idx, 60)  # Thinner for ID
+        if "W" in columns:
+            idx = columns.index("W")
+            self.tree.header().resizeSection(idx, 60)  # Thinner for W
+        if "L" in columns:
+            idx = columns.index("L")
+            self.tree.header().resizeSection(idx, 60)  # Thinner for L
         self.tree.setTabKeyNavigation(False)  # Disable default row-wise tab behavior
         # Allow multiple selection and enable drag & drop. We handle moves in
         # dropEvent and use startDrag to ensure external drops don't remove

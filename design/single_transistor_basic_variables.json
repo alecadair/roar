@@ -1,24 +1,6 @@
 {
     "expression_editor": [
         {
-            "Symbol": "kgm1",
-            "Expression": "kgm:M1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcgs1",
-            "Expression": "kcgs:M1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "ws",
-            "Expression": "kgm1/kcgs1",
-            "disabled": false,
-            "plot": false
-        },
-        {
             "Symbol": "cload",
             "Expression": "10e-12",
             "disabled": false,
@@ -31,8 +13,56 @@
             "plot": false
         },
         {
+            "Symbol": "kgm1",
+            "Expression": "kgm:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs1",
+            "Expression": "kcgs:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "idensity1",
+            "Expression": "iden:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgds1",
+            "Expression": "kgds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "av1",
+            "Expression": "kgm1/kgds1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "ws",
+            "Expression": "kgm1/kcgs1",
+            "disabled": false,
+            "plot": false
+        },
+        {
             "Symbol": "ids0",
             "Expression": "(wu*cload)/kgm1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "i_total",
+            "Expression": "ids0*(1/(1 - wu/ws))",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "m1_width",
+            "Expression": "idensity1/i_total",
             "disabled": false,
             "plot": false
         }

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
     QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton, QTabBar, QAbstractItemView)
 from PyQt6.QtCore import Qt, QSize, QObject, QEvent
-from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen, QKeySequence
+from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen, QKeySequence, QCursor
 # QShortcut historically lives in QtWidgets but some PyQt6 builds expose it in QtGui.
 # Import with a fallback so the module works across environments.
 try:
@@ -1501,109 +1501,117 @@ class ROARApp(QMainWindow):
             pass
 
     def _shortcut_toggle_log_both(self):
-        def h(pw):
-            try:
-                try:
-                    with open('/tmp/roar_shortcuts.log', 'a', encoding='utf-8') as fh:
-                        fh.write(f"TOGGLE_BOTH target={type(pw)} id={getattr(pw,'_pi_id',None)}\n")
-                except Exception:
-                    pass
+        grid = self.graph_grid
+        if grid:
+            plot_widgets = []
+            for lw in grid.lookup_windows:
+                if hasattr(lw, 'plot_widget'):
+                    plot_widgets.append(lw.plot_widget)
+            cursor_pos = QCursor.pos()
+            for pw in plot_widgets:
+                if pw.geometry().contains(pw.mapFromGlobal(cursor_pos)):
+                    try:
+                        pi = pw.getPlotItem()
+                        if pi is not None:
+                            cur_x = pi.getAxis('bottom').logMode
+                            cur_y = pi.getAxis('left').logMode
+                            if cur_x and cur_y:
+                                # Both on log, turn both off
+                                new_x = False
+                                new_y = False
+                            elif not cur_x and not cur_y:
+                                # Both off log, turn both on
+                                new_x = True
+                                new_y = True
+                            else:
+                                # One on, one off, turn both on to make consistent
+                                new_x = True
+                                new_y = True
+                            pi.setLogMode(x=new_x, y=new_y)
+                            pi_id = id(pi)
+                            self._plot_log_state[pi_id] = {'x': new_x, 'y': new_y}
 
-                pi = pw.getPlotItem()
-                if pi is not None:
-                    cur_x = pi.getAxis('bottom').logMode
-                    cur_y = pi.getAxis('left').logMode
-                    if cur_x and cur_y:
-                        # Both on log, turn both off
-                        new_x = False
-                        new_y = False
-                    elif not cur_x and not cur_y:
-                        # Both off log, turn both on
-                        new_x = True
-                        new_y = True
-                    else:
-                        # One on, one off, turn both on to make consistent
-                        new_x = True
-                        new_y = True
-                    pi.setLogMode(x=new_x, y=new_y)
-                    pi_id = id(pi)
-                    self._plot_log_state[pi_id] = {'x': new_x, 'y': new_y}
-
-                # Sync checkboxes
-                plw = getattr(pw, 'parent_lookup_window', None)
-                if plw and hasattr(plw, 'sync_log_checkboxes'):
-                    plw.sync_log_checkboxes()
-            except Exception:
-                pass
-        self._apply_to_plotwidgets(h)
+                        # Sync checkboxes
+                        plw = getattr(pw, 'parent_lookup_window', None)
+                        if plw and hasattr(plw, 'sync_log_checkboxes'):
+                            plw.sync_log_checkboxes()
+                    except Exception:
+                        pass
+                    break
 
     def _shortcut_toggle_log_x(self):
-        def h(pw):
-            try:
-                try:
-                    with open('/tmp/roar_shortcuts.log', 'a', encoding='utf-8') as fh:
-                        fh.write(f"TOGGLE_X target={type(pw)} id={getattr(pw,'_pi_id',None)}\n")
-                except Exception:
-                    pass
+        grid = self.graph_grid
+        if grid:
+            plot_widgets = []
+            for lw in grid.lookup_windows:
+                if hasattr(lw, 'plot_widget'):
+                    plot_widgets.append(lw.plot_widget)
+            cursor_pos = QCursor.pos()
+            for pw in plot_widgets:
+                if pw.geometry().contains(pw.mapFromGlobal(cursor_pos)):
+                    try:
+                        pi = pw.getPlotItem()
+                        if pi is not None:
+                            cur_x = pi.getAxis('bottom').logMode
+                            cur_y = pi.getAxis('left').logMode
+                            new_x = not cur_x
+                            pi.setLogMode(x=new_x, y=cur_y)
+                            pi_id = id(pi)
+                            self._plot_log_state[pi_id] = {'x': new_x, 'y': cur_y}
 
-                pi = pw.getPlotItem()
-                if pi is not None:
-                    cur_x = pi.getAxis('bottom').logMode
-                    cur_y = pi.getAxis('left').logMode
-                    new_x = not cur_x
-                    pi.setLogMode(x=new_x, y=cur_y)
-                    pi_id = id(pi)
-                    self._plot_log_state[pi_id] = {'x': new_x, 'y': cur_y}
-
-                # Sync checkboxes
-                plw = getattr(pw, 'parent_lookup_window', None)
-                if plw and hasattr(plw, 'sync_log_checkboxes'):
-                    plw.sync_log_checkboxes()
-            except Exception:
-                pass
-        self._apply_to_plotwidgets(h)
+                        # Sync checkboxes
+                        plw = getattr(pw, 'parent_lookup_window', None)
+                        if plw and hasattr(plw, 'sync_log_checkboxes'):
+                            plw.sync_log_checkboxes()
+                    except Exception:
+                        pass
+                    break
 
     def _shortcut_toggle_log_y(self):
-        def h(pw):
-            try:
-                try:
-                    with open('/tmp/roar_shortcuts.log', 'a', encoding='utf-8') as fh:
-                        fh.write(f"TOGGLE_Y target={type(pw)} id={getattr(pw,'_pi_id',None)}\n")
-                except Exception:
-                    pass
+        grid = self.graph_grid
+        if grid:
+            plot_widgets = []
+            for lw in grid.lookup_windows:
+                if hasattr(lw, 'plot_widget'):
+                    plot_widgets.append(lw.plot_widget)
+            cursor_pos = QCursor.pos()
+            for pw in plot_widgets:
+                if pw.geometry().contains(pw.mapFromGlobal(cursor_pos)):
+                    try:
+                        pi = pw.getPlotItem()
+                        if pi is not None:
+                            cur_x = pi.getAxis('bottom').logMode
+                            cur_y = pi.getAxis('left').logMode
+                            new_y = not cur_y
+                            pi.setLogMode(x=cur_x, y=new_y)
+                            pi_id = id(pi)
+                            self._plot_log_state[pi_id] = {'x': cur_x, 'y': new_y}
 
-                pi = pw.getPlotItem()
-                if pi is not None:
-                    cur_x = pi.getAxis('bottom').logMode
-                    cur_y = pi.getAxis('left').logMode
-                    new_y = not cur_y
-                    pi.setLogMode(x=cur_x, y=new_y)
-                    pi_id = id(pi)
-                    self._plot_log_state[pi_id] = {'x': cur_x, 'y': new_y}
-
-                # Sync checkboxes
-                plw = getattr(pw, 'parent_lookup_window', None)
-                if plw and hasattr(plw, 'sync_log_checkboxes'):
-                    plw.sync_log_checkboxes()
-            except Exception:
-                pass
-        self._apply_to_plotwidgets(h)
+                        # Sync checkboxes
+                        plw = getattr(pw, 'parent_lookup_window', None)
+                        if plw and hasattr(plw, 'sync_log_checkboxes'):
+                            plw.sync_log_checkboxes()
+                    except Exception:
+                        pass
+                    break
 
     def _shortcut_auto_fit(self):
-        def h(pw):
-            try:
-                try:
-                    with open('/tmp/roar_shortcuts.log', 'a', encoding='utf-8') as fh:
-                        fh.write(f"AUTO_FIT target={type(pw)} id={getattr(pw,'_pi_id',None)}\n")
-                except Exception:
-                    pass
-
-                vb = pw.getViewBox()
-                if vb is not None:
-                    vb.enableAutoRange()
-            except Exception:
-                pass
-        self._apply_to_plotwidgets(h)
+        grid = self.graph_grid
+        if grid:
+            plot_widgets = []
+            for lw in grid.lookup_windows:
+                if hasattr(lw, 'plot_widget'):
+                    plot_widgets.append(lw.plot_widget)
+            cursor_pos = QCursor.pos()
+            for pw in plot_widgets:
+                if pw.geometry().contains(pw.mapFromGlobal(cursor_pos)):
+                    try:
+                        vb = pw.getViewBox()
+                        if vb is not None:
+                            vb.enableAutoRange()
+                    except Exception:
+                        pass
+                    break
 
     def _shortcut_add_vertical_marker(self):
         def h(pw):
@@ -1629,4 +1637,3 @@ if __name__ == "__main__":
     window.setWindowIcon(window_icon)
     window.show()
     sys.exit(app.exec())
-
