@@ -2,10 +2,15 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QMessageBox, QSplitter, QGroupBox
 )
-from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen
+from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 import json
 import sys
+import os
+
+
+# Get ROAR_HOME from environment
+ROAR_HOME = os.environ.get("ROAR_HOME", "")
 
 
 class BaseEditor(QWidget):
@@ -634,6 +639,14 @@ class ROAREditorWindow(QWidget):
         self.expression_editor.add_button.clicked.connect(self.on_expressions_changed)
         self.expression_editor.delete_button.clicked.connect(self.on_expressions_changed)
 
+        # Connect the open editor button to toggle dock/undock
+        self.open_editor_button.clicked.connect(self.toggle_dock_undock)
+
+        # Initialize dock state
+        self.is_docked = True
+        self.original_parent = None
+        self.original_index = -1
+
     def on_expressions_changed(self):
         self.expressions_changed.emit(self.get_expression_symbols())
 
@@ -745,9 +758,89 @@ class ROAREditorWindow(QWidget):
             r = 1.0
         self._snap_threshold_ratio = r
 
+    def toggle_dock_undock(self):
+        """Toggle between docked and undocked states of the editor window."""
+        if self.is_docked:
+            self.undock_editor()
+        else:
+            self.dock_editor()
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = ROAREditorWindow()
-    window.show()
-    sys.exit(app.exec())
+    def undock_editor(self):
+        """Undock the editor to a separate window."""
+        if not self.top_level_app:
+            return
+
+        # Find the splitter containing this editor
+        parent_widget = self.parent()
+        if not parent_widget:
+            return
+
+        # The parent should be a QSplitter (horizontal splitter with graph tabs)
+        if not isinstance(parent_widget, QSplitter):
+            return
+
+        # Store original position information
+        self.original_parent = parent_widget
+        self.original_index = parent_widget.indexOf(self)
+
+        # Remove from splitter
+        self.setParent(None)
+
+        # Set window flags for a proper separate window
+        self.setWindowFlags(Qt.WindowType.Window)
+        self.setWindowTitle("ROAR Design Editor")
+
+        # Set the window icon to match the main application
+        try:
+            window_icon = QIcon(ROAR_HOME + "/images/png/ROAR_ICON.png")
+            self.setWindowIcon(window_icon)
+        except Exception:
+            pass  # Silently fail if icon can't be loaded
+
+        # Show as separate window
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+        # Update button text
+        self.open_editor_button.setText("Dock Editor")
+
+        # Update dock state
+        self.is_docked = False
+
+    def dock_editor(self):
+        """Dock the editor back into the main window."""
+        if not self.original_parent or self.original_index < 0:
+            return
+
+        # Remove window flags first (while still visible)
+        self.setWindowFlags(Qt.WindowType.Widget)
+
+        # Re-add to the original splitter at the original position
+        self.original_parent.insertWidget(self.original_index, self)
+
+        # Ensure the widget is visible after re-parenting
+        self.show()
+
+        # Reset window title (back to embedded state)
+        self.setWindowTitle("Editor Window")
+
+        # Update button text
+        self.open_editor_button.setText("Open Editor")
+
+        # Update dock state
+        self.is_docked = True
+
+        # Clear stored position info
+        self.original_parent = None
+        self.original_index = -1
+
+    def closeEvent(self, event):
+        """Handle the close event when the editor is undocked."""
+        if not self.is_docked:
+            # If the window is closed while undocked, dock it back
+            self.dock_editor()
+            event.ignore()  # Don't actually close the window, just dock it
+        else:
+            # If docked, allow normal closing
+            super().closeEvent(event)
