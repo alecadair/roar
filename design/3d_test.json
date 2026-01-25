@@ -1,0 +1,101 @@
+{
+    "expression_editor": [
+        {
+            "Symbol": "cload",
+            "Expression": "100e-12",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "wu",
+            "Expression": "100e6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm1",
+            "Expression": "kgm:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs1",
+            "Expression": "kcgs:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "idensity1",
+            "Expression": "iden:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgds1",
+            "Expression": "kgds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "av1",
+            "Expression": "kgm1/kgds1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "ws",
+            "Expression": "kgm1/kcgs1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "ids0",
+            "Expression": "(wu*cload)/kgm1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "i_total",
+            "Expression": "ids0*(1/(1 - wu/ws))",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "m1_width",
+            "Expression": "idensity1/i_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm2",
+            "Expression": "kgm:M2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm_mult",
+            "Expression": "kgm2*kgm2 + kgm1",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "constraint_editor": [
+        {
+            "Symbol": "min_kcgs",
+            "Constraint Expression": "kcgs1 > 0",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "instance_table": [
+        {
+            "Instance Name": "M1",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "disabled": false,
+            "plot": false
+        }
+    ]
+}

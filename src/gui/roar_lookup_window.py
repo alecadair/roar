@@ -908,7 +908,13 @@ class ROARLookupWindow(QWidget):
             self.gl_widget = gl.GLViewWidget()
             self.gl_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             try:
+                # Set camera distance and viewing angle
                 self.gl_widget.opts['distance'] = 40
+                self.gl_widget.opts['azimuth'] = 45  # Rotate view 45 degrees
+                self.gl_widget.opts['elevation'] = 30  # Tilt view 30 degrees
+                self.gl_widget.opts['fov'] = 60  # Field of view
+                # Set background color to white for better visibility
+                self.gl_widget.setBackgroundColor('w')
             except Exception:
                 pass
             self.gl_widget.setVisible(False)
@@ -950,6 +956,7 @@ class ROARLookupWindow(QWidget):
         self.checkbox_logy.stateChanged.connect(self.update_log_scale)
 
         self.checkbox_3d.stateChanged.connect(self._update_z_controls_state)
+        self.checkbox_black_bg.stateChanged.connect(self.on_background_color_changed)
         self._update_z_controls_state()
 
         # Ensure combo boxes and visibility reflect the current radio selection
@@ -1040,6 +1047,16 @@ class ROARLookupWindow(QWidget):
     def on_mode_changed(self, _checked):
         self.is_device_params_mode = self.radio_device_params.isChecked()
         self.update_combobox_items()
+        self.update_attachment_checkboxes()
+
+    def on_background_color_changed(self):
+        """Update the 3D plot background when the Black BG checkbox changes"""
+        if self.gl_widget is not None:
+            bg_color = 'k' if self.checkbox_black_bg.isChecked() else 'w'
+            self.gl_widget.setBackgroundColor(bg_color)
+            # Redraw the 3D plot if it's currently visible
+            if self.gl_widget.isVisible():
+                self.update_graph_from_tech_browser()
 
     def update_expression_symbols(self, symbols):
         self.expression_symbols = symbols
@@ -1635,10 +1652,192 @@ class ROARLookupWindow(QWidget):
                                 p1, p2, p3 = results_3d
                                 try:
                                     pts = np.vstack((p1, p2, p3)).T.astype(float)
-                                    scatter = gl.GLScatterPlotItem(pos=pts, size=3, color=(1.0, 0.5, 0.0, 1.0), pxMode=False)
+
+                                    # Set background color based on checkbox
+                                    bg_color = 'k' if self.checkbox_black_bg.isChecked() else 'w'
+                                    self.gl_widget.setBackgroundColor(bg_color)
+
+                                    # Add scatter plot
+                                    scatter = gl.GLScatterPlotItem(pos=pts, size=5, color=(1.0, 0.5, 0.0, 1.0), pxMode=False)
                                     if self.gl_widget is not None:
                                         self.gl_widget.addItem(scatter)
                                         self.gl_items.append(scatter)
+
+                                    # Add line plot connecting the points
+                                    line = gl.GLLinePlotItem(pos=pts, color=(0.0, 0.5, 1.0, 0.8), width=2, antialias=True, mode='line_strip')
+                                    if self.gl_widget is not None:
+                                        self.gl_widget.addItem(line)
+                                        self.gl_items.append(line)
+
+                                    # Determine axis ranges
+                                    x_min, x_max = np.min(p1), np.max(p1)
+                                    y_min, y_max = np.min(p2), np.max(p2)
+                                    z_min, z_max = np.min(p3), np.max(p3)
+
+                                    # Add some padding
+                                    x_range = x_max - x_min if x_max != x_min else 1
+                                    y_range = y_max - y_min if y_max != y_min else 1
+                                    z_range = z_max - z_min if z_max != z_min else 1
+                                    x_min -= x_range * 0.1
+                                    x_max += x_range * 0.1
+                                    y_min -= y_range * 0.1
+                                    y_max += y_range * 0.1
+                                    z_min -= z_range * 0.1
+                                    z_max += z_range * 0.1
+
+                                    # Determine axis colors based on background
+                                    if self.checkbox_black_bg.isChecked():
+                                        axis_colors = {'x': (1, 0.3, 0.3, 0.8), 'y': (0.3, 1, 0.3, 0.8), 'z': (0.3, 0.3, 1, 0.8)}
+                                        text_color = (1, 1, 1, 1)  # white text on black
+                                        grid_color = (0.5, 0.5, 0.5, 0.3)
+                                    else:
+                                        axis_colors = {'x': (1, 0, 0, 0.8), 'y': (0, 0.8, 0, 0.8), 'z': (0, 0, 1, 0.8)}
+                                        text_color = (0, 0, 0, 1)  # black text on white
+                                        grid_color = (0.5, 0.5, 0.5, 0.3)
+
+                                    # Create bounding box
+                                    box_lines = [
+                                        # Bottom rectangle
+                                        [[x_min, y_min, z_min], [x_max, y_min, z_min]],
+                                        [[x_max, y_min, z_min], [x_max, y_max, z_min]],
+                                        [[x_max, y_max, z_min], [x_min, y_max, z_min]],
+                                        [[x_min, y_max, z_min], [x_min, y_min, z_min]],
+                                        # Top rectangle
+                                        [[x_min, y_min, z_max], [x_max, y_min, z_max]],
+                                        [[x_max, y_min, z_max], [x_max, y_max, z_max]],
+                                        [[x_max, y_max, z_max], [x_min, y_max, z_max]],
+                                        [[x_min, y_max, z_max], [x_min, y_min, z_max]],
+                                        # Vertical edges
+                                        [[x_min, y_min, z_min], [x_min, y_min, z_max]],
+                                        [[x_max, y_min, z_min], [x_max, y_min, z_max]],
+                                        [[x_max, y_max, z_min], [x_max, y_max, z_max]],
+                                        [[x_min, y_max, z_min], [x_min, y_max, z_max]],
+                                    ]
+                                    for line_pts in box_lines:
+                                        box_line = gl.GLLinePlotItem(pos=np.array(line_pts), color=grid_color, width=1, antialias=True)
+                                        self.gl_widget.addItem(box_line)
+                                        self.gl_items.append(box_line)
+
+                                    # Add main axis lines with thicker width
+                                    # X axis (red)
+                                    x_axis = gl.GLLinePlotItem(
+                                        pos=np.array([[x_min, y_min, z_min], [x_max, y_min, z_min]]),
+                                        color=axis_colors['x'], width=3, antialias=True
+                                    )
+                                    self.gl_widget.addItem(x_axis)
+                                    self.gl_items.append(x_axis)
+
+                                    # Y axis (green)
+                                    y_axis = gl.GLLinePlotItem(
+                                        pos=np.array([[x_min, y_min, z_min], [x_min, y_max, z_min]]),
+                                        color=axis_colors['y'], width=3, antialias=True
+                                    )
+                                    self.gl_widget.addItem(y_axis)
+                                    self.gl_items.append(y_axis)
+
+                                    # Z axis (blue)
+                                    z_axis = gl.GLLinePlotItem(
+                                        pos=np.array([[x_min, y_min, z_min], [x_min, y_min, z_max]]),
+                                        color=axis_colors['z'], width=3, antialias=True
+                                    )
+                                    self.gl_widget.addItem(z_axis)
+                                    self.gl_items.append(z_axis)
+
+                                    # Add tick marks and labels on axes
+                                    n_ticks = 5
+                                    tick_size = min(x_range, y_range, z_range) * 0.02
+
+                                    # X-axis ticks and labels
+                                    for i in range(n_ticks + 1):
+                                        t = i / n_ticks
+                                        x_val = x_min + t * (x_max - x_min)
+                                        # Tick mark
+                                        tick = gl.GLLinePlotItem(
+                                            pos=np.array([[x_val, y_min, z_min], [x_val, y_min - tick_size, z_min]]),
+                                            color=axis_colors['x'], width=2, antialias=True
+                                        )
+                                        self.gl_widget.addItem(tick)
+                                        self.gl_items.append(tick)
+                                        # Label (using scatter as text placeholder - actual text rendering in 3D is complex)
+                                        # Add a small marker to indicate tick position
+                                        tick_marker = gl.GLScatterPlotItem(
+                                            pos=np.array([[x_val, y_min - tick_size * 2, z_min]]),
+                                            size=3, color=axis_colors['x'], pxMode=False
+                                        )
+                                        self.gl_widget.addItem(tick_marker)
+                                        self.gl_items.append(tick_marker)
+
+                                    # Y-axis ticks
+                                    for i in range(n_ticks + 1):
+                                        t = i / n_ticks
+                                        y_val = y_min + t * (y_max - y_min)
+                                        tick = gl.GLLinePlotItem(
+                                            pos=np.array([[x_min, y_val, z_min], [x_min - tick_size, y_val, z_min]]),
+                                            color=axis_colors['y'], width=2, antialias=True
+                                        )
+                                        self.gl_widget.addItem(tick)
+                                        self.gl_items.append(tick)
+                                        tick_marker = gl.GLScatterPlotItem(
+                                            pos=np.array([[x_min - tick_size * 2, y_val, z_min]]),
+                                            size=3, color=axis_colors['y'], pxMode=False
+                                        )
+                                        self.gl_widget.addItem(tick_marker)
+                                        self.gl_items.append(tick_marker)
+
+                                    # Z-axis ticks
+                                    for i in range(n_ticks + 1):
+                                        t = i / n_ticks
+                                        z_val = z_min + t * (z_max - z_min)
+                                        tick = gl.GLLinePlotItem(
+                                            pos=np.array([[x_min, y_min, z_val], [x_min - tick_size, y_min, z_val]]),
+                                            color=axis_colors['z'], width=2, antialias=True
+                                        )
+                                        self.gl_widget.addItem(tick)
+                                        self.gl_items.append(tick)
+                                        tick_marker = gl.GLScatterPlotItem(
+                                            pos=np.array([[x_min - tick_size * 2, y_min, z_val]]),
+                                            size=3, color=axis_colors['z'], pxMode=False
+                                        )
+                                        self.gl_widget.addItem(tick_marker)
+                                        self.gl_items.append(tick_marker)
+
+                                    # Add multiple grid planes for better 3D reference
+                                    # XY plane at bottom
+                                    grid_xy = gl.GLGridItem()
+                                    grid_xy.setSize(x=(x_max-x_min), y=(y_max-y_min), z=0)
+                                    grid_xy.setSpacing(x=(x_max-x_min)/10, y=(y_max-y_min)/10, z=1)
+                                    grid_xy.translate((x_min+x_max)/2, (y_min+y_max)/2, z_min)
+                                    grid_xy.setColor(grid_color)
+                                    self.gl_widget.addItem(grid_xy)
+                                    self.gl_items.append(grid_xy)
+
+                                    # XZ plane at back
+                                    grid_xz = gl.GLGridItem()
+                                    grid_xz.setSize(x=(x_max-x_min), y=(z_max-z_min), z=0)
+                                    grid_xz.setSpacing(x=(x_max-x_min)/10, y=(z_max-z_min)/10, z=1)
+                                    grid_xz.rotate(90, 1, 0, 0)  # Rotate to XZ plane
+                                    grid_xz.translate((x_min+x_max)/2, y_min, (z_min+z_max)/2)
+                                    grid_xz.setColor(grid_color)
+                                    self.gl_widget.addItem(grid_xz)
+                                    self.gl_items.append(grid_xz)
+
+                                    # YZ plane at back
+                                    grid_yz = gl.GLGridItem()
+                                    grid_yz.setSize(x=(y_max-y_min), y=(z_max-z_min), z=0)
+                                    grid_yz.setSpacing(x=(y_max-y_min)/10, y=(z_max-z_min)/10, z=1)
+                                    grid_yz.rotate(90, 0, 1, 0)  # Rotate to YZ plane
+                                    grid_yz.translate(x_min, (y_min+y_max)/2, (z_min+z_max)/2)
+                                    grid_yz.setColor(grid_color)
+                                    self.gl_widget.addItem(grid_yz)
+                                    self.gl_items.append(grid_yz)
+
+                                    # Print axis value ranges to console for reference
+                                    print(f"\n3D Plot Axis Ranges:")
+                                    print(f"  X ({param1}): {format_eng(np.min(p1))} to {format_eng(np.max(p1))}")
+                                    print(f"  Y ({param2}): {format_eng(np.min(p2))} to {format_eng(np.max(p2))}")
+                                    print(f"  Z ({param3}): {format_eng(np.min(p3))} to {format_eng(np.max(p3))}")
+                                    print(f"  Total points: {len(pts)}\n")
+
                                 except Exception as e:
                                     msg = f"3D plotting error: {e}"
                                     print(msg)
