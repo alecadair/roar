@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sympy import sympify, Number, SympifyError
+from sympy import sympify, Number, SympifyError, sin, cos, tan, asin, acos, atan, sqrt, exp, log, ln, pi, E
 from sympy.utilities.lambdify import lambdify
 from collections import defaultdict, deque
 from decimal import Decimal
@@ -21,11 +21,18 @@ class ROAREquationSolver:
         self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
                             'va', 'vds', 'vdsat', 'vgs', 'vth', 'pi')
+
+        # Mathematical functions that should be available in equations
+        self.math_functions = {
+            'sin', 'cos', 'tan', 'asin', 'acos', 'atan',
+            'arcsin', 'arccos', 'arctan',  # Alternative names
+            'sqrt', 'exp', 'log', 'ln', 'abs',
+            'min', 'max', 'sum', 'mean', 'std'
+        }
+
         if data_frames:
             for df in data_frames:
                 self.data_frames.append(df)
-
-                #self.add_variable_from_dataframe(df)
     def clear_all_equations(self):
         self.equations = {}
         self.variables = {}
@@ -44,7 +51,17 @@ class ROAREquationSolver:
                 parts = equation.split('e')
                 if len(parts) == 2 and parts[0].replace('.', '', 1).isdigit() and parts[1].replace('-', '', 1).isdigit():
                     equation = f"({parts[0]}*10**{parts[1]})"
-            sympified_equation  = sympify(equation)
+
+            # Create a local namespace with mathematical functions
+            local_dict = {
+                'sin': sin, 'cos': cos, 'tan': tan,
+                'asin': asin, 'acos': acos, 'atan': atan,
+                'arcsin': asin, 'arccos': acos, 'arctan': atan,  # aliases
+                'sqrt': sqrt, 'exp': exp, 'log': log, 'ln': ln,
+                'pi': pi, 'e': E
+            }
+
+            sympified_equation = sympify(equation, locals=local_dict)
             self.equations[symbol] = sympified_equation
         except SympifyError as e:
             print(f"Error adding equation {symbol}: {e}")
@@ -175,7 +192,21 @@ class ROAREquationSolver:
         try:
             # Convert the symbolic equation to a lambda function
             free_syms = list(symbolic_equation.free_symbols)
-            func = lambdify(free_syms, symbolic_equation, modules="numpy")
+
+            # Use numpy modules for better matrix/array support and include math functions
+            numpy_modules = [
+                'numpy',
+                {
+                    'sin': np.sin, 'cos': np.cos, 'tan': np.tan,
+                    'arcsin': np.arcsin, 'arccos': np.arccos, 'arctan': np.arctan,
+                    'asin': np.arcsin, 'acos': np.arccos, 'atan': np.arctan,
+                    'sqrt': np.sqrt, 'exp': np.exp, 'log': np.log, 'ln': np.log,
+                    'abs': np.abs, 'min': np.minimum, 'max': np.maximum,
+                    'pi': np.pi, 'e': np.e
+                }
+            ]
+
+            func = lambdify(free_syms, symbolic_equation, modules=numpy_modules)
 
             # Build argument list for lambdify: prefer already-computed results; if a free symbol
             # corresponds to a lookup column (or contains ':'), create matrix(s) from corner_dfs.
@@ -198,12 +229,23 @@ class ROAREquationSolver:
 
             # Evaluate the lambda function with prepared args
             evaluated_equation = func(*args)
+
+            # Ensure result is a numpy array for consistent handling
+            if not isinstance(evaluated_equation, np.ndarray):
+                if isinstance(evaluated_equation, (list, tuple)):
+                    evaluated_equation = np.array(evaluated_equation)
+                elif isinstance(evaluated_equation, (int, float)):
+                    # Keep scalars as-is, they'll be broadcast as needed
+                    pass
+
             return evaluated_equation
         except Exception as e:
             if symbolic_equation in results:
                 result = results[symbolic_equation]
                 return result
-            print("Error:", e)
+            print(f"Error evaluating equation: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def build_dependency_graph(self):
@@ -213,7 +255,10 @@ class ROAREquationSolver:
             variables = set(symbol for symbol in re.split(self.delimiters, str(equation)))
 
             for var in variables:
-                if var != name and var != "":
+                # Skip if it's the equation name itself, empty, a number, or a mathematical function
+                if (var != name and var != "" and
+                    not var.isdigit() and
+                    var not in self.math_functions):
                     dependency_graph[name].add(var)
         return dependency_graph
 
