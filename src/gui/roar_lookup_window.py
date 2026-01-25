@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QLabel, QPushButton, QColorDialog, QDoubleSpinBox, QGraphicsItem
 )
 from PyQt6.QtCore import Qt, QSize, QPoint
-from PyQt6.QtGui import QColor, QCursor
+from PyQt6.QtGui import QColor, QCursor, QIcon
 
 
 def format_eng(num):
@@ -958,6 +958,12 @@ class ROARLookupWindow(QWidget):
         # Initialize attachment checkboxes
         self.update_attachment_checkboxes()
 
+        # Connect copy button
+        self.copy_button.clicked.connect(self.on_copy_button_clicked)
+
+        # Track copy/paste state
+        self.copied_state = None  # Stores the state when in copy mode
+
     # ...existing code...
 
     def update_combobox_items(self):
@@ -1101,6 +1107,244 @@ class ROARLookupWindow(QWidget):
             marker_info['marker'].setData(x=[plot_x], y=[plot_y])
             marker_info['text'].setPos(plot_x, plot_y)
         self.update_graph_from_tech_browser()
+
+    def on_copy_button_clicked(self):
+        """Handle copy/paste button click"""
+        if self.copy_button.text() == "Copy":
+            # Start copy mode
+            self.start_copy_mode()
+        else:
+            # Paste mode - apply the copied state to this window
+            self.apply_paste()
+
+    def start_copy_mode(self):
+        """Capture current state and switch other windows to paste mode"""
+        # Capture the current state
+        self.copied_state = self.capture_state()
+
+        # Change other windows' copy buttons to "Paste"
+        if self.graph_grid:
+            for window in self.graph_grid.lookup_windows:
+                if window != self:
+                    window.copy_button.setText("Paste")
+
+        # Set focus to enable escape key handling
+        self.setFocus()
+
+    def apply_paste(self):
+        """Apply the copied state from the source window to this window"""
+        if not self.graph_grid:
+            return
+
+        # Find the source window (the one still showing "Copy")
+        source_window = None
+        for window in self.graph_grid.lookup_windows:
+            if window.copy_button.text() == "Copy" and window.copied_state is not None:
+                source_window = window
+                break
+
+        if source_window and source_window.copied_state:
+            # Apply the copied state to this window
+            self.restore_state(source_window.copied_state)
+
+            # Cancel copy mode
+            self.cancel_copy_mode()
+
+    def cancel_copy_mode(self):
+        """Cancel copy mode and reset all buttons to 'Copy'"""
+        if self.graph_grid:
+            for window in self.graph_grid.lookup_windows:
+                window.copy_button.setText("Copy")
+                window.copied_state = None
+
+    def capture_state(self):
+        """Capture the current state of this window for copying"""
+        state = {
+            # Radio button state
+            'is_device_params_mode': self.radio_device_params.isChecked(),
+
+            # Combo box selections
+            'combo_x_text': self.combo_x.currentText(),
+            'combo_y_text': self.combo_y.currentText(),
+            'combo_z_text': self.combo_z.currentText(),
+
+            # Spin box values
+            'spin_x_value': self.spin_x.value(),
+            'spin_y_value': self.spin_y.value(),
+            'spin_z_value': self.spin_z.value(),
+
+            # Checkbox states
+            'checkbox_logx': self.checkbox_logx.isChecked(),
+            'checkbox_logy': self.checkbox_logy.isChecked(),
+            'checkbox_logz': self.checkbox_logz.isChecked(),
+            'checkbox_3d': self.checkbox_3d.isChecked(),
+            'checkbox_contour': self.checkbox_contour.isChecked(),
+            'checkbox_legend': self.checkbox_legend.isChecked(),
+            'checkbox_black_bg': self.checkbox_black_bg.isChecked(),
+
+            # Settings checkboxes
+            'setting_checkboxes': [cb.isChecked() for cb in self.setting_checkboxes],
+
+            # Tech browser state - checked items
+            'checked_paths': self.tech_browser.get_checked_item_paths(),
+
+            # Tech browser color map
+            'color_map': dict(self.tech_browser.color_map),  # Make a copy
+        }
+        return state
+
+    def restore_state(self, state):
+        """Restore the window state from a captured state dictionary"""
+        try:
+            # Temporarily disable updates to prevent repeated graph updates
+            self._is_updating = True
+
+            # Restore radio button
+            if state.get('is_device_params_mode', True):
+                self.radio_device_params.setChecked(True)
+            else:
+                self.radio_design_eq.setChecked(True)
+
+            # Restore combo boxes
+            self.combo_x.setCurrentText(state.get('combo_x_text', ''))
+            self.combo_y.setCurrentText(state.get('combo_y_text', ''))
+            self.combo_z.setCurrentText(state.get('combo_z_text', ''))
+
+            # Restore spin boxes
+            self.spin_x.setValue(state.get('spin_x_value', 0))
+            self.spin_y.setValue(state.get('spin_y_value', 0))
+            self.spin_z.setValue(state.get('spin_z_value', 0))
+
+            # Restore checkboxes
+            self.checkbox_logx.setChecked(state.get('checkbox_logx', False))
+            self.checkbox_logy.setChecked(state.get('checkbox_logy', False))
+            self.checkbox_logz.setChecked(state.get('checkbox_logz', False))
+            self.checkbox_3d.setChecked(state.get('checkbox_3d', False))
+            self.checkbox_contour.setChecked(state.get('checkbox_contour', False))
+            self.checkbox_legend.setChecked(state.get('checkbox_legend', False))
+            self.checkbox_black_bg.setChecked(state.get('checkbox_black_bg', False))
+
+            # Restore settings checkboxes
+            setting_states = state.get('setting_checkboxes', [])
+            for i, checked in enumerate(setting_states):
+                if i < len(self.setting_checkboxes):
+                    self.setting_checkboxes[i].setChecked(checked)
+
+            # Restore checked items in tech browser first
+            if 'checked_paths' in state:
+                self.restore_tech_browser_checks(state['checked_paths'])
+
+            # Restore tech browser color map after check states are set
+            if 'color_map' in state:
+                # First, clear all existing icons to prevent artifacts
+                for path, item in self.tech_browser.path_to_item.items():
+                    if item.childCount() == 0:  # Only clear icons on leaf nodes
+                        item.setIcon(0, QIcon())  # Empty icon
+
+                # Now set the color map and icons
+                self.tech_browser.color_map = dict(state['color_map'])
+                # Update icons with new colors - only for items that exist and are leaf nodes
+                for path, color in self.tech_browser.color_map.items():
+                    if path in self.tech_browser.path_to_item:
+                        item = self.tech_browser.path_to_item[path]
+                        # Only set icon on leaf nodes (corners)
+                        if item.childCount() == 0:
+                            self.tech_browser.set_item_icon(item, color)
+
+            # Re-enable updates
+            self._is_updating = False
+
+            # Update the graph
+            self.update_graph_from_tech_browser()
+
+        except Exception as e:
+            self._is_updating = False
+            print(f"Error restoring state: {e}")
+
+    def restore_tech_browser_checks(self, checked_paths):
+        """Restore the checked state of items in the tech browser"""
+        try:
+            # Temporarily block signals to prevent handle_item_changed from propagating checks
+            self.tech_browser.tree.blockSignals(True)
+
+            # First, uncheck all items
+            def uncheck_all(item):
+                item.setCheckState(0, Qt.CheckState.Unchecked)
+                for i in range(item.childCount()):
+                    uncheck_all(item.child(i))
+
+            root = self.tech_browser.tree.invisibleRootItem()
+            for i in range(root.childCount()):
+                uncheck_all(root.child(i))
+
+            # Now check only the leaf items (corners) that should be checked
+            for path in checked_paths:
+                if path in self.tech_browser.path_to_item:
+                    item = self.tech_browser.path_to_item[path]
+                    # Only check the actual item, not parents
+                    # This ensures only the exact items from the source are checked
+                    item.setCheckState(0, Qt.CheckState.Checked)
+
+            # Update parent check states to reflect children
+            # This shows PartiallyChecked for parents with some (but not all) children checked
+            def update_parent_states(item):
+                if item.childCount() == 0:
+                    return
+
+                # Check children first (bottom-up approach)
+                for i in range(item.childCount()):
+                    update_parent_states(item.child(i))
+
+                # Count checked children
+                checked_count = 0
+                total_count = item.childCount()
+
+                for i in range(total_count):
+                    child = item.child(i)
+                    if child.checkState(0) == Qt.CheckState.Checked:
+                        checked_count += 1
+                    elif child.checkState(0) == Qt.CheckState.PartiallyChecked:
+                        # If any child is partially checked, parent should be partially checked
+                        item.setCheckState(0, Qt.CheckState.PartiallyChecked)
+                        return
+
+                # Set parent state based on children
+                if checked_count == 0:
+                    item.setCheckState(0, Qt.CheckState.Unchecked)
+                elif checked_count == total_count:
+                    item.setCheckState(0, Qt.CheckState.Checked)
+                else:
+                    item.setCheckState(0, Qt.CheckState.PartiallyChecked)
+
+            # Update all parent states
+            for i in range(root.childCount()):
+                update_parent_states(root.child(i))
+
+            # Re-enable signals
+            self.tech_browser.tree.blockSignals(False)
+
+        except Exception as e:
+            print(f"Error restoring tech browser checks: {e}")
+
+    def keyPressEvent(self, event):
+        """Handle keyboard events for the lookup window"""
+        if event.key() == Qt.Key.Key_Escape:
+            # Check if we're in copy mode
+            if self.graph_grid:
+                in_copy_mode = False
+                for window in self.graph_grid.lookup_windows:
+                    if window.copied_state is not None or window.copy_button.text() == "Paste":
+                        in_copy_mode = True
+                        break
+
+                if in_copy_mode:
+                    # Cancel copy mode
+                    self.cancel_copy_mode()
+                    event.accept()
+                    return
+
+        # Pass to parent class for default handling
+        super().keyPressEvent(event)
 
     def on_axis_selection_changed(self, _idx=None):
         try:
@@ -1564,6 +1808,26 @@ class ROARGraphGrid(QWidget):
         self.grid_splitter.setStretchFactor(1, 1)
 
         layout.addWidget(self.grid_splitter)
+
+    def keyPressEvent(self, event):
+        """Handle keyboard events for the graph grid"""
+        if event.key() == Qt.Key.Key_Escape:
+            # Check if any window is in copy mode and cancel it
+            in_copy_mode = False
+            for window in self.lookup_windows:
+                if window.copied_state is not None or window.copy_button.text() == "Paste":
+                    in_copy_mode = True
+                    break
+
+            if in_copy_mode:
+                # Cancel copy mode on all windows
+                for window in self.lookup_windows:
+                    window.cancel_copy_mode()
+                event.accept()
+                return
+
+        # Pass to parent class for default handling
+        super().keyPressEvent(event)
 
     def populate_from_app(self):
         try:
