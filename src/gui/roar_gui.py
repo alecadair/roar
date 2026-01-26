@@ -928,6 +928,7 @@ class ROARApp(QMainWindow):
     # ---- MENU ACTION CALLBACKS ----
     def new_file(self):
         """Handler for New File action."""
+
         QMessageBox.information(self, "New File", "New file creation is not implemented yet.")
 
     def open_file(self):
