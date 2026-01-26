@@ -751,7 +751,7 @@ class ROARLookupWindow(QWidget):
         # Keep combo boxes left-aligned and do not allow them to expand horizontally
         self.combo_x.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.spin_x = EngSpinBox()
-        self.spin_x.setMinimumWidth(120)
+        self.spin_x.setMinimumWidth(80)
         # Make spinboxes expand horizontally to absorb extra space
         self.spin_x.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.checkbox_logx = QCheckBox("LogX")
@@ -766,7 +766,7 @@ class ROARLookupWindow(QWidget):
         self.combo_y.setCurrentText("kcgs")
         self.combo_y.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.spin_y = EngSpinBox()
-        self.spin_y.setMinimumWidth(120)
+        self.spin_y.setMinimumWidth(80)
         self.spin_y.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.checkbox_logy = QCheckBox("LogY")
 
@@ -780,7 +780,7 @@ class ROARLookupWindow(QWidget):
         self.combo_z.setCurrentText("iden")
         self.combo_z.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.spin_z = EngSpinBox()
-        self.spin_z.setMinimumWidth(120)
+        self.spin_z.setMinimumWidth(80)
         self.spin_z.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.checkbox_logz = QCheckBox("LogZ")
 
@@ -789,27 +789,65 @@ class ROARLookupWindow(QWidget):
         self.combo_y.currentIndexChanged.connect(self.on_axis_selection_changed)
         self.combo_z.currentIndexChanged.connect(self.on_axis_selection_changed)
 
+        # Create a single splitter for each row to allow adjusting combo/spin widths
+        # X row splitter
+        self.splitter_x = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter_x.setChildrenCollapsible(False)
+        self.splitter_x.addWidget(self.combo_x)
+        self.splitter_x.addWidget(self.spin_x)
+        self.splitter_x.setSizes([200, 120])  # Favor combobox with more space
+
+        # Y row splitter
+        self.splitter_y = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter_y.setChildrenCollapsible(False)
+        self.splitter_y.addWidget(self.combo_y)
+        self.splitter_y.addWidget(self.spin_y)
+        self.splitter_y.setSizes([200, 120])  # Favor combobox with more space
+
+        # Z row splitter
+        self.splitter_z = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter_z.setChildrenCollapsible(False)
+        self.splitter_z.addWidget(self.combo_z)
+        self.splitter_z.addWidget(self.spin_z)
+        self.splitter_z.setSizes([200, 120])  # Favor combobox with more space
+
+        # Synchronize all three splitters to move together
+        def sync_all_splitters(moved_splitter):
+            sizes = moved_splitter.sizes()
+            if moved_splitter is not self.splitter_x:
+                self.splitter_x.blockSignals(True)
+                self.splitter_x.setSizes(sizes)
+                self.splitter_x.blockSignals(False)
+            if moved_splitter is not self.splitter_y:
+                self.splitter_y.blockSignals(True)
+                self.splitter_y.setSizes(sizes)
+                self.splitter_y.blockSignals(False)
+            if moved_splitter is not self.splitter_z:
+                self.splitter_z.blockSignals(True)
+                self.splitter_z.setSizes(sizes)
+                self.splitter_z.blockSignals(False)
+
+        self.splitter_x.splitterMoved.connect(lambda: sync_all_splitters(self.splitter_x))
+        self.splitter_y.splitterMoved.connect(lambda: sync_all_splitters(self.splitter_y))
+        self.splitter_z.splitterMoved.connect(lambda: sync_all_splitters(self.splitter_z))
+
         self.controls_layout.addWidget(self.label_x, 1, 0)
-        self.controls_layout.addWidget(self.combo_x, 1, 1)
-        self.controls_layout.addWidget(self.spin_x, 1, 2)
+        self.controls_layout.addWidget(self.splitter_x, 1, 1, 1, 2)  # Span columns 1 and 2
         self.controls_layout.addWidget(self.checkbox_logx, 1, 3)
 
         self.controls_layout.addWidget(self.label_y, 2, 0)
-        self.controls_layout.addWidget(self.combo_y, 2, 1)
-        self.controls_layout.addWidget(self.spin_y, 2, 2)
+        self.controls_layout.addWidget(self.splitter_y, 2, 1, 1, 2)  # Span columns 1 and 2
         self.controls_layout.addWidget(self.checkbox_logy, 2, 3)
 
         self.controls_layout.addWidget(self.label_z, 3, 0)
-        self.controls_layout.addWidget(self.combo_z, 3, 1)
-        self.controls_layout.addWidget(self.spin_z, 3, 2)
+        self.controls_layout.addWidget(self.splitter_z, 3, 1, 1, 2)  # Span columns 1 and 2
         self.controls_layout.addWidget(self.checkbox_logz, 3, 3)
 
         # Set column stretch factors
-        # Make the spinner column stretch (absorb extra space) while other columns remain tight
-        self.controls_layout.setColumnStretch(0, 0)
-        self.controls_layout.setColumnStretch(1, 0)
-        self.controls_layout.setColumnStretch(2, 1) # Spinner column expands
-        self.controls_layout.setColumnStretch(3, 0)
+        self.controls_layout.setColumnStretch(0, 0)  # Labels
+        self.controls_layout.setColumnStretch(1, 1)  # Splitters expand
+        self.controls_layout.setColumnStretch(2, 0)  # (Splitters span this column too)
+        self.controls_layout.setColumnStretch(3, 0)  # Checkboxes
 
         # Individual Checkboxes with specific callbacks
         self.checkbox_3d = QCheckBox("3-D")
