@@ -76,6 +76,10 @@ class ROARPlotWidget(pg.PlotWidget):
         self.parent_lookup_window = parent_lookup_window
         self._mouse_inside = False
 
+        # Add timer for debouncing marker label updates during dragging
+        self._marker_update_timer = None
+        self._pending_marker_updates = []  # Use list instead of set since dicts aren't hashable
+
         # Add legend and crosshair lines
         self.plotItem.addLegend()
         self.v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
@@ -305,7 +309,7 @@ class ROARPlotWidget(pg.PlotWidget):
         except Exception:
             return False
 
-    def add_vertical_marker(self, linear_pos=None):
+    def add_vertical_marker(self, linear_pos=None, sync=True):
         if linear_pos is None:
             cursor_pos = QCursor.pos()
             global_pos = self.mapToGlobal(QPoint(0, 0))
@@ -323,17 +327,19 @@ class ROARPlotWidget(pg.PlotWidget):
         self.plotItem.addItem(line)
         marker = {'line': line, 'vertical': True, 'texts': [], 'selected': False, 'linear_pos': linear_pos}
         self.line_markers.append(marker)
-        line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
+        # Signal doesn't pass arguments, so use a proper lambda closure
+        line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker, sync=True))
         line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
-        self.update_marker_labels(marker)
+        self.update_marker_labels(marker, sync=False)  # Don't sync on initial creation
 
-        # Place marker on attached graphs
-        plw = getattr(self, "parent_lookup_window", None)
-        if plw:
-            for attached_window in plw.get_attached_windows():
-                attached_window.plot_widget.add_vertical_marker(linear_pos=linear_pos)
+        # Place marker on attached graphs only if sync=True
+        if sync:
+            plw = getattr(self, "parent_lookup_window", None)
+            if plw:
+                for attached_window in plw.get_attached_windows():
+                    attached_window.plot_widget.add_vertical_marker(linear_pos=linear_pos, sync=False)
 
-    def add_horizontal_marker(self, linear_pos=None):
+    def add_horizontal_marker(self, linear_pos=None, sync=True):
         if linear_pos is None:
             cursor_pos = QCursor.pos()
             global_pos = self.mapToGlobal(QPoint(0, 0))
@@ -351,17 +357,19 @@ class ROARPlotWidget(pg.PlotWidget):
         self.plotItem.addItem(line)
         marker = {'line': line, 'vertical': False, 'texts': [], 'selected': False, 'linear_pos': linear_pos}
         self.line_markers.append(marker)
-        line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
+        # Signal doesn't pass arguments, so use a proper lambda closure
+        line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker, sync=True))
         line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
-        self.update_marker_labels(marker)
+        self.update_marker_labels(marker, sync=False)  # Don't sync on initial creation
 
-        # Place marker on attached graphs
-        plw = getattr(self, "parent_lookup_window", None)
-        if plw:
-            for attached_window in plw.get_attached_windows():
-                attached_window.plot_widget.add_horizontal_marker(linear_pos=linear_pos)
+        # Place marker on attached graphs only if sync=True
+        if sync:
+            plw = getattr(self, "parent_lookup_window", None)
+            if plw:
+                for attached_window in plw.get_attached_windows():
+                    attached_window.plot_widget.add_horizontal_marker(linear_pos=linear_pos, sync=False)
 
-    def update_marker_labels(self, marker):
+    def update_marker_labels(self, marker, sync=True):
         line = marker['line']
         vertical = marker['vertical']
         pos = line.value()
@@ -373,6 +381,7 @@ class ROARPlotWidget(pg.PlotWidget):
         else:
             y_log = self.plotItem.getAxis('left').logMode
             marker['linear_pos'] = 10**pos if y_log else pos
+
 
         # remove old texts
         for text in marker['texts']:
@@ -449,27 +458,105 @@ class ROARPlotWidget(pg.PlotWidget):
                 summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
                 marker['summary_text'] = summary_text
 
-        # Synchronize marker position with attached plots
-        plw = getattr(self, "parent_lookup_window", None)
-        if plw:
-            my_index = self.line_markers.index(marker)
-            for attached_window in plw.get_attached_windows():
-                if my_index < len(attached_window.plot_widget.line_markers):
-                    m = attached_window.plot_widget.line_markers[my_index]
-                    if m['vertical'] == marker['vertical']:
-                        m['linear_pos'] = marker['linear_pos']
+        # Synchronize marker position with attached plots (only if sync=True)
+        if sync:
+            plw = getattr(self, "parent_lookup_window", None)
+            if plw:
+                attached_windows = plw.get_attached_windows()
+
+                # Get the index of this marker in the list
+                try:
+                    marker_index = self.line_markers.index(marker)
+                except (ValueError, AttributeError):
+                    marker_index = -1
+
+                for attached_window in attached_windows:
+                    matched_marker = None
+
+                    # Strategy 1: Try to match by index (for markers created together)
+                    if marker_index >= 0 and marker_index < len(attached_window.plot_widget.line_markers):
+                        candidate = attached_window.plot_widget.line_markers[marker_index]
+                        if candidate['vertical'] == marker['vertical']:
+                            matched_marker = candidate
+
+                    # Strategy 2: If no match by index, try matching by position and orientation
+                    if matched_marker is None:
+                        for attached_marker in attached_window.plot_widget.line_markers:
+                            if attached_marker['vertical'] == marker['vertical']:
+                                pos_diff = abs(attached_marker['linear_pos'] - marker['linear_pos'])
+                                # Use a more generous tolerance for matching
+                                tolerance = max(abs(marker['linear_pos']) * 0.1, 0.1)
+                                if pos_diff < tolerance:
+                                    matched_marker = attached_marker
+                                    break
+
+                    # If we found a match, update it
+                    if matched_marker is not None:
+                        # Update the matched marker's position
+                        matched_marker['linear_pos'] = marker['linear_pos']
                         axis = 'bottom' if vertical else 'left'
-                        log_mode = attached_window.plot_widget.getPlotItem().getAxis(axis).logMode
+                        log_mode = attached_window.plot_widget.plotItem.getAxis(axis).logMode
                         new_pos = np.log10(marker['linear_pos']) if log_mode and marker['linear_pos'] > 0 else marker['linear_pos']
-                        m['line'].setPos(new_pos)
-                        attached_window.plot_widget.select_marker(m)
-                        break
+
+                        # Temporarily block signals to prevent cascading updates during drag
+                        try:
+                            matched_marker['line'].blockSignals(True)
+                        except Exception:
+                            pass
+
+                        # Update position without triggering signal
+                        matched_marker['line'].setValue(new_pos)
+
+                        # Re-enable signals
+                        try:
+                            matched_marker['line'].blockSignals(False)
+                        except Exception:
+                            pass
+
+                        # Update labels immediately for smooth text following
+                        # This is more responsive than debouncing
+                        attached_window.plot_widget.update_marker_labels(matched_marker, sync=False)
 
     def on_marker_selected(self, marker, selected):
         # Optional: change appearance when selected
         pass
 
-    def select_marker(self, marker):
+    def _perform_pending_marker_updates(self):
+        """Execute pending marker label updates after debounce timer expires"""
+        for marker in self._pending_marker_updates:
+            try:
+                # Do a full label update without syncing
+                self.update_marker_labels(marker, sync=False)
+            except Exception as e:
+                pass  # Marker might have been deleted
+        self._pending_marker_updates.clear()
+        self._marker_update_timer = None
+
+    def _schedule_marker_update(self, marker):
+        """Schedule a full marker label update after a short delay to reduce lag during dragging"""
+        # Add to pending updates if not already there (check by marker identity)
+        if marker not in self._pending_marker_updates:
+            self._pending_marker_updates.append(marker)
+
+        # Cancel existing timer and create a new one
+        if self._marker_update_timer is not None:
+            try:
+                self._marker_update_timer.stop()
+            except Exception:
+                pass
+
+        # Import QTimer here to avoid issues
+        try:
+            from PyQt6.QtCore import QTimer
+            self._marker_update_timer = QTimer()
+            self._marker_update_timer.setSingleShot(True)
+            self._marker_update_timer.timeout.connect(self._perform_pending_marker_updates)
+            self._marker_update_timer.start(50)  # 50ms delay - feels instant but reduces updates
+        except Exception:
+            # Fallback: just do the update immediately
+            self.update_marker_labels(marker, sync=False)
+
+    def select_marker(self, marker, sync=True):
         if marker['selected']:
             marker['selected'] = False
             marker['line'].setPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=1))
@@ -481,18 +568,22 @@ class ROARPlotWidget(pg.PlotWidget):
             marker['line'].setHoverPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=5))
             marker['line'].update()
 
-        # Synchronize selection with attached plots
-        plw = getattr(self, "parent_lookup_window", None)
-        if plw:
-            for attached_window in plw.get_attached_windows():
-                for m in attached_window.plot_widget.line_markers:
-                    if m['linear_pos'] == marker['linear_pos'] and m['vertical'] == marker['vertical']:
-                        attached_window.plot_widget.select_marker(m)
-                        break
+        # Synchronize selection with attached plots (only if sync=True to prevent infinite recursion)
+        if sync:
+            plw = getattr(self, "parent_lookup_window", None)
+            if plw:
+                for attached_window in plw.get_attached_windows():
+                    for m in attached_window.plot_widget.line_markers:
+                        if m['linear_pos'] == marker['linear_pos'] and m['vertical'] == marker['vertical']:
+                            # Pass sync=False to prevent infinite recursion
+                            attached_window.plot_widget.select_marker(m, sync=False)
+                            break
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Delete:
             to_remove = [m for m in self.line_markers if m.get('selected', False)]
+
+            # Remove the markers
             for m in to_remove:
                 self.plotItem.removeItem(m['line'])
                 for text in m['texts']:
@@ -500,6 +591,33 @@ class ROARPlotWidget(pg.PlotWidget):
                 if 'summary_text' in m:
                     self.plotItem.removeItem(m['summary_text'])
                 self.line_markers.remove(m)
+
+            # Remove any difference items that involve the deleted markers
+            diff_to_remove = []
+            for diff_item in self.difference_items:
+                if isinstance(diff_item, dict):
+                    # Check if either marker in the difference was deleted
+                    marker1 = diff_item.get('marker1')
+                    marker2 = diff_item.get('marker2')
+                    if marker1 in to_remove or marker2 in to_remove:
+                        # Remove the difference line and text from the plot
+                        self.plotItem.removeItem(diff_item['line'])
+                        self.plotItem.removeItem(diff_item['text'])
+                        diff_to_remove.append(diff_item)
+
+            # Remove the difference items from the list
+            for diff_item in diff_to_remove:
+                self.difference_items.remove(diff_item)
+
+            event.accept()
+        elif event.key() == Qt.Key.Key_Escape:
+            # Unselect all markers
+            for m in self.line_markers:
+                if m.get('selected', False):
+                    m['selected'] = False
+                    m['line'].setPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=1))
+                    m['line'].setHoverPen(pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4))
+                    m['line'].update()
             event.accept()
         elif event.key() == Qt.Key.Key_V:
             self.add_vertical_marker()
@@ -599,7 +717,9 @@ class ROARPlotWidget(pg.PlotWidget):
                     'relative_x': 0,
                     'relative_y': 0,
                     'x_vals': x_vals,
-                    'y_vals': y_vals
+                    'y_vals': y_vals,
+                    'marker1': m1,  # Track which markers are involved
+                    'marker2': m2
                 }
                 self.difference_items.append(diff_dict)
 
@@ -627,7 +747,9 @@ class ROARPlotWidget(pg.PlotWidget):
                     'relative_x': 0,
                     'relative_y': 0,
                     'x_vals': x_vals,
-                    'y_vals': y_vals
+                    'y_vals': y_vals,
+                    'marker1': m1,  # Track which markers are involved
+                    'marker2': m2
                 }
                 self.difference_items.append(diff_dict)
 
@@ -1173,6 +1295,13 @@ class ROARLookupWindow(QWidget):
             marker_info['text'].setPos(plot_x, plot_y)
         self.update_graph_from_tech_browser()
 
+        # Synchronize log scale with attached windows
+        if self.graph_grid:
+            for attached_window in self.get_attached_windows():
+                # Update log checkboxes in attached windows
+                attached_window.checkbox_logx.setChecked(x_log)
+                attached_window.checkbox_logy.setChecked(y_log)
+
     def on_copy_button_clicked(self):
         """Handle copy/paste button click"""
         if self.copy_button.text() == "Copy":
@@ -1247,14 +1376,24 @@ class ROARLookupWindow(QWidget):
             'checkbox_legend': self.checkbox_legend.isChecked(),
             'checkbox_black_bg': self.checkbox_black_bg.isChecked(),
 
-            # Settings checkboxes
-            'setting_checkboxes': [cb.isChecked() for cb in self.setting_checkboxes],
+            # NOTE: setting_checkboxes are NOT included - these represent window attachments/locks
+            # which should not be copied to other windows
 
             # Tech browser state - checked items
             'checked_paths': self.tech_browser.get_checked_item_paths(),
 
             # Tech browser color map
             'color_map': dict(self.tech_browser.color_map),  # Make a copy
+
+            # Markers - capture linear positions and orientations
+            'markers': [
+                {
+                    'vertical': m['vertical'],
+                    'linear_pos': m['linear_pos'],
+                    'selected': False  # Don't copy selection state
+                }
+                for m in self.plot_widget.line_markers
+            ],
         }
         return state
 
@@ -1289,11 +1428,8 @@ class ROARLookupWindow(QWidget):
             self.checkbox_legend.setChecked(state.get('checkbox_legend', False))
             self.checkbox_black_bg.setChecked(state.get('checkbox_black_bg', False))
 
-            # Restore settings checkboxes
-            setting_states = state.get('setting_checkboxes', [])
-            for i, checked in enumerate(setting_states):
-                if i < len(self.setting_checkboxes):
-                    self.setting_checkboxes[i].setChecked(checked)
+            # NOTE: setting_checkboxes are NOT restored - these represent window attachments/locks
+            # which should not be copied to other windows
 
             # Restore checked items in tech browser first
             if 'checked_paths' in state:
@@ -1322,9 +1458,36 @@ class ROARLookupWindow(QWidget):
             # Update the graph
             self.update_graph_from_tech_browser()
 
+            # Restore markers after the graph is updated
+            if 'markers' in state:
+                self.restore_markers(state['markers'])
+
         except Exception as e:
             self._is_updating = False
             print(f"Error restoring state: {e}")
+
+    def restore_markers(self, markers_data):
+        """Restore markers from captured marker data"""
+        try:
+            # Clear existing markers first
+            for m in list(self.plot_widget.line_markers):
+                self.plot_widget.plotItem.removeItem(m['line'])
+                for text in m['texts']:
+                    self.plot_widget.plotItem.removeItem(text)
+                if 'summary_text' in m:
+                    self.plot_widget.plotItem.removeItem(m['summary_text'])
+            self.plot_widget.line_markers.clear()
+
+            # Recreate markers from data WITHOUT syncing to attached windows
+            # This prevents duplicate markers when pasting
+            for marker_data in markers_data:
+                if marker_data['vertical']:
+                    self.plot_widget.add_vertical_marker(linear_pos=marker_data['linear_pos'], sync=False)
+                else:
+                    self.plot_widget.add_horizontal_marker(linear_pos=marker_data['linear_pos'], sync=False)
+
+        except Exception as e:
+            print(f"Error restoring markers: {e}")
 
     def restore_tech_browser_checks(self, checked_paths):
         """Restore the checked state of items in the tech browser"""
