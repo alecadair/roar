@@ -1647,6 +1647,20 @@ class ROARLookupWindow(QWidget):
                                     unique_x = np.unique(x_data)
                                     unique_y = np.unique(y_data)
 
+                                    # Limit grid resolution for performance (3D plots can be laggy with too many points)
+                                    # Recommended: 20-40 points per axis for smooth interaction
+                                    max_grid_resolution = 40  # Adjust this for performance vs quality tradeoff
+
+                                    # Downsample if needed
+                                    if len(unique_x) > max_grid_resolution:
+                                        # Use linspace to get evenly distributed points
+                                        unique_x = np.linspace(unique_x[0], unique_x[-1], max_grid_resolution)
+                                        print(f"[PERFORMANCE] Downsampled X from {len(np.unique(x_data))} to {max_grid_resolution} points")
+
+                                    if len(unique_y) > max_grid_resolution:
+                                        unique_y = np.linspace(unique_y[0], unique_y[-1], max_grid_resolution)
+                                        print(f"[PERFORMANCE] Downsampled Y from {len(np.unique(y_data))} to {max_grid_resolution} points")
+
                                     # Decide between surface and scatter plot
                                     # For surface: need enough unique values and Z must be a function of X and Y
                                     min_grid_size = 3  # Need at least 3x3 grid for meaningful surface
@@ -1912,15 +1926,6 @@ class ROARLookupWindow(QWidget):
                                             self.mpl_ax.clabel(contour_lines, inline=True, fontsize=7,
                                                              colors=[mpl_color])
 
-                                            # Add colorbar only on first plot
-                                            if new_plot:
-                                                cbar = self.mpl_figure.colorbar(contour_filled, ax=self.mpl_ax, shrink=0.8, aspect=10)
-                                                cbar.set_label(f'{param3}', rotation=270, labelpad=15,
-                                                              color=text_color, fontweight='bold')
-                                                if is_black_bg:
-                                                    cbar.ax.yaxis.set_tick_params(color=text_color)
-                                                    cbar.outline.set_edgecolor(text_color)
-                                                    plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color=text_color)
 
                                             # Set labels only on first plot
                                             if new_plot:
@@ -1959,15 +1964,6 @@ class ROARLookupWindow(QWidget):
                                             surf = self.mpl_ax.plot_surface(p1, p2, p3, cmap=corner_cmap,
                                                                            alpha=0.7, edgecolor=mpl_color,
                                                                            linewidth=0.3, antialiased=True)
-                                            # Add a color bar only on first plot
-                                            if new_plot:
-                                                cbar = self.mpl_figure.colorbar(surf, ax=self.mpl_ax, shrink=0.5, aspect=5)
-                                                cbar.set_label(f'{param3}', rotation=270, labelpad=15,
-                                                              color=text_color, fontweight='bold')
-                                                if is_black_bg:
-                                                    cbar.ax.yaxis.set_tick_params(color=text_color)
-                                                    cbar.outline.set_edgecolor(text_color)
-                                                    plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color=text_color)
                                     else:
                                         # Plot as scatter points and lines with corner-specific color
                                         self.mpl_ax.scatter(p1, p2, p3, c=mpl_color, marker='o', s=50, alpha=0.8,
