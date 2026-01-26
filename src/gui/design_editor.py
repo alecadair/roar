@@ -322,28 +322,32 @@ class BaseEditor(QWidget):
         # Set header text alignment
         header_item = self.tree.headerItem()
         for col, col_name in enumerate(columns):
-            if col_name in ["kgm", "ID", "W", "L"]:
+            if col_name in ["Instance", "kgm", "ID", "W", "L", "Corners"]:
                 header_item.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             else:
                 header_item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)  # Allow resizing
+        # Set resize mode to Interactive so columns can be manually resized by dragging
+        self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         # Set initial column widths for better fit
-        if "Instance Name" in columns:
-            idx = columns.index("Instance Name")
-            self.tree.header().resizeSection(idx, 150)  # Wider for Instance Name
+        if "Instance" in columns:
+            idx = columns.index("Instance")
+            self.tree.header().resizeSection(idx, 55)  # Very narrow - just fits "Instance"
         if "kgm" in columns:
             idx = columns.index("kgm")
-            self.tree.header().resizeSection(idx, 60)  # Thinner for kgm
+            self.tree.header().resizeSection(idx, 45)  # Compact for kgm
         if "ID" in columns:
             idx = columns.index("ID")
-            self.tree.header().resizeSection(idx, 60)  # Thinner for ID
+            self.tree.header().resizeSection(idx, 45)  # Smaller for ID
         if "W" in columns:
             idx = columns.index("W")
-            self.tree.header().resizeSection(idx, 60)  # Thinner for W
+            self.tree.header().resizeSection(idx, 45)  # Smaller for W
         if "L" in columns:
             idx = columns.index("L")
-            self.tree.header().resizeSection(idx, 60)  # Thinner for L
+            self.tree.header().resizeSection(idx, 45)  # Smaller for L
+        if "Corners" in columns:
+            idx = columns.index("Corners")
+            self.tree.header().resizeSection(idx, 50)  # Compact width for Corners
         self.tree.setTabKeyNavigation(False)  # Disable default row-wise tab behavior
         # Allow multiple selection and enable drag & drop. We handle moves in
         # dropEvent and use startDrag to ensure external drops don't remove
@@ -486,10 +490,14 @@ class BaseEditor(QWidget):
             item.setData(0, Qt.ItemDataRole.UserRole + 1, False)
         except Exception:
             pass
-        # Ensure text is left-aligned in each column and vertically centered
+        # Ensure text is aligned properly in each column and vertically centered
         for col in range(len(self.columns)):
             try:
-                item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                col_name = self.columns[col]
+                if col_name in ["Instance", "kgm", "ID", "W", "L", "Corners"]:
+                    item.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+                else:
+                    item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             except Exception:
                 pass
 
@@ -587,7 +595,7 @@ class BaseEditor(QWidget):
 
         if not device_name:
             QMessageBox.warning(self, "No Device Name",
-                              "Please enter a device name in the Instance Name column first.")
+                              "Please enter a device name in the Instance column first.")
             return
 
         # Get tech browser reference
@@ -945,10 +953,14 @@ class BaseEditor(QWidget):
             # If disabled, remove editable flag
             if row_data.get("disabled"):
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            # Ensure text alignment is flush left for each column
+            # Ensure text alignment is proper for each column
             for col in range(len(self.columns)):
                 try:
-                    item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                    col_name = self.columns[col]
+                    if col_name in ["Instance", "kgm", "ID", "W", "L", "Corners"]:
+                        item.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+                    else:
+                        item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 except Exception:
                     pass
             # Restore corner data if available
@@ -997,7 +1009,8 @@ class ROAREditorWindow(QWidget):
         # Tweak these values if you want a different compact size.
         try:
             # Make the editor narrower by default so it starts compact but usable.
-            self.setMinimumSize(320, 300)
+            # Width accommodates instance table columns with [*Global*] text
+            self.setMinimumSize(340, 300)
         except Exception:
             pass
         try:
@@ -1023,7 +1036,7 @@ class ROAREditorWindow(QWidget):
         # We'll set the tech_browser reference later when it's available
         self.instance_table = BaseEditor(
             "Instance Table",
-            ["Instance Name", "kgm", "ID", "W", "L", "Corners"],  # Added Corners column
+            ["Instance", "kgm", "ID", "W", "L", "Corners"],  # Added Corners column
             plot_button_text=None,
             tech_browser=None,  # Will be set dynamically via get_tech_browser()
             enable_corners=True  # Enable corner selection for Design Eqs mode
@@ -1114,7 +1127,7 @@ class ROAREditorWindow(QWidget):
 
         for i in range(self.instance_table.tree.topLevelItemCount()):
             item = self.instance_table.tree.topLevelItem(i)
-            device_name = item.text(0)  # Instance Name column
+            device_name = item.text(0)  # Instance column
             if device_name:
                 # Get corner data from UserRole
                 corners = item.data(corners_column_index, Qt.ItemDataRole.UserRole)
