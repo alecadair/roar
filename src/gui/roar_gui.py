@@ -891,6 +891,7 @@ class ROARApp(QMainWindow):
             light_act = QAction("Light", self, checkable=True)
             light_act.triggered.connect(lambda: self.set_theme('light'))
             theme_group.addAction(light_act)
+
             theme_menu.addAction(light_act)
 
             # Dark theme action
