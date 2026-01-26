@@ -1815,106 +1815,217 @@ class ROARLookupWindow(QWidget):
                                     plot_type = 'scatter'
 
                                 try:
-                                    # Clear the figure
-                                    self.mpl_figure.clear()
+                                    # Clear the figure only on first plot
+                                    if new_plot:
+                                        self.mpl_figure.clear()
 
-                                    # Create 3D subplot
-                                    self.mpl_ax = self.mpl_figure.add_subplot(111, projection='3d')
+                                    # Check if we need to create new axes
+                                    is_contour_mode = self.checkbox_contour.isChecked()
 
-                                    # Set background color based on checkbox
+                                    # Create appropriate subplot if needed
+                                    if new_plot or self.mpl_ax is None:
+                                        if is_contour_mode and plot_type == 'surface':
+                                            # 2D contour plot
+                                            self.mpl_ax = self.mpl_figure.add_subplot(111)
+                                        else:
+                                            # 3D plot
+                                            self.mpl_ax = self.mpl_figure.add_subplot(111, projection='3d')
+
+                                    # Set background color based on checkbox (only on first plot)
                                     is_black_bg = self.checkbox_black_bg.isChecked()
-                                    if is_black_bg:
-                                        self.mpl_figure.patch.set_facecolor('black')
-                                        self.mpl_ax.set_facecolor('black')
-                                        self.mpl_ax.xaxis.pane.set_facecolor('black')
-                                        self.mpl_ax.yaxis.pane.set_facecolor('black')
-                                        self.mpl_ax.zaxis.pane.set_facecolor('black')
-                                        grid_color = 'gray'
-                                        text_color = 'white'
-                                        axis_color = 'white'
-                                    else:
-                                        self.mpl_figure.patch.set_facecolor('white')
-                                        self.mpl_ax.set_facecolor('white')
-                                        self.mpl_ax.xaxis.pane.set_facecolor('white')
-                                        self.mpl_ax.yaxis.pane.set_facecolor('white')
-                                        self.mpl_ax.zaxis.pane.set_facecolor('white')
-                                        grid_color = 'gray'
-                                        text_color = 'black'
-                                        axis_color = 'black'
+                                    if new_plot:
+                                        if is_contour_mode and plot_type == 'surface':
+                                            # 2D background
+                                            if is_black_bg:
+                                                self.mpl_figure.patch.set_facecolor('black')
+                                                self.mpl_ax.set_facecolor('black')
+                                            else:
+                                                self.mpl_figure.patch.set_facecolor('white')
+                                                self.mpl_ax.set_facecolor('white')
+                                        else:
+                                            # 3D background
+                                            if is_black_bg:
+                                                self.mpl_figure.patch.set_facecolor('black')
+                                                self.mpl_ax.set_facecolor('black')
+                                                self.mpl_ax.xaxis.pane.set_facecolor('black')
+                                                self.mpl_ax.yaxis.pane.set_facecolor('black')
+                                                self.mpl_ax.zaxis.pane.set_facecolor('black')
+                                            else:
+                                                self.mpl_figure.patch.set_facecolor('white')
+                                                self.mpl_ax.set_facecolor('white')
+                                                self.mpl_ax.xaxis.pane.set_facecolor('white')
+                                                self.mpl_ax.yaxis.pane.set_facecolor('white')
+                                                self.mpl_ax.zaxis.pane.set_facecolor('white')
+
+                                    grid_color = 'gray'
+                                    text_color = 'white' if is_black_bg else 'black'
+                                    axis_color = 'white' if is_black_bg else 'black'
+
+                                    # Check if contour mode is enabled
+                                    is_contour_mode_check = self.checkbox_contour.isChecked()
+
+                                    # Get corner-specific color
+                                    corner_color = self.tech_browser.get_color_for_path(model)
+                                    # Convert to matplotlib color format
+                                    mpl_color = None
+
+                                    # Handle different color types
+                                    from PyQt6.QtGui import QColor
+                                    if isinstance(corner_color, QColor):
+                                        # QColor object - convert to hex string
+                                        mpl_color = corner_color.name()
+                                    elif hasattr(corner_color, 'color'):
+                                        # pyqtgraph Pen object - extract color
+                                        pen_color = corner_color.color()
+                                        if isinstance(pen_color, QColor):
+                                            mpl_color = pen_color.name()
+                                    elif hasattr(corner_color, 'name'):
+                                        # Object with name() method
+                                        mpl_color = corner_color.name()
+                                    elif isinstance(corner_color, str):
+                                        # Already a string
+                                        mpl_color = corner_color
+
+                                    # Fallback to a color from a predefined list based on corner index
+                                    if mpl_color is None:
+                                        color_list = ['#ff0000', '#0000ff', '#00ff00', '#ff8800', '#ff00ff', '#00ffff']
+                                        corner_index = models_selected.index(model) if model in models_selected else 0
+                                        mpl_color = color_list[corner_index % len(color_list)]
+
+                                    print(f"[COLOR DEBUG] Corner: {corner}, Color: {mpl_color}")
 
                                     # Plot based on plot type
                                     if plot_type == 'surface':
-                                        # Plot as a surface
                                         from matplotlib import cm
-                                        surf = self.mpl_ax.plot_surface(p1, p2, p3, cmap=cm.viridis,
-                                                                       alpha=0.8, edgecolor='none',
-                                                                       linewidth=0, antialiased=True)
-                                        # Add a color bar
-                                        cbar = self.mpl_figure.colorbar(surf, ax=self.mpl_ax, shrink=0.5, aspect=5)
-                                        cbar.set_label(f'{param3}', rotation=270, labelpad=15,
-                                                      color=text_color, fontweight='bold')
-                                        if is_black_bg:
-                                            cbar.ax.yaxis.set_tick_params(color=text_color)
-                                            cbar.outline.set_edgecolor(text_color)
-                                            plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color=text_color)
 
-                                        # Also add wireframe for better visibility
-                                        self.mpl_ax.plot_wireframe(p1, p2, p3, color='black' if not is_black_bg else 'white',
-                                                                   alpha=0.2, linewidth=0.5)
-                                    else:
-                                        # Plot as scatter points and lines
-                                        self.mpl_ax.scatter(p1, p2, p3, c='orange', marker='o', s=50, alpha=0.8,
-                                                           edgecolors='darkorange', linewidth=0.5, label='Data Points')
+                                        if is_contour_mode_check:
+                                            # Create contour plot on XY plane with corner-specific color
+                                            # Use alpha to allow multiple corners to be visible
+                                            alpha_contour = 0.6 if not new_plot else 0.8
 
-                                        # Plot the line connecting points
-                                        self.mpl_ax.plot(p1, p2, p3, c='royalblue', linewidth=1.5, alpha=0.7, label='Data Path')
+                                            # Create filled contour plot
+                                            contour_filled = self.mpl_ax.contourf(p1, p2, p3, levels=15, alpha=alpha_contour)
+                                            # Add contour lines with corner color
+                                            contour_lines = self.mpl_ax.contour(p1, p2, p3, levels=15, colors=[mpl_color],
+                                                                               linewidths=1.5, alpha=0.8)
+                                            # Add labels to contour lines
+                                            self.mpl_ax.clabel(contour_lines, inline=True, fontsize=7,
+                                                             colors=[mpl_color])
 
-                                    # Set labels with proper formatting
-                                    self.mpl_ax.set_xlabel(f'{param1}', fontsize=10, color=text_color, fontweight='bold')
-                                    self.mpl_ax.set_ylabel(f'{param2}', fontsize=10, color=text_color, fontweight='bold')
-                                    self.mpl_ax.set_zlabel(f'{param3}', fontsize=10, color=text_color, fontweight='bold')
+                                            # Add colorbar only on first plot
+                                            if new_plot:
+                                                cbar = self.mpl_figure.colorbar(contour_filled, ax=self.mpl_ax, shrink=0.8, aspect=10)
+                                                cbar.set_label(f'{param3}', rotation=270, labelpad=15,
+                                                              color=text_color, fontweight='bold')
+                                                if is_black_bg:
+                                                    cbar.ax.yaxis.set_tick_params(color=text_color)
+                                                    cbar.outline.set_edgecolor(text_color)
+                                                    plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color=text_color)
 
-                                    # Set title
-                                    self.mpl_ax.set_title(f'3D Plot: {param3} vs {param1} and {param2}',
-                                                         fontsize=12, color=text_color, fontweight='bold', pad=20)
+                                            # Set labels only on first plot
+                                            if new_plot:
+                                                self.mpl_ax.set_xlabel(f'{param1}', fontsize=10, color=text_color, fontweight='bold')
+                                                self.mpl_ax.set_ylabel(f'{param2}', fontsize=10, color=text_color, fontweight='bold')
+                                                self.mpl_ax.set_title(f'Contour Plot: {param3} vs {param1} and {param2}',
+                                                                    fontsize=12, color=text_color, fontweight='bold')
 
-                                    # Customize grid
-                                    self.mpl_ax.grid(True, linestyle='--', alpha=0.3, color=grid_color)
+                                                # Customize tick colors
+                                                self.mpl_ax.tick_params(axis='x', colors=text_color, labelsize=8)
+                                                self.mpl_ax.tick_params(axis='y', colors=text_color, labelsize=8)
 
-                                    # Customize tick colors
-                                    self.mpl_ax.tick_params(axis='x', colors=text_color, labelsize=8)
-                                    self.mpl_ax.tick_params(axis='y', colors=text_color, labelsize=8)
-                                    self.mpl_ax.tick_params(axis='z', colors=text_color, labelsize=8)
-
-                                    # Customize axis line colors
-                                    self.mpl_ax.xaxis.line.set_color(axis_color)
-                                    self.mpl_ax.yaxis.line.set_color(axis_color)
-                                    self.mpl_ax.zaxis.line.set_color(axis_color)
-
-                                    # Customize pane edges
-                                    self.mpl_ax.xaxis.pane.set_edgecolor(grid_color)
-                                    self.mpl_ax.yaxis.pane.set_edgecolor(grid_color)
-                                    self.mpl_ax.zaxis.pane.set_edgecolor(grid_color)
-
-                                    # Set pane transparency
-                                    self.mpl_ax.xaxis.pane.set_alpha(0.1)
-                                    self.mpl_ax.yaxis.pane.set_alpha(0.1)
-                                    self.mpl_ax.zaxis.pane.set_alpha(0.1)
-
-                                    # Add legend only for scatter plots (surface has colorbar)
-                                    if plot_type != 'surface':
-                                        legend = self.mpl_ax.legend(loc='upper right', fontsize=8, framealpha=0.8)
-                                        if is_black_bg:
-                                            legend.get_frame().set_facecolor('black')
-                                            legend.get_frame().set_edgecolor('white')
-                                            for text in legend.get_texts():
-                                                text.set_color('white')
+                                                # Set equal aspect ratio for better visualization
+                                                self.mpl_ax.set_aspect('auto')
                                         else:
-                                            legend.get_frame().set_facecolor('white')
-                                            legend.get_frame().set_edgecolor('black')
+                                            # Plot as a 3D surface with corner-specific color
+                                            # Create a custom colormap based on the corner color
+                                            from matplotlib.colors import LinearSegmentedColormap
+                                            import matplotlib.colors as mcolors
 
-                                    # Set viewing angle for better perspective
-                                    self.mpl_ax.view_init(elev=20, azim=45)
+                                            # Convert hex color to RGB
+                                            try:
+                                                base_rgb = mcolors.to_rgb(mpl_color)
+                                                # Create a colormap from dark to bright version of the corner color
+                                                # Dark version (multiply by 0.3)
+                                                dark_rgb = tuple(c * 0.3 for c in base_rgb)
+                                                # Create custom colormap
+                                                corner_cmap = LinearSegmentedColormap.from_list(
+                                                    f'corner_{corner}',
+                                                    [dark_rgb, base_rgb]
+                                                )
+                                            except:
+                                                # Fallback to viridis if color conversion fails
+                                                corner_cmap = cm.viridis
+
+                                            surf = self.mpl_ax.plot_surface(p1, p2, p3, cmap=corner_cmap,
+                                                                           alpha=0.7, edgecolor=mpl_color,
+                                                                           linewidth=0.3, antialiased=True)
+                                            # Add a color bar only on first plot
+                                            if new_plot:
+                                                cbar = self.mpl_figure.colorbar(surf, ax=self.mpl_ax, shrink=0.5, aspect=5)
+                                                cbar.set_label(f'{param3}', rotation=270, labelpad=15,
+                                                              color=text_color, fontweight='bold')
+                                                if is_black_bg:
+                                                    cbar.ax.yaxis.set_tick_params(color=text_color)
+                                                    cbar.outline.set_edgecolor(text_color)
+                                                    plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color=text_color)
+                                    else:
+                                        # Plot as scatter points and lines with corner-specific color
+                                        self.mpl_ax.scatter(p1, p2, p3, c=mpl_color, marker='o', s=50, alpha=0.8,
+                                                           edgecolors=mpl_color, linewidth=0.5, label=f'{corner}')
+
+                                        # Plot the line connecting points with same color
+                                        self.mpl_ax.plot(p1, p2, p3, c=mpl_color, linewidth=1.5, alpha=0.7)
+
+                                    # Set labels and customization (different for contour vs 3D)
+                                    if not is_contour_mode or plot_type != 'surface':
+                                        # These are for 3D plots or scatter plots
+                                        if hasattr(self.mpl_ax, 'set_zlabel'):
+                                            # 3D axis
+                                            self.mpl_ax.set_xlabel(f'{param1}', fontsize=10, color=text_color, fontweight='bold')
+                                            self.mpl_ax.set_ylabel(f'{param2}', fontsize=10, color=text_color, fontweight='bold')
+                                            self.mpl_ax.set_zlabel(f'{param3}', fontsize=10, color=text_color, fontweight='bold')
+
+                                            # Set title
+                                            self.mpl_ax.set_title(f'3D Plot: {param3} vs {param1} and {param2}',
+                                                                 fontsize=12, color=text_color, fontweight='bold', pad=20)
+
+                                            # Customize grid
+                                            self.mpl_ax.grid(True, linestyle='--', alpha=0.3, color=grid_color)
+
+                                            # Customize tick colors
+                                            self.mpl_ax.tick_params(axis='x', colors=text_color, labelsize=8)
+                                            self.mpl_ax.tick_params(axis='y', colors=text_color, labelsize=8)
+                                            self.mpl_ax.tick_params(axis='z', colors=text_color, labelsize=8)
+
+                                            # Customize axis line colors
+                                            self.mpl_ax.xaxis.line.set_color(axis_color)
+                                            self.mpl_ax.yaxis.line.set_color(axis_color)
+                                            self.mpl_ax.zaxis.line.set_color(axis_color)
+
+                                            # Customize pane edges
+                                            self.mpl_ax.xaxis.pane.set_edgecolor(grid_color)
+                                            self.mpl_ax.yaxis.pane.set_edgecolor(grid_color)
+                                            self.mpl_ax.zaxis.pane.set_edgecolor(grid_color)
+
+                                            # Set pane transparency
+                                            self.mpl_ax.xaxis.pane.set_alpha(0.1)
+                                            self.mpl_ax.yaxis.pane.set_alpha(0.1)
+                                            self.mpl_ax.zaxis.pane.set_alpha(0.1)
+
+                                            # Add legend only for scatter plots (surface has colorbar)
+                                            if plot_type != 'surface':
+                                                legend = self.mpl_ax.legend(loc='upper right', fontsize=8, framealpha=0.8)
+                                                if is_black_bg:
+                                                    legend.get_frame().set_facecolor('black')
+                                                    legend.get_frame().set_edgecolor('white')
+                                                    for text in legend.get_texts():
+                                                        text.set_color('white')
+                                                else:
+                                                    legend.get_frame().set_facecolor('white')
+                                                    legend.get_frame().set_edgecolor('black')
+
+                                            # Set viewing angle for better perspective
+                                            self.mpl_ax.view_init(elev=20, azim=45)
 
                                     # Auto-scale to fit data
                                     self.mpl_ax.autoscale(enable=True, axis='both', tight=True)
@@ -1928,8 +2039,10 @@ class ROARLookupWindow(QWidget):
                                         self.mpl_ax.set_xlim(np.min(p1) - 0.05*x_range, np.max(p1) + 0.05*x_range)
                                     if y_range > 0:
                                         self.mpl_ax.set_ylim(np.min(p2) - 0.05*y_range, np.max(p2) + 0.05*y_range)
-                                    if z_range > 0:
-                                        self.mpl_ax.set_zlim(np.min(p3) - 0.05*z_range, np.max(p3) + 0.05*z_range)
+                                    # Only set z limits for 3D plots
+                                    if not is_contour_mode or plot_type != 'surface':
+                                        if z_range > 0 and hasattr(self.mpl_ax, 'set_zlim'):
+                                            self.mpl_ax.set_zlim(np.min(p3) - 0.05*z_range, np.max(p3) + 0.05*z_range)
 
                                     # Tight layout for better spacing
                                     self.mpl_figure.tight_layout()
