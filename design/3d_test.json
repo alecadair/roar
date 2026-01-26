@@ -77,6 +77,12 @@
             "Expression": "kgm2*kgm2 + kgm1",
             "disabled": false,
             "plot": false
+        },
+        {
+            "Symbol": "kgm_mult2",
+            "Expression": "kgm1*kgm2",
+            "disabled": false,
+            "plot": false
         }
     ],
     "constraint_editor": [

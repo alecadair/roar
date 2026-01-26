@@ -10,6 +10,15 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, QPoint
 from PyQt6.QtGui import QColor, QCursor, QIcon
 
+# Matplotlib imports for 3D plotting
+import matplotlib
+matplotlib.use('Qt5Agg')  # Use Qt5 backend for PyQt6 compatibility
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+
 
 def format_eng(num):
     if num == 0:
@@ -904,20 +913,24 @@ class ROARLookupWindow(QWidget):
 
         self.plot_widget = ROARPlotWidget(parent_lookup_window=self, top_level_app=self.top_level_app)
 
+        # Create matplotlib 3D canvas for superior 3D plotting
         try:
-            self.gl_widget = gl.GLViewWidget()
-            self.gl_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-            try:
-                # Set camera distance and viewing angle
-                self.gl_widget.opts['distance'] = 40
-                self.gl_widget.opts['azimuth'] = 45  # Rotate view 45 degrees
-                self.gl_widget.opts['elevation'] = 30  # Tilt view 30 degrees
-                self.gl_widget.opts['fov'] = 60  # Field of view
-                # Set background color to white for better visibility
-                self.gl_widget.setBackgroundColor('w')
-            except Exception:
-                pass
-            self.gl_widget.setVisible(False)
+            self.mpl_figure = Figure(figsize=(8, 6), dpi=100)
+            self.mpl_canvas = FigureCanvas(self.mpl_figure)
+            self.mpl_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            self.mpl_canvas.setVisible(False)
+            self.mpl_ax = None  # Will be created when needed
+            self.mpl_3d_items = []  # Track plotted items
+        except Exception as e:
+            print(f"Could not create matplotlib canvas: {e}")
+            self.mpl_canvas = None
+            self.mpl_figure = None
+            self.mpl_ax = None
+            self.mpl_3d_items = []
+
+        # Keep old gl_widget for backward compatibility (but prefer matplotlib)
+        try:
+            self.gl_widget = None  # Deprecated in favor of matplotlib
             self.gl_items = []
         except Exception:
             self.gl_widget = None
@@ -929,8 +942,8 @@ class ROARLookupWindow(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         right_layout.addWidget(self.plot_widget)
-        if self.gl_widget is not None:
-            right_layout.addWidget(self.gl_widget)
+        if self.mpl_canvas is not None:
+            right_layout.addWidget(self.mpl_canvas)
         self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser + controls)
         self.top_level_pane.addWidget(right_container)  # Right side (graphing window container)
 
@@ -1051,12 +1064,9 @@ class ROARLookupWindow(QWidget):
 
     def on_background_color_changed(self):
         """Update the 3D plot background when the Black BG checkbox changes"""
-        if self.gl_widget is not None:
-            bg_color = 'k' if self.checkbox_black_bg.isChecked() else 'w'
-            self.gl_widget.setBackgroundColor(bg_color)
-            # Redraw the 3D plot if it's currently visible
-            if self.gl_widget.isVisible():
-                self.update_graph_from_tech_browser()
+        if self.mpl_canvas is not None and self.mpl_canvas.isVisible():
+            # Redraw the 3D plot with new background color
+            self.update_graph_from_tech_browser()
 
     def update_expression_symbols(self, symbols):
         self.expression_symbols = symbols
@@ -1615,232 +1625,334 @@ class ROARLookupWindow(QWidget):
                     except Exception:
                         pass
                     try:
-                        if not self.is_device_params_mode and getattr(self, 'checkbox_3d', None) is not None and self.checkbox_3d.isChecked():
+                        # Check if 3D mode is enabled
+                        is_3d_mode = (not self.is_device_params_mode and
+                                     getattr(self, 'checkbox_3d', None) is not None and
+                                     self.checkbox_3d.isChecked())
+
+                        if is_3d_mode:
                             param3 = self.combo_z.currentText()
                             results_3d = None
                             try:
-                                result_matrix_3d = equation_solver.evaluate_equations(symbols_to_add=[param1, param2, param3], corner_dfs=[cid_corner.df])
-                                if result_matrix_3d is not None and param1 in result_matrix_3d and param2 in result_matrix_3d and param3 in result_matrix_3d:
-                                    p1 = np.asarray(result_matrix_3d[param1]).ravel()
-                                    p2 = np.asarray(result_matrix_3d[param2]).ravel()
-                                    p3 = np.asarray(result_matrix_3d[param3]).ravel()
-                                    results_3d = (p1, p2, p3)
-                            except Exception:
+                                # For 3D surface plotting, we need to evaluate Z at all combinations of X and Y
+                                # First, get X and Y data from the corner
+                                result_matrix_xy = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=[cid_corner.df])
+
+                                if result_matrix_xy is not None and param1 in result_matrix_xy and param2 in result_matrix_xy:
+                                    # Get X and Y data
+                                    x_data = np.asarray(result_matrix_xy[param1]).ravel()
+                                    y_data = np.asarray(result_matrix_xy[param2]).ravel()
+
+                                    # Get unique values for creating meshgrid
+                                    unique_x = np.unique(x_data)
+                                    unique_y = np.unique(y_data)
+
+                                    # Decide between surface and scatter plot
+                                    # For surface: need enough unique values and Z must be a function of X and Y
+                                    min_grid_size = 3  # Need at least 3x3 grid for meaningful surface
+
+                                    if len(unique_x) >= min_grid_size and len(unique_y) >= min_grid_size:
+                                        # Create meshgrid for surface plot
+                                        X_grid, Y_grid = np.meshgrid(unique_x, unique_y)
+
+                                        # Now we need to evaluate Z for ALL points in the meshgrid
+                                        # We'll create a temporary dataframe with all combinations
+                                        try:
+                                            import pandas as pd
+                                            # Flatten the grid to get all (X,Y) pairs
+                                            x_flat = X_grid.ravel()
+                                            y_flat = Y_grid.ravel()
+
+                                            # Create a temporary DataFrame with these values
+                                            # IMPORTANT: If param1/param2 are equations (e.g., kgm1 = kgm:M1),
+                                            # we need to figure out the underlying column names
+                                            temp_df = pd.DataFrame()
+
+                                            # Helper function to get the actual column name
+                                            def get_base_column_name(param_name, param_values):
+                                                """
+                                                If param_name is an equation like 'kgm1 = kgm:M1',
+                                                extract the base column name 'kgm'.
+                                                Otherwise, just use param_name as-is.
+                                                """
+                                                if param_name in equation_solver.equations:
+                                                    eq = equation_solver.equations[param_name]
+                                                    eq_str = str(eq)
+                                                    # Check if it's a lookup (contains ':')
+                                                    if ':' in eq_str:
+                                                        # Extract the lookup variable (before ':')
+                                                        base_name = eq_str.split(':')[0].strip()
+                                                        print(f"[DEBUG] {param_name} is equation '{eq_str}' -> using base column '{base_name}'")
+                                                        return base_name
+                                                # Not an equation or not a lookup, use as-is
+                                                return param_name
+
+                                            # Get actual column names
+                                            col1 = get_base_column_name(param1, x_flat)
+                                            col2 = get_base_column_name(param2, y_flat)
+
+                                            # Create temp_df with the correct column names
+                                            temp_df[col1] = x_flat
+                                            temp_df[col2] = y_flat
+
+                                            # Also add param1 and param2 as columns if they're different
+                                            # This handles cases where the equation solver expects both
+                                            if col1 != param1:
+                                                temp_df[param1] = x_flat
+                                            if col2 != param2:
+                                                temp_df[param2] = y_flat
+
+                                            print(f"\n[DEBUG] Creating meshgrid for surface plot")
+                                            print(f"  param1 ({param1}): {len(unique_x)} unique values")
+                                            print(f"  param2 ({param2}): {len(unique_y)} unique values")
+                                            print(f"  Grid size: {X_grid.shape}")
+                                            print(f"  Total points: {len(x_flat)}")
+                                            print(f"  param1 range: {np.min(x_flat)} to {np.max(x_flat)}")
+                                            print(f"  param2 range: {np.min(y_flat)} to {np.max(y_flat)}")
+
+                                            # Copy ALL other columns from original corner
+                                            # This ensures any variables referenced by param3 equation are available
+                                            # IMPORTANT: Don't overwrite the meshgrid columns!
+                                            columns_to_preserve = set([param1, param2, col1, col2])
+                                            for col in cid_corner.df.columns:
+                                                if col not in columns_to_preserve:
+                                                    # Use the first value as representative for other variables
+                                                    temp_df[col] = cid_corner.df[col].iloc[0]
+
+                                            print(f"  Preserved columns from overwrite: {columns_to_preserve}")
+
+                                            print(f"  temp_df columns: {list(temp_df.columns)}")
+                                            print(f"  temp_df shape: {temp_df.shape}")
+                                            print(f"  {param1} in temp_df: {param1 in temp_df.columns}")
+                                            print(f"  {param2} in temp_df: {param2 in temp_df.columns}")
+                                            print(f"  {param1} unique values in temp_df: {len(temp_df[param1].unique())}")
+                                            print(f"  {param2} unique values in temp_df: {len(temp_df[param2].unique())}")
+
+                                            # Now evaluate Z using this grid
+                                            result_matrix_3d = equation_solver.evaluate_equations(
+                                                symbols_to_add=[param3],
+                                                corner_dfs=[temp_df]
+                                            )
+
+                                            if result_matrix_3d is not None and param3 in result_matrix_3d:
+                                                z_data = np.asarray(result_matrix_3d[param3]).ravel()
+
+                                                print(f"\n[DEBUG] Z evaluation results:")
+                                                print(f"  param3 ({param3}) shape: {z_data.shape}")
+                                                print(f"  Z range: {np.min(z_data)} to {np.max(z_data)}")
+                                                print(f"  Z unique values: {len(np.unique(z_data))}")
+                                                if len(np.unique(z_data)) == 1:
+                                                    print(f"  ⚠ WARNING: Z has only ONE unique value (flat plane)!")
+                                                print(f"  First 5 Z values: {z_data[:5]}")
+                                                print(f"  Last 5 Z values: {z_data[-5:]}")
+
+                                                # Reshape Z to match the meshgrid
+                                                try:
+                                                    Z_grid = z_data.reshape(X_grid.shape)
+                                                    results_3d = (X_grid, Y_grid, Z_grid, 'surface')
+                                                    print(f"  ✓ Created surface plot: {X_grid.shape} grid")
+                                                    print(f"  Z grid corner values:")
+                                                    print(f"    Z[0,0]={Z_grid[0,0]}, Z[0,-1]={Z_grid[0,-1]}")
+                                                    print(f"    Z[-1,0]={Z_grid[-1,0]}, Z[-1,-1]={Z_grid[-1,-1]}")
+                                                except Exception as e:
+                                                    print(f"Reshape failed: {e}, falling back to scatter")
+                                                    # Fall back to scatter
+                                                    results_3d = (x_data, y_data,
+                                                                np.asarray(equation_solver.evaluate_equations([param3], [cid_corner.df])[param3]).ravel(),
+                                                                'scatter')
+                                            else:
+                                                results_3d = None
+                                        except Exception as e:
+                                            print(f"Grid evaluation failed: {e}")
+                                            import traceback
+                                            traceback.print_exc()
+                                            # Fall back to scatter plot with original data
+                                            result_matrix_3d = equation_solver.evaluate_equations(
+                                                symbols_to_add=[param1, param2, param3],
+                                                corner_dfs=[cid_corner.df]
+                                            )
+                                            if result_matrix_3d is not None and param3 in result_matrix_3d:
+                                                z_data = np.asarray(result_matrix_3d[param3]).ravel()
+                                                results_3d = (x_data, y_data, z_data, 'scatter')
+                                            else:
+                                                results_3d = None
+                                    else:
+                                        # Not enough unique values for surface, use scatter/line plot
+                                        result_matrix_3d = equation_solver.evaluate_equations(
+                                            symbols_to_add=[param1, param2, param3],
+                                            corner_dfs=[cid_corner.df]
+                                        )
+                                        if result_matrix_3d is not None and param3 in result_matrix_3d:
+                                            z_data = np.asarray(result_matrix_3d[param3]).ravel()
+                                            results_3d = (x_data, y_data, z_data, 'scatter')
+                                        else:
+                                            results_3d = None
+                                else:
+                                    results_3d = None
+
+                            except Exception as e:
+                                print(f"3D data preparation error: {e}")
+                                import traceback
+                                traceback.print_exc()
                                 results_3d = None
 
-                            if results_3d and self.gl_widget is not None:
+                            if results_3d and self.mpl_canvas is not None:
                                 try:
                                     self.plot_widget.hide()
                                 except Exception:
                                     pass
                                 try:
-                                    self.gl_widget.setVisible(True)
+                                    self.mpl_canvas.setVisible(True)
                                 except Exception:
                                     pass
 
-                                try:
-                                    for item in list(self.gl_items):
-                                        try:
-                                            if self.gl_widget is not None:
-                                                self.gl_widget.removeItem(item)
-                                        except Exception:
-                                            pass
-                                    self.gl_items = []
-                                except Exception:
-                                    self.gl_items = []
+                                # Unpack results (includes plot type)
+                                if len(results_3d) == 4:
+                                    p1, p2, p3, plot_type = results_3d
+                                else:
+                                    # Fallback for old format
+                                    p1, p2, p3 = results_3d
+                                    plot_type = 'scatter'
 
-                                p1, p2, p3 = results_3d
                                 try:
-                                    pts = np.vstack((p1, p2, p3)).T.astype(float)
+                                    # Clear the figure
+                                    self.mpl_figure.clear()
+
+                                    # Create 3D subplot
+                                    self.mpl_ax = self.mpl_figure.add_subplot(111, projection='3d')
 
                                     # Set background color based on checkbox
-                                    bg_color = 'k' if self.checkbox_black_bg.isChecked() else 'w'
-                                    self.gl_widget.setBackgroundColor(bg_color)
-
-                                    # Add scatter plot
-                                    scatter = gl.GLScatterPlotItem(pos=pts, size=5, color=(1.0, 0.5, 0.0, 1.0), pxMode=False)
-                                    if self.gl_widget is not None:
-                                        self.gl_widget.addItem(scatter)
-                                        self.gl_items.append(scatter)
-
-                                    # Add line plot connecting the points
-                                    line = gl.GLLinePlotItem(pos=pts, color=(0.0, 0.5, 1.0, 0.8), width=2, antialias=True, mode='line_strip')
-                                    if self.gl_widget is not None:
-                                        self.gl_widget.addItem(line)
-                                        self.gl_items.append(line)
-
-                                    # Determine axis ranges
-                                    x_min, x_max = np.min(p1), np.max(p1)
-                                    y_min, y_max = np.min(p2), np.max(p2)
-                                    z_min, z_max = np.min(p3), np.max(p3)
-
-                                    # Add some padding
-                                    x_range = x_max - x_min if x_max != x_min else 1
-                                    y_range = y_max - y_min if y_max != y_min else 1
-                                    z_range = z_max - z_min if z_max != z_min else 1
-                                    x_min -= x_range * 0.1
-                                    x_max += x_range * 0.1
-                                    y_min -= y_range * 0.1
-                                    y_max += y_range * 0.1
-                                    z_min -= z_range * 0.1
-                                    z_max += z_range * 0.1
-
-                                    # Determine axis colors based on background
-                                    if self.checkbox_black_bg.isChecked():
-                                        axis_colors = {'x': (1, 0.3, 0.3, 0.8), 'y': (0.3, 1, 0.3, 0.8), 'z': (0.3, 0.3, 1, 0.8)}
-                                        text_color = (1, 1, 1, 1)  # white text on black
-                                        grid_color = (0.5, 0.5, 0.5, 0.3)
+                                    is_black_bg = self.checkbox_black_bg.isChecked()
+                                    if is_black_bg:
+                                        self.mpl_figure.patch.set_facecolor('black')
+                                        self.mpl_ax.set_facecolor('black')
+                                        self.mpl_ax.xaxis.pane.set_facecolor('black')
+                                        self.mpl_ax.yaxis.pane.set_facecolor('black')
+                                        self.mpl_ax.zaxis.pane.set_facecolor('black')
+                                        grid_color = 'gray'
+                                        text_color = 'white'
+                                        axis_color = 'white'
                                     else:
-                                        axis_colors = {'x': (1, 0, 0, 0.8), 'y': (0, 0.8, 0, 0.8), 'z': (0, 0, 1, 0.8)}
-                                        text_color = (0, 0, 0, 1)  # black text on white
-                                        grid_color = (0.5, 0.5, 0.5, 0.3)
+                                        self.mpl_figure.patch.set_facecolor('white')
+                                        self.mpl_ax.set_facecolor('white')
+                                        self.mpl_ax.xaxis.pane.set_facecolor('white')
+                                        self.mpl_ax.yaxis.pane.set_facecolor('white')
+                                        self.mpl_ax.zaxis.pane.set_facecolor('white')
+                                        grid_color = 'gray'
+                                        text_color = 'black'
+                                        axis_color = 'black'
 
-                                    # Create bounding box
-                                    box_lines = [
-                                        # Bottom rectangle
-                                        [[x_min, y_min, z_min], [x_max, y_min, z_min]],
-                                        [[x_max, y_min, z_min], [x_max, y_max, z_min]],
-                                        [[x_max, y_max, z_min], [x_min, y_max, z_min]],
-                                        [[x_min, y_max, z_min], [x_min, y_min, z_min]],
-                                        # Top rectangle
-                                        [[x_min, y_min, z_max], [x_max, y_min, z_max]],
-                                        [[x_max, y_min, z_max], [x_max, y_max, z_max]],
-                                        [[x_max, y_max, z_max], [x_min, y_max, z_max]],
-                                        [[x_min, y_max, z_max], [x_min, y_min, z_max]],
-                                        # Vertical edges
-                                        [[x_min, y_min, z_min], [x_min, y_min, z_max]],
-                                        [[x_max, y_min, z_min], [x_max, y_min, z_max]],
-                                        [[x_max, y_max, z_min], [x_max, y_max, z_max]],
-                                        [[x_min, y_max, z_min], [x_min, y_max, z_max]],
-                                    ]
-                                    for line_pts in box_lines:
-                                        box_line = gl.GLLinePlotItem(pos=np.array(line_pts), color=grid_color, width=1, antialias=True)
-                                        self.gl_widget.addItem(box_line)
-                                        self.gl_items.append(box_line)
+                                    # Plot based on plot type
+                                    if plot_type == 'surface':
+                                        # Plot as a surface
+                                        from matplotlib import cm
+                                        surf = self.mpl_ax.plot_surface(p1, p2, p3, cmap=cm.viridis,
+                                                                       alpha=0.8, edgecolor='none',
+                                                                       linewidth=0, antialiased=True)
+                                        # Add a color bar
+                                        cbar = self.mpl_figure.colorbar(surf, ax=self.mpl_ax, shrink=0.5, aspect=5)
+                                        cbar.set_label(f'{param3}', rotation=270, labelpad=15,
+                                                      color=text_color, fontweight='bold')
+                                        if is_black_bg:
+                                            cbar.ax.yaxis.set_tick_params(color=text_color)
+                                            cbar.outline.set_edgecolor(text_color)
+                                            plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color=text_color)
 
-                                    # Add main axis lines with thicker width
-                                    # X axis (red)
-                                    x_axis = gl.GLLinePlotItem(
-                                        pos=np.array([[x_min, y_min, z_min], [x_max, y_min, z_min]]),
-                                        color=axis_colors['x'], width=3, antialias=True
-                                    )
-                                    self.gl_widget.addItem(x_axis)
-                                    self.gl_items.append(x_axis)
+                                        # Also add wireframe for better visibility
+                                        self.mpl_ax.plot_wireframe(p1, p2, p3, color='black' if not is_black_bg else 'white',
+                                                                   alpha=0.2, linewidth=0.5)
+                                    else:
+                                        # Plot as scatter points and lines
+                                        self.mpl_ax.scatter(p1, p2, p3, c='orange', marker='o', s=50, alpha=0.8,
+                                                           edgecolors='darkorange', linewidth=0.5, label='Data Points')
 
-                                    # Y axis (green)
-                                    y_axis = gl.GLLinePlotItem(
-                                        pos=np.array([[x_min, y_min, z_min], [x_min, y_max, z_min]]),
-                                        color=axis_colors['y'], width=3, antialias=True
-                                    )
-                                    self.gl_widget.addItem(y_axis)
-                                    self.gl_items.append(y_axis)
+                                        # Plot the line connecting points
+                                        self.mpl_ax.plot(p1, p2, p3, c='royalblue', linewidth=1.5, alpha=0.7, label='Data Path')
 
-                                    # Z axis (blue)
-                                    z_axis = gl.GLLinePlotItem(
-                                        pos=np.array([[x_min, y_min, z_min], [x_min, y_min, z_max]]),
-                                        color=axis_colors['z'], width=3, antialias=True
-                                    )
-                                    self.gl_widget.addItem(z_axis)
-                                    self.gl_items.append(z_axis)
+                                    # Set labels with proper formatting
+                                    self.mpl_ax.set_xlabel(f'{param1}', fontsize=10, color=text_color, fontweight='bold')
+                                    self.mpl_ax.set_ylabel(f'{param2}', fontsize=10, color=text_color, fontweight='bold')
+                                    self.mpl_ax.set_zlabel(f'{param3}', fontsize=10, color=text_color, fontweight='bold')
 
-                                    # Add tick marks and labels on axes
-                                    n_ticks = 5
-                                    tick_size = min(x_range, y_range, z_range) * 0.02
+                                    # Set title
+                                    self.mpl_ax.set_title(f'3D Plot: {param3} vs {param1} and {param2}',
+                                                         fontsize=12, color=text_color, fontweight='bold', pad=20)
 
-                                    # X-axis ticks and labels
-                                    for i in range(n_ticks + 1):
-                                        t = i / n_ticks
-                                        x_val = x_min + t * (x_max - x_min)
-                                        # Tick mark
-                                        tick = gl.GLLinePlotItem(
-                                            pos=np.array([[x_val, y_min, z_min], [x_val, y_min - tick_size, z_min]]),
-                                            color=axis_colors['x'], width=2, antialias=True
-                                        )
-                                        self.gl_widget.addItem(tick)
-                                        self.gl_items.append(tick)
-                                        # Label (using scatter as text placeholder - actual text rendering in 3D is complex)
-                                        # Add a small marker to indicate tick position
-                                        tick_marker = gl.GLScatterPlotItem(
-                                            pos=np.array([[x_val, y_min - tick_size * 2, z_min]]),
-                                            size=3, color=axis_colors['x'], pxMode=False
-                                        )
-                                        self.gl_widget.addItem(tick_marker)
-                                        self.gl_items.append(tick_marker)
+                                    # Customize grid
+                                    self.mpl_ax.grid(True, linestyle='--', alpha=0.3, color=grid_color)
 
-                                    # Y-axis ticks
-                                    for i in range(n_ticks + 1):
-                                        t = i / n_ticks
-                                        y_val = y_min + t * (y_max - y_min)
-                                        tick = gl.GLLinePlotItem(
-                                            pos=np.array([[x_min, y_val, z_min], [x_min - tick_size, y_val, z_min]]),
-                                            color=axis_colors['y'], width=2, antialias=True
-                                        )
-                                        self.gl_widget.addItem(tick)
-                                        self.gl_items.append(tick)
-                                        tick_marker = gl.GLScatterPlotItem(
-                                            pos=np.array([[x_min - tick_size * 2, y_val, z_min]]),
-                                            size=3, color=axis_colors['y'], pxMode=False
-                                        )
-                                        self.gl_widget.addItem(tick_marker)
-                                        self.gl_items.append(tick_marker)
+                                    # Customize tick colors
+                                    self.mpl_ax.tick_params(axis='x', colors=text_color, labelsize=8)
+                                    self.mpl_ax.tick_params(axis='y', colors=text_color, labelsize=8)
+                                    self.mpl_ax.tick_params(axis='z', colors=text_color, labelsize=8)
 
-                                    # Z-axis ticks
-                                    for i in range(n_ticks + 1):
-                                        t = i / n_ticks
-                                        z_val = z_min + t * (z_max - z_min)
-                                        tick = gl.GLLinePlotItem(
-                                            pos=np.array([[x_min, y_min, z_val], [x_min - tick_size, y_min, z_val]]),
-                                            color=axis_colors['z'], width=2, antialias=True
-                                        )
-                                        self.gl_widget.addItem(tick)
-                                        self.gl_items.append(tick)
-                                        tick_marker = gl.GLScatterPlotItem(
-                                            pos=np.array([[x_min - tick_size * 2, y_min, z_val]]),
-                                            size=3, color=axis_colors['z'], pxMode=False
-                                        )
-                                        self.gl_widget.addItem(tick_marker)
-                                        self.gl_items.append(tick_marker)
+                                    # Customize axis line colors
+                                    self.mpl_ax.xaxis.line.set_color(axis_color)
+                                    self.mpl_ax.yaxis.line.set_color(axis_color)
+                                    self.mpl_ax.zaxis.line.set_color(axis_color)
 
-                                    # Add multiple grid planes for better 3D reference
-                                    # XY plane at bottom
-                                    grid_xy = gl.GLGridItem()
-                                    grid_xy.setSize(x=(x_max-x_min), y=(y_max-y_min), z=0)
-                                    grid_xy.setSpacing(x=(x_max-x_min)/10, y=(y_max-y_min)/10, z=1)
-                                    grid_xy.translate((x_min+x_max)/2, (y_min+y_max)/2, z_min)
-                                    grid_xy.setColor(grid_color)
-                                    self.gl_widget.addItem(grid_xy)
-                                    self.gl_items.append(grid_xy)
+                                    # Customize pane edges
+                                    self.mpl_ax.xaxis.pane.set_edgecolor(grid_color)
+                                    self.mpl_ax.yaxis.pane.set_edgecolor(grid_color)
+                                    self.mpl_ax.zaxis.pane.set_edgecolor(grid_color)
 
-                                    # XZ plane at back
-                                    grid_xz = gl.GLGridItem()
-                                    grid_xz.setSize(x=(x_max-x_min), y=(z_max-z_min), z=0)
-                                    grid_xz.setSpacing(x=(x_max-x_min)/10, y=(z_max-z_min)/10, z=1)
-                                    grid_xz.rotate(90, 1, 0, 0)  # Rotate to XZ plane
-                                    grid_xz.translate((x_min+x_max)/2, y_min, (z_min+z_max)/2)
-                                    grid_xz.setColor(grid_color)
-                                    self.gl_widget.addItem(grid_xz)
-                                    self.gl_items.append(grid_xz)
+                                    # Set pane transparency
+                                    self.mpl_ax.xaxis.pane.set_alpha(0.1)
+                                    self.mpl_ax.yaxis.pane.set_alpha(0.1)
+                                    self.mpl_ax.zaxis.pane.set_alpha(0.1)
 
-                                    # YZ plane at back
-                                    grid_yz = gl.GLGridItem()
-                                    grid_yz.setSize(x=(y_max-y_min), y=(z_max-z_min), z=0)
-                                    grid_yz.setSpacing(x=(y_max-y_min)/10, y=(z_max-z_min)/10, z=1)
-                                    grid_yz.rotate(90, 0, 1, 0)  # Rotate to YZ plane
-                                    grid_yz.translate(x_min, (y_min+y_max)/2, (z_min+z_max)/2)
-                                    grid_yz.setColor(grid_color)
-                                    self.gl_widget.addItem(grid_yz)
-                                    self.gl_items.append(grid_yz)
+                                    # Add legend only for scatter plots (surface has colorbar)
+                                    if plot_type != 'surface':
+                                        legend = self.mpl_ax.legend(loc='upper right', fontsize=8, framealpha=0.8)
+                                        if is_black_bg:
+                                            legend.get_frame().set_facecolor('black')
+                                            legend.get_frame().set_edgecolor('white')
+                                            for text in legend.get_texts():
+                                                text.set_color('white')
+                                        else:
+                                            legend.get_frame().set_facecolor('white')
+                                            legend.get_frame().set_edgecolor('black')
+
+                                    # Set viewing angle for better perspective
+                                    self.mpl_ax.view_init(elev=20, azim=45)
+
+                                    # Auto-scale to fit data
+                                    self.mpl_ax.autoscale(enable=True, axis='both', tight=True)
+
+                                    # Add some padding to the limits
+                                    x_range = np.max(p1) - np.min(p1)
+                                    y_range = np.max(p2) - np.min(p2)
+                                    z_range = np.max(p3) - np.min(p3)
+
+                                    if x_range > 0:
+                                        self.mpl_ax.set_xlim(np.min(p1) - 0.05*x_range, np.max(p1) + 0.05*x_range)
+                                    if y_range > 0:
+                                        self.mpl_ax.set_ylim(np.min(p2) - 0.05*y_range, np.max(p2) + 0.05*y_range)
+                                    if z_range > 0:
+                                        self.mpl_ax.set_zlim(np.min(p3) - 0.05*z_range, np.max(p3) + 0.05*z_range)
+
+                                    # Tight layout for better spacing
+                                    self.mpl_figure.tight_layout()
+
+                                    # Refresh the canvas
+                                    self.mpl_canvas.draw()
 
                                     # Print axis value ranges to console for reference
-                                    print(f"\n3D Plot Axis Ranges:")
+                                    print(f"\n3D Plot Axis Ranges ({plot_type}):")
                                     print(f"  X ({param1}): {format_eng(np.min(p1))} to {format_eng(np.max(p1))}")
                                     print(f"  Y ({param2}): {format_eng(np.min(p2))} to {format_eng(np.max(p2))}")
                                     print(f"  Z ({param3}): {format_eng(np.min(p3))} to {format_eng(np.max(p3))}")
-                                    print(f"  Total points: {len(pts)}\n")
+                                    if plot_type == 'surface':
+                                        print(f"  Grid shape: {p1.shape}")
+                                    else:
+                                        print(f"  Total points: {len(p1) if hasattr(p1, '__len__') else p1.size}")
+                                    print()
 
                                 except Exception as e:
                                     msg = f"3D plotting error: {e}"
                                     print(msg)
+                                    import traceback
+                                    traceback.print_exc()
                                     try:
                                         if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
                                             self.top_level_app.statusBar().showMessage(msg, 5000)
@@ -1849,29 +1961,26 @@ class ROARLookupWindow(QWidget):
                                 new_plot = False
                                 continue
 
-                        try:
-                            if self.gl_widget is not None:
-                                for item in list(self.gl_items):
-                                    try:
-                                        self.gl_widget.removeItem(item)
-                                    except Exception:
-                                        pass
-                                self.gl_items = []
-                                self.gl_widget.setVisible(False)
-                        except Exception:
-                            pass
-                        try:
-                            self.plot_widget.show()
-                        except Exception:
-                            pass
-                        curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=None)
-                        xlabel = param1 + "  [" + unit1 + "]"
-                        ylabel = param2 + "  [" + unit2 + "]"
-                        self.plot_widget.setLabel('bottom', xlabel)
-                        self.plot_widget.setLabel('left', ylabel)
-                        self.plot_widget.setTitle(f"{param2} vs {param1}")
-                        self.plot_widget.getAxis('left').setStyle(autoExpandTextSpace=True)
-                        self.plot_widget.getAxis('left').enableAutoSIPrefix(False)
+                        # 2D plotting (only when NOT in 3D mode)
+                        else:
+                            try:
+                                # Hide matplotlib canvas when not in 3D mode
+                                if self.mpl_canvas is not None:
+                                    self.mpl_canvas.setVisible(False)
+                            except Exception:
+                                pass
+                            try:
+                                self.plot_widget.show()
+                            except Exception:
+                                pass
+                            curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=None)
+                            xlabel = param1 + "  [" + unit1 + "]"
+                            ylabel = param2 + "  [" + unit2 + "]"
+                            self.plot_widget.setLabel('bottom', xlabel)
+                            self.plot_widget.setLabel('left', ylabel)
+                            self.plot_widget.setTitle(f"{param2} vs {param1}")
+                            self.plot_widget.getAxis('left').setStyle(autoExpandTextSpace=True)
+                            self.plot_widget.getAxis('left').enableAutoSIPrefix(False)
                     except Exception as e:
                         msg = f"Plotting error for design eq {param1} vs {param2}: {e}"
                         print(msg)
