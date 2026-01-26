@@ -99,7 +99,15 @@ class ROAREquationSolver:
             df = corner
             #df = corner.df
             if lookup_var in df.columns:
-                column_vectors.append(df[lookup_var].values)
+                col_values = df[lookup_var].values
+                column_vectors.append(col_values)
+                # Debug: show what we extracted
+                if len(column_vectors) == 1:  # Only print for first corner to avoid spam
+                    unique_count = len(np.unique(col_values))
+                    print(f"[LOOKUP DEBUG] Extracting '{lookup_var}' from df: {len(col_values)} values, {unique_count} unique, range=[{np.min(col_values):.3f}, {np.max(col_values):.3f}]")
+                    if unique_count == 1:
+                        print(f"[LOOKUP DEBUG]   ⚠ WARNING: Column '{lookup_var}' has only ONE unique value in dataframe!")
+                        print(f"[LOOKUP DEBUG]   DataFrame shape: {df.shape}, columns: {list(df.columns[:5])}...")
         # Stack the column vectors horizontally to form a 2D matrix
         matrix = np.column_stack(column_vectors)
         return matrix, corner_dfs
@@ -145,8 +153,16 @@ class ROAREquationSolver:
                     for corner in corner_collection:
                         print("TODO")
                 results[equation] = result
+                # Debug: show what the lookup returned
+                if hasattr(result, 'shape'):
+                    unique_count = len(np.unique(result)) if isinstance(result, np.ndarray) else 'N/A'
+                    print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
+                else:
+                    print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', value: {result}")
                 continue
             equation_to_evaluate = self.equations[equation]
+            print(f"[SOLVER DEBUG] Evaluating equation '{equation}' = {equation_to_evaluate}")
+            print(f"[SOLVER DEBUG]   Available in results: {list(results.keys())}")
             if self.is_number(equation_to_evaluate):
                 # If corner_dfs provided, create a 2D array (nrows x n_corners)
                 # where every entry equals the constant. This keeps result
@@ -166,7 +182,7 @@ class ROAREquationSolver:
                 else:
                     results[equation] = val
                 continue
-            result = self.evaluate_equation(equation_to_evaluate, results)
+            result = self.evaluate_equation(equation_to_evaluate, results, corner_dfs=corner_dfs)
             if result is not None:
                 corner_equation_dict = {}
                 if equation in symbols_to_add_strings:
@@ -188,7 +204,7 @@ class ROAREquationSolver:
                 return None
         return results
 
-    def evaluate_equation(self, symbolic_equation, results):
+    def evaluate_equation(self, symbolic_equation, results, corner_dfs=None):
         try:
             # Convert the symbolic equation to a lambda function
             free_syms = list(symbolic_equation.free_symbols)
@@ -215,10 +231,19 @@ class ROAREquationSolver:
                 name = str(var)
                 if name in results:
                     args.append(results[name])
+                    # Debug: show what we're getting from results
+                    val = results[name]
+                    if hasattr(val, 'shape'):
+                        unique_count = len(np.unique(val)) if isinstance(val, np.ndarray) else 'N/A'
+                        print(f"[SOLVER DEBUG]     Using {name} from results: shape={val.shape}, unique={unique_count}, range=[{np.min(val):.3f}, {np.max(val):.3f}]")
+                    else:
+                        print(f"[SOLVER DEBUG]     Using {name} from results: value={val}")
                 elif (name in self.lookup_vals) or (":" in name):
                     # Pull lookup column arrays from corner_dfs
+                    # USE THE PASSED corner_dfs if available, otherwise fall back to self.corners
                     try:
-                        mat, _ = self.create_matrix_from_lookup(name, corner_dfs=self.corners if self.corners else [])
+                        use_corners = corner_dfs if corner_dfs is not None else (self.corners if self.corners else [])
+                        mat, _ = self.create_matrix_from_lookup(name, corner_dfs=use_corners)
                     except Exception:
                         # fall back to empty list
                         mat = None
