@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QMessageBox, QSplitter, QGroupBox
+    QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QMessageBox, QSplitter, QGroupBox,
+    QDialog, QRadioButton, QCheckBox, QLabel
 )
-from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon
+from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon, QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 import json
 import sys
@@ -13,12 +14,236 @@ import os
 ROAR_HOME = os.environ.get("ROAR_HOME", "")
 
 
+class DeviceCornerSelectorWindow(QDialog):
+    """Window with tech browser for selecting corners for a specific device instance."""
+
+    corners_selected = pyqtSignal(object)  # Emits None for global or list of corner names
+
+    def __init__(self, parent, device_name, tech_browser_ref, current_corners=None):
+        super().__init__(parent)
+        self.device_name = device_name
+        self.tech_browser_ref = tech_browser_ref
+        self.current_corners = current_corners
+        self.selected_corners = current_corners  # Track current selection
+
+        self.setWindowTitle(f"Select Corners for {device_name}")
+        self.setMinimumSize(600, 500)
+
+        # Make it non-modal so user can interact with main window
+        self.setModal(False)
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        # Info label
+        info_label = QLabel(f"Select corners for device: <b>{self.device_name}</b>")
+        info_label.setStyleSheet("padding: 5px; background-color: #f0f0f0; border-radius: 3px;")
+        layout.addWidget(info_label)
+
+        # Create or reference the tech browser
+        self.tech_browser = None
+
+        if self.tech_browser_ref:
+            # Import the tech browser class
+            try:
+                from .roar_gui import ROARTechBrowser
+            except Exception:
+                try:
+                    from roar_gui import ROARTechBrowser
+                except Exception:
+                    ROARTechBrowser = None
+
+            if ROARTechBrowser:
+                try:
+                    # Create a new tech browser instance that SHARES the same data
+                    # Get necessary references from the parent tech browser
+                    lookup_window = None
+                    top_level_app = None
+                    tech_dict = None
+
+                    if hasattr(self.tech_browser_ref, 'lookup_window'):
+                        lookup_window = self.tech_browser_ref.lookup_window
+                    if hasattr(self.tech_browser_ref, 'top_level_app'):
+                        top_level_app = self.tech_browser_ref.top_level_app
+                    if hasattr(self.tech_browser_ref, 'tech_dict'):
+                        tech_dict = self.tech_browser_ref.tech_dict
+
+                    # ROARTechBrowser accepts tech_dict parameter and shares the same data
+                    self.tech_browser = ROARTechBrowser(
+                        parent=self,
+                        lookup_window=lookup_window,
+                        top_level_app=top_level_app,
+                        tech_dict=tech_dict  # Share the same data structure!
+                    )
+
+                    # Populate the tree with data from tech_dict
+                    if hasattr(self.tech_browser, 'populate_from_tech_dict'):
+                        self.tech_browser.populate_from_tech_dict()
+
+                    # If we have current custom corners, check them in the tech browser
+                    if self.current_corners:
+                        self.apply_corner_selection_to_browser(self.current_corners)
+
+                    layout.addWidget(self.tech_browser)
+                except Exception as e:
+                    print(f"Could not create tech browser: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    error_label = QLabel(f"Error creating tech browser: {e}")
+                    error_label.setStyleSheet("color: red;")
+                    layout.addWidget(error_label)
+
+        if not self.tech_browser:
+            no_browser_label = QLabel("Tech browser not available")
+            no_browser_label.setStyleSheet("color: gray; font-style: italic; padding: 20px;")
+            layout.addWidget(no_browser_label)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+
+        self.apply_button = QPushButton("Apply")
+        self.apply_button.setToolTip("Apply current corner selection to this device")
+        self.apply_button.clicked.connect(self.apply_selection)
+
+        self.clear_button = QPushButton("Use Global")
+        self.clear_button.setToolTip("Use global (main tech browser) selection instead")
+        self.clear_button.clicked.connect(self.apply_global)
+
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.close)
+
+        button_layout.addWidget(self.apply_button)
+        button_layout.addWidget(self.clear_button)
+        button_layout.addStretch()
+        button_layout.addWidget(self.close_button)
+
+        layout.addLayout(button_layout)
+
+    def apply_corner_selection_to_browser(self, corner_names):
+        """Check specific corners in the tech browser."""
+        if not self.tech_browser or not corner_names:
+            return
+
+        try:
+            # Get all items in the tech browser tree and check matching corners
+            if hasattr(self.tech_browser, 'tree'):
+                tree = self.tech_browser.tree
+
+                def check_tree_items(parent_item, depth=0):
+                    """Recursively check items at corner level (depth 2)."""
+                    if parent_item is None:
+                        count = tree.topLevelItemCount()
+                        for i in range(count):
+                            check_tree_items(tree.topLevelItem(i), 0)
+                    else:
+                        child_count = parent_item.childCount()
+                        for i in range(child_count):
+                            child = parent_item.child(i)
+                            if depth == 1:  # Device type level, go deeper
+                                check_tree_items(child, depth + 1)
+                            elif depth == 2:  # Corner level
+                                corner_name = child.text(0)
+                                if corner_name in corner_names:
+                                    child.setCheckState(0, Qt.CheckState.Checked)
+                                else:
+                                    child.setCheckState(0, Qt.CheckState.Unchecked)
+
+                check_tree_items(None)
+        except Exception as e:
+            print(f"Error applying corner selection to browser: {e}")
+
+    def get_checked_corners_from_browser(self):
+        """Extract checked corner names from tech browser."""
+        if not self.tech_browser:
+            return []
+
+        checked_corners = set()
+
+        try:
+            if hasattr(self.tech_browser, 'get_checked_item_paths'):
+                # get_checked_item_paths returns paths like "PDK>sky130>nfet>180n>TT"
+                # where TT is the corner name
+                paths = self.tech_browser.get_checked_item_paths()
+                for path in paths:
+                    # Path format: "PDK>pdk_name>device_type>length>corner"
+                    parts = path.split('>')
+                    if len(parts) >= 5:  # Need all parts including corner
+                        corner_name = parts[4]  # Corner is the 5th part (index 4)
+                        checked_corners.add(corner_name)
+                    elif len(parts) >= 1:  # Fallback - use last part
+                        checked_corners.add(parts[-1])
+        except Exception as e:
+            print(f"Error getting checked corners: {e}")
+            import traceback
+            traceback.print_exc()
+
+        return sorted(list(checked_corners))
+
+    def apply_selection(self):
+        """Apply the current corner selection."""
+        # Get checked corners from tech browser
+        self.selected_corners = self.get_checked_corners_from_browser()
+
+        if not self.selected_corners:
+            QMessageBox.warning(self, "No Corners Selected",
+                              "Please select at least one corner in the tech browser, or click 'Use Global'.")
+            return
+
+        # Emit signal with selection
+        self.corners_selected.emit(self.selected_corners)
+
+        # Show feedback
+        msg = f"Applied: {', '.join(self.selected_corners)} for {self.device_name}"
+
+        if self.parent():
+            try:
+                # Try to show message in status bar if available
+                parent = self.parent()
+                while parent:
+                    if hasattr(parent, 'statusBar'):
+                        parent.statusBar().showMessage(msg, 3000)
+                        break
+                    parent = parent.parent() if hasattr(parent, 'parent') else None
+            except Exception:
+                pass
+
+        print(msg)
+
+    def apply_global(self):
+        """Apply global selection (None = use main tech browser)."""
+        self.selected_corners = None
+        self.corners_selected.emit(None)
+
+        msg = f"Applied: Use global corners for {self.device_name}"
+
+        if self.parent():
+            try:
+                parent = self.parent()
+                while parent:
+                    if hasattr(parent, 'statusBar'):
+                        parent.statusBar().showMessage(msg, 3000)
+                        break
+                    parent = parent.parent() if hasattr(parent, 'parent') else None
+            except Exception:
+                pass
+
+        print(msg)
+
+
 class BaseEditor(QWidget):
-    def __init__(self, title, columns, plot_button_text="Add LUT", plot_command=None, add_command=None):
+    def __init__(self, title, columns, plot_button_text="Add LUT", plot_command=None, add_command=None, tech_browser=None, enable_corners=False):
         super().__init__()
         self.columns = columns
         self.plot_button_text = plot_button_text
         self.plot_command = plot_command
+        self.tech_browser = tech_browser  # Reference to tech browser for getting available corners
+        self.enable_corners = enable_corners  # Whether to enable corner selection (Design Eqs mode only)
+
+        # Find the Corners column index if it exists
+        self.corners_column_index = columns.index("Corners") if "Corners" in columns else -1
+
         #self.disabled_rows = set()
         #self.enabled_plot_rows = set()
 
@@ -171,6 +396,11 @@ class BaseEditor(QWidget):
             self.tree.setStyleSheet("QTreeView::item { padding-left: 0px; padding-top: 2px; padding-bottom: 2px; }")
         except Exception:
             pass
+
+        # Connect itemClicked signal for corner selection
+        if self.corners_column_index >= 0:
+            self.tree.itemClicked.connect(self.on_tree_item_clicked)
+
         container_layout.addWidget(self.tree)
 
         # Button panel
@@ -298,6 +528,167 @@ class BaseEditor(QWidget):
             except Exception:
                 pass
 
+        # Initialize corners to global for new rows
+        if self.corners_column_index >= 0:
+            self.update_corners_display(item, None)
+
+    def on_tree_item_clicked(self, item, column):
+        """Handle clicks on tree items, specifically the Corners column."""
+        if column == self.corners_column_index and self.enable_corners:
+            self.edit_device_corners(item)
+
+    def get_available_corners(self):
+        """Get list of available corners from tech browser."""
+        tech_browser = self.tech_browser
+
+        # If tech_browser not set, try to get it dynamically from top_level_app
+        if not tech_browser and hasattr(self, '_top_level_app'):
+            top_level_app = self._top_level_app
+            if top_level_app and hasattr(top_level_app, 'graph_tabs'):
+                try:
+                    # Try to get the first graph tab
+                    first_graph = top_level_app.graph_tabs.widget(0)
+                    if first_graph:
+                        # Try multiple possible paths to find a lookup window with tech browser
+                        if hasattr(first_graph, 'lookup_window_1'):
+                            if hasattr(first_graph.lookup_window_1, 'tech_browser'):
+                                tech_browser = first_graph.lookup_window_1.tech_browser
+                        elif hasattr(first_graph, 'tech_browser'):
+                            tech_browser = first_graph.tech_browser
+                except Exception as e:
+                    print(f"Could not get tech_browser from top_level_app: {e}")
+
+        if not tech_browser:
+            return []
+
+        try:
+            # Try to get corners from tech browser
+            # The tech browser should have a method to get all available corner names
+            if hasattr(tech_browser, 'get_all_corner_names'):
+                return tech_browser.get_all_corner_names()
+            elif hasattr(tech_browser, 'get_checked_paths'):
+                # Fallback: extract unique corner names from checked paths
+                paths = tech_browser.get_checked_paths()
+                corners = set()
+                for path in paths:
+                    # Path format: "pdk_name/device_type/corner"
+                    parts = path.split('/')
+                    if len(parts) >= 3:
+                        corners.add(parts[2])
+                return sorted(list(corners))
+        except Exception as e:
+            print(f"Error getting available corners: {e}")
+
+        return []
+
+    def edit_device_corners(self, item):
+        """Open tech browser window for selecting corners for this device."""
+        device_name = item.text(0)  # Get device name from first column
+
+        if not device_name:
+            QMessageBox.warning(self, "No Device Name",
+                              "Please enter a device name in the Instance Name column first.")
+            return
+
+        # Get tech browser reference
+        tech_browser = self.tech_browser
+        if not tech_browser and hasattr(self, '_top_level_app'):
+            top_level_app = self._top_level_app
+            if top_level_app and hasattr(top_level_app, 'graph_tabs'):
+                try:
+                    first_graph = top_level_app.graph_tabs.widget(0)
+                    if first_graph:
+                        if hasattr(first_graph, 'lookup_window_1'):
+                            if hasattr(first_graph.lookup_window_1, 'tech_browser'):
+                                tech_browser = first_graph.lookup_window_1.tech_browser
+                        elif hasattr(first_graph, 'tech_browser'):
+                            tech_browser = first_graph.tech_browser
+                except Exception as e:
+                    print(f"Could not get tech_browser: {e}")
+
+        if not tech_browser:
+            QMessageBox.information(self, "No Tech Browser Available",
+                                  "Tech browser is not available.\n"
+                                  "Please open a lookup window with tech browser first.")
+            return
+
+        # Get current corners for this item
+        current_corners = item.data(self.corners_column_index, Qt.ItemDataRole.UserRole)
+
+        # Check if we already have a window open for this device
+        window_key = f"corner_selector_{device_name}"
+        if not hasattr(self, '_corner_selector_windows'):
+            self._corner_selector_windows = {}
+
+        if window_key in self._corner_selector_windows:
+            # Reuse existing window
+            window = self._corner_selector_windows[window_key]
+            if window and window.isVisible():
+                window.raise_()
+                window.activateWindow()
+                return
+
+        # Create new corner selector window
+        window = DeviceCornerSelectorWindow(
+            self,
+            device_name,
+            tech_browser,
+            current_corners
+        )
+
+        # Connect the signal to update the display when Apply is clicked
+        def on_corners_selected(corners):
+            self.update_corners_display(item, corners)
+
+        window.corners_selected.connect(on_corners_selected)
+
+        # Store window reference
+        self._corner_selector_windows[window_key] = window
+
+        # Clean up when window is closed
+        def on_window_closed():
+            if window_key in self._corner_selector_windows:
+                del self._corner_selector_windows[window_key]
+
+        window.finished.connect(on_window_closed)
+
+        # Show the window (non-modal, stays open)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def update_corners_display(self, item, corners):
+        """Update the display text and data for corners in an item."""
+        if self.corners_column_index < 0:
+            return
+
+        # Store the corner selection
+        item.setData(self.corners_column_index, Qt.ItemDataRole.UserRole, corners)
+
+        # Update display text
+        if corners is None:
+            # Global - use italic gray
+            item.setText(self.corners_column_index, "[*Global*]")
+            item.setForeground(self.corners_column_index, QBrush(QColor("gray")))
+            font = item.font(self.corners_column_index)
+            font.setItalic(True)
+            item.setFont(self.corners_column_index, font)
+        elif not corners:
+            # Empty list - error state
+            item.setText(self.corners_column_index, "[None]")
+            item.setForeground(self.corners_column_index, QBrush(QColor("red")))
+            font = item.font(self.corners_column_index)
+            font.setItalic(False)
+            item.setFont(self.corners_column_index, font)
+        else:
+            # Custom corner list
+            corner_text = ", ".join(corners)
+            item.setText(self.corners_column_index, f"[{corner_text}]")
+            item.setForeground(self.corners_column_index, QBrush(QColor("black")))
+            font = item.font(self.corners_column_index)
+            font.setItalic(False)
+            item.setFont(self.corners_column_index, font)
+
     def delete_row(self):
         selected_items = self.tree.selectedItems()
         indices_to_remove = sorted([self.tree.indexOfTopLevelItem(item) for item in selected_items], reverse=True)
@@ -329,6 +720,7 @@ class BaseEditor(QWidget):
                 'bg': [it.data(c, Qt.ItemDataRole.BackgroundRole) for c in range(self.tree.columnCount())],
                 'flags': it.flags(),
                 'align': [it.textAlignment(c) for c in range(self.tree.columnCount())],
+                'corners': it.data(self.corners_column_index, Qt.ItemDataRole.UserRole) if self.corners_column_index >= 0 else None,
             }
             rows.append(row)
 
@@ -368,9 +760,10 @@ class BaseEditor(QWidget):
                     item.setTextAlignment(c, r['align'][c])
                 except Exception:
                     pass
+            # Restore corners data if corners column exists
+            if self.corners_column_index >= 0 and 'corners' in r:
+                self.update_corners_display(item, r['corners'])
             self.tree.addTopLevelItem(item)
-            if orig_idx in sel_set:
-                selected_new_positions.add(new_idx)
 
         # Reselect moved items
         for idx in selected_new_positions:
@@ -400,6 +793,7 @@ class BaseEditor(QWidget):
                 'bg': [it.data(c, Qt.ItemDataRole.BackgroundRole) for c in range(self.tree.columnCount())],
                 'flags': it.flags(),
                 'align': [it.textAlignment(c) for c in range(self.tree.columnCount())],
+                'corners': it.data(self.corners_column_index, Qt.ItemDataRole.UserRole) if self.corners_column_index >= 0 else None,
             }
             rows.append(row)
 
@@ -438,9 +832,10 @@ class BaseEditor(QWidget):
                     item.setTextAlignment(c, r['align'][c])
                 except Exception:
                     pass
+            # Restore corners data if corners column exists
+            if self.corners_column_index >= 0 and 'corners' in r:
+                self.update_corners_display(item, r['corners'])
             self.tree.addTopLevelItem(item)
-            if orig_idx in sel_set:
-                selected_new_positions.add(new_idx)
 
         # Reselect moved items
         for idx in selected_new_positions:
@@ -521,6 +916,13 @@ class BaseEditor(QWidget):
                 row_data["plot"] = bool(item.data(0, Qt.ItemDataRole.UserRole + 1))
             except Exception:
                 row_data["plot"] = False
+            # Save corner data if corners column exists
+            if self.corners_column_index >= 0:
+                try:
+                    corners_data = item.data(self.corners_column_index, Qt.ItemDataRole.UserRole)
+                    row_data["_corners_data"] = corners_data  # Use special key to store corner data
+                except Exception:
+                    row_data["_corners_data"] = None
             data.append(row_data)
         return data
 
@@ -549,6 +951,13 @@ class BaseEditor(QWidget):
                     item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 except Exception:
                     pass
+            # Restore corner data if available
+            if self.corners_column_index >= 0 and "_corners_data" in row_data:
+                corners_data = row_data.get("_corners_data")
+                self.update_corners_display(item, corners_data)
+            elif self.corners_column_index >= 0:
+                # Initialize to global if no data
+                self.update_corners_display(item, None)
             self.tree.addTopLevelItem(item)
 
         self.update_row_colors()  # Apply correct colors after loading data
@@ -609,8 +1018,19 @@ class ROAREditorWindow(QWidget):
         # Create editors without plot buttons for Expression and Constraint
         self.expression_editor = BaseEditor("Expression Editor", ["Symbol", "Expression"], plot_button_text=None)
         self.constraint_editor = BaseEditor("Constraint Editor", ["Symbol", "Constraint Expression"], plot_button_text=None)
-        # Create instance table without the Set LUTs plot button
-        self.instance_table = BaseEditor("Instance Table", ["Instance Name", "kgm", "ID", "W", "L"], plot_button_text=None)
+
+        # Create instance table WITH corners column and corner selection enabled
+        # We'll set the tech_browser reference later when it's available
+        self.instance_table = BaseEditor(
+            "Instance Table",
+            ["Instance Name", "kgm", "ID", "W", "L", "Corners"],  # Added Corners column
+            plot_button_text=None,
+            tech_browser=None,  # Will be set dynamically via get_tech_browser()
+            enable_corners=True  # Enable corner selection for Design Eqs mode
+        )
+
+        # Store reference to top_level_app so we can get tech_browser dynamically
+        self.instance_table._top_level_app = top_level_app
 
         splitter.addWidget(self.expression_editor)
         splitter.addWidget(self.constraint_editor)
@@ -677,6 +1097,30 @@ class ROAREditorWindow(QWidget):
                 constraints[symbol] = constraint_expr
 
         return expressions, constraints
+
+    def get_device_corners(self):
+        """Get dictionary mapping device names to their corner selections.
+
+        Returns:
+            dict: {device_name: corner_list or None}
+                  None means use global (tech browser) selection
+        """
+        device_corners = {}
+        corners_column_index = self.instance_table.corners_column_index
+
+        if corners_column_index < 0:
+            # No corners column, return empty dict
+            return device_corners
+
+        for i in range(self.instance_table.tree.topLevelItemCount()):
+            item = self.instance_table.tree.topLevelItem(i)
+            device_name = item.text(0)  # Instance Name column
+            if device_name:
+                # Get corner data from UserRole
+                corners = item.data(corners_column_index, Qt.ItemDataRole.UserRole)
+                device_corners[device_name] = corners  # None or list of corner names
+
+        return device_corners
 
     def plot_expression(self):
         selected_items = self.expression_editor.tree.selectedItems()
