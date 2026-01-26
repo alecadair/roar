@@ -1588,7 +1588,16 @@ class ROARLookupWindow(QWidget):
                     except Exception:
                         from equation_solver import ROAREquationSolver
 
-                    equation_solver = ROAREquationSolver(top_level_app=self.top_level_app)
+                    # Get device corners mapping from editor window
+                    device_corners = {}
+                    if self.top_level_app and hasattr(self.top_level_app, 'editor_window'):
+                        try:
+                            device_corners = self.top_level_app.editor_window.get_device_corners()
+                            print(f"[DESIGN EQS] Device corners mapping: {device_corners}")
+                        except Exception as e:
+                            print(f"[DESIGN EQS] Could not get device corners: {e}")
+
+                    equation_solver = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
                     equation_solver.corners = [cid_corner.df]
                     expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
                     for expression_sym in expressions:

@@ -8,7 +8,7 @@ import re
 
 
 class ROAREquationSolver:
-    def __init__(self, top_level_app, data_frames=None):
+    def __init__(self, top_level_app, data_frames=None, device_corners=None):
         self.equations = {}
         self.variables = {}
         self.constants = {}
@@ -18,6 +18,7 @@ class ROAREquationSolver:
         self.corners = []
         self.data_frames = []
         self.top_level_app = top_level_app
+        self.device_corners = device_corners or {}  # Dict mapping device names to corner lists (None = global)
         self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
                             'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
                             'va', 'vds', 'vdsat', 'vgs', 'vth', 'pi')
@@ -91,9 +92,28 @@ class ROAREquationSolver:
             lookup_var = split_lookup[0]
         else:
             lookup_var = split_lookup[0]
+
+        # Determine which corners to use for this device
+        device_specific_corners = None
+        if device and device in self.device_corners:
+            device_specific_corners = self.device_corners[device]
+
+        # Filter corner_dfs if device has specific corners
+        corners_to_use = corner_dfs
+        if device_specific_corners is not None:
+            # Device has custom corner selection
+            # Note: This assumes corner_dfs is a dict with corner names as keys
+            # If it's a list, we need to filter it differently
+            if isinstance(corner_dfs, dict):
+                corners_to_use = {k: v for k, v in corner_dfs.items() if k in device_specific_corners}
+            elif isinstance(corner_dfs, list):
+                # If corner_dfs is a list, we need corner names from somewhere else
+                # For now, use all corners (global behavior)
+                print(f"[SOLVER DEBUG] Device {device} has custom corners {device_specific_corners} but corner_dfs is a list")
+
         #corner_collection = self.top_level_app.roar_design.devices[device].corner_collection
         #corners_to_eval = self.top_level_app.roar_design.
-        for corner in corner_dfs:
+        for corner in corners_to_use if not isinstance(corners_to_use, dict) else corners_to_use.values():
         #for corner in corner_collection.corners:
             #df = corner.df
             df = corner
@@ -105,12 +125,14 @@ class ROAREquationSolver:
                 if len(column_vectors) == 1:  # Only print for first corner to avoid spam
                     unique_count = len(np.unique(col_values))
                     print(f"[LOOKUP DEBUG] Extracting '{lookup_var}' from df: {len(col_values)} values, {unique_count} unique, range=[{np.min(col_values):.3f}, {np.max(col_values):.3f}]")
+                    if device_specific_corners:
+                        print(f"[LOOKUP DEBUG]   Using device-specific corners for {device}: {device_specific_corners}")
                     if unique_count == 1:
                         print(f"[LOOKUP DEBUG]   ⚠ WARNING: Column '{lookup_var}' has only ONE unique value in dataframe!")
                         print(f"[LOOKUP DEBUG]   DataFrame shape: {df.shape}, columns: {list(df.columns[:5])}...")
         # Stack the column vectors horizontally to form a 2D matrix
         matrix = np.column_stack(column_vectors)
-        return matrix, corner_dfs
+        return matrix, corner_dfs if not isinstance(corners_to_use, dict) else list(corners_to_use.values())
         #return matrix
 
     def add_variable_from_dataframe(self, dataframe):
