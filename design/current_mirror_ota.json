@@ -2,13 +2,25 @@
     "expression_editor": [
         {
             "Symbol": "cload",
-            "Expression": "100e-12",
+            "Expression": "4e-12",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "fu",
+            "Expression": "100e6",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "wu",
-            "Expression": "100e6",
+            "Expression": "2*pi*fu",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "av",
+            "Expression": "50",
             "disabled": false,
             "plot": false
         },
@@ -57,6 +69,18 @@
         {
             "Symbol": "kgm8",
             "Expression": "kgm3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgds6",
+            "Expression": "kgds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgds8",
+            "Expression": "kgds:M3",
             "disabled": false,
             "plot": false
         },
@@ -140,7 +164,7 @@
         },
         {
             "Symbol": "idso1_2",
-            "Expression": "wu*cload/(beta*kgm1)",
+            "Expression": "fu*cload/(beta*kgm1)",
             "disabled": false,
             "plot": false
         },
@@ -152,7 +176,7 @@
         },
         {
             "Symbol": "alpha",
-            "Expression": "1/0.5774",
+            "Expression": "1/tan(30)",
             "disabled": false,
             "plot": false
         },
@@ -177,6 +201,18 @@
         {
             "Symbol": "i_total",
             "Expression": "id1_2 + beta*id1_2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "mult_test",
+            "Expression": "kgm1*kgm3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "gain",
+            "Expression": "kgm1/(kgds6 + kgds8)",
             "disabled": false,
             "plot": false
         }
@@ -224,10 +260,14 @@
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[*Global*]",
+            "Corners": "[pfettt-25, pfettt25, pfettt75]",
             "disabled": false,
             "plot": false,
-            "_corners_data": null
+            "_corners_data": [
+                "pfettt-25",
+                "pfettt25",
+                "pfettt75"
+            ]
         },
         {
             "Instance": "M4",
