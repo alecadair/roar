@@ -417,7 +417,7 @@ class CIDCorner():
                 id = i_col[i]
                 kcgd = cgd/id
                 kcgd_array.append(kcgd)
-            self.df["kcgd"] = kcgg_array
+            self.df["kcgd"] = kcgd_array
         if not self.check_if_param_exists("kcgs"):
             kcgs_array = []
             cgs_col = abs(self.df["cgs"])

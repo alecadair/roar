@@ -1,10 +1,40 @@
 import numpy as np
 import pandas as pd
-from sympy import sympify, Number, SympifyError, sin, cos, tan, asin, acos, atan, sqrt, exp, log, ln, pi, E
+from sympy import sympify, Number, SympifyError, sin, cos, tan, asin, acos, atan, sqrt, exp, log, ln, pi, E, deg, rad, Symbol
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 from sympy.utilities.lambdify import lambdify
 from collections import defaultdict, deque
 from decimal import Decimal
 import re
+import token
+import tokenize
+from io import StringIO
+
+# Create degree-based trig functions by wrapping radian functions
+# These convert degrees to radians before calling the trig function
+def sind(angle_degrees):
+    """Sine function that takes angle in degrees"""
+    return sin(angle_degrees * pi / 180)
+
+def cosd(angle_degrees):
+    """Cosine function that takes angle in degrees"""
+    return cos(angle_degrees * pi / 180)
+
+def tand(angle_degrees):
+    """Tangent function that takes angle in degrees"""
+    return tan(angle_degrees * pi / 180)
+
+def asind(value):
+    """Arcsine function that returns angle in degrees"""
+    return asin(value) * 180 / pi
+
+def acosd(value):
+    """Arccosine function that returns angle in degrees"""
+    return acos(value) * 180 / pi
+
+def atand(value):
+    """Arctangent function that returns angle in degrees"""
+    return atan(value) * 180 / pi
 
 
 class ROAREquationSolver:
@@ -12,15 +42,15 @@ class ROAREquationSolver:
         self.equations = {}
         self.variables = {}
         self.constants = {}
-        #self.delimiters = r"[\+\-\*/\^\(\)\s,;.]+|\d+"
-        #self.delimiters = r"[\+\-\*/\^\(\)\s,;.]+|(?<!M)\d+"
-        self.delimiters = r"[\+\-\*/\^\(\)\s,;.]+|(?<![a-zA-Z])\d+"
+        # Delimiter pattern that preserves scientific notation (e.g., 1e-10, 100e-6)
+        # This pattern splits on operators/whitespace but keeps numbers with scientific notation together
+        self.delimiters = r"[\+\-\*/\^\(\)\s,;.]+|(?<![a-zA-Z])\d+(?:[eE][+-]?\d+)?"
         self.corners = []
         self.data_frames = []
         self.top_level_app = top_level_app
         self.device_corners = device_corners or {}  # Dict mapping device names to corner lists (None = global)
         self.lookup_vals = ('cdb', 'cdd', 'cds', 'cgb', 'cgd', 'cgg', 'cgs', 'css', 'ft', 'gds', 'gm', 'gmb,', 'gmidft',
-                            'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgm', 'kgmft', 'n', 'rds', 'ro',
+                            'gmro', 'ic', 'iden', 'ids', 'kcdb', 'kcds', 'kcgd', 'kcgs', 'kgds', 'kgm', 'kgmft', 'n', 'rds', 'ro',
                             'va', 'vds', 'vdsat', 'vgs', 'vth', 'pi')
 
         # Mathematical functions that should be available in equations
@@ -47,25 +77,67 @@ class ROAREquationSolver:
             self.equations[symbol] = equation
             return 0
         try:
+            original_equation = equation
+
             # Handle scientific notation for constants
-            if isinstance(equation, str) and 'e' in equation:
-                parts = equation.split('e')
-                if len(parts) == 2 and parts[0].replace('.', '', 1).isdigit() and parts[1].replace('-', '', 1).isdigit():
-                    equation = f"({parts[0]}*10**{parts[1]})"
+            if isinstance(equation, str) and 'e' in equation.lower():
+                # Check if this is actually scientific notation (not just the letter 'e')
+                # Match patterns like: 1e-10, 100e6, 2.5e+3
+                sci_pattern = r'\d+\.?\d*[eE][+-]?\d+'
+                matches = re.findall(sci_pattern, equation)
+                for match in matches:
+                    parts = match.lower().split('e')
+                    if len(parts) == 2:
+                        replacement = f"({parts[0]}*10**({parts[1]}))"
+                        equation = equation.replace(match, replacement)
+
+            # Extract all identifiers from the equation and pre-create Symbol objects
+            # This avoids the "strict=True" error when sympify encounters undefined variables
+            import token
+            import tokenize
+            from io import StringIO
+
+            identifiers = set()
+            try:
+                tokens_list = tokenize.generate_tokens(StringIO(equation).readline)
+                for tok in tokens_list:
+                    if tok.type == token.NAME and tok.string not in ['and', 'or', 'not', 'in', 'is']:
+                        identifiers.add(tok.string)
+            except:
+                # Fallback: use simple regex if tokenize fails
+                identifiers = set(re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', equation))
 
             # Create a local namespace with mathematical functions
+            # NOTE: Trig functions now use DEGREES by default
             local_dict = {
-                'sin': sin, 'cos': cos, 'tan': tan,
-                'asin': asin, 'acos': acos, 'atan': atan,
-                'arcsin': asin, 'arccos': acos, 'arctan': atan,  # aliases
+                'sin': sind, 'cos': cosd, 'tan': tand,  # Degree-based trig functions
+                'asin': asind, 'acos': acosd, 'atan': atand,  # Degree-based inverse trig
+                'arcsin': asind, 'arccos': acosd, 'arctan': atand,  # aliases (degrees)
+                'sind': sind, 'cosd': cosd, 'tand': tand,  # Explicit degree versions
+                'asind': asind, 'acosd': acosd, 'atand': atand,  # Explicit degree inverse
                 'sqrt': sqrt, 'exp': exp, 'log': log, 'ln': ln,
-                'pi': pi, 'e': E
+                'pi': pi, 'e': E, 'E': E
             }
 
-            sympified_equation = sympify(equation, locals=local_dict)
+            # Add all identifiers as Symbols to avoid "strict=True" errors
+            for identifier in identifiers:
+                if identifier not in local_dict:
+                    local_dict[identifier] = Symbol(identifier)
+
+            # Now sympify should work because all variables are pre-defined as Symbols
+            sympified_equation = sympify(equation, locals=local_dict,
+                                        rational=False, evaluate=True)
+
             self.equations[symbol] = sympified_equation
-        except SympifyError as e:
-            print(f"Error adding equation {symbol}: {e}")
+
+        except (SympifyError, TypeError, ValueError, NameError) as e:
+            print(f"Error adding equation '{symbol}': {e}")
+            print(f"  Equation string: '{equation}'")
+            import traceback
+            traceback.print_exc()
+            # Do NOT store equation as string - this causes issues with dependency graph
+            # Instead, store a simple constant or skip it
+            self.equations[symbol] = sympify("0")  # Store as zero to avoid crashes
 
     def remove_equation(self, name):
         if name in self.equations:
@@ -130,6 +202,19 @@ class ROAREquationSolver:
                     if unique_count == 1:
                         print(f"[LOOKUP DEBUG]   ⚠ WARNING: Column '{lookup_var}' has only ONE unique value in dataframe!")
                         print(f"[LOOKUP DEBUG]   DataFrame shape: {df.shape}, columns: {list(df.columns[:5])}...")
+
+        # Check if we found any data
+        if not column_vectors:
+            print(f"[LOOKUP DEBUG] ⚠ WARNING: No data found for lookup '{lookup_var}' in any dataframe!")
+            print(f"[LOOKUP DEBUG]   Device: {device if device else 'None'}")
+            print(f"[LOOKUP DEBUG]   Available corners: {len(corners_to_use) if not isinstance(corners_to_use, dict) else len(corners_to_use)}")
+            # Return empty array with proper shape instead of crashing
+            if isinstance(corner_dfs, list) and len(corner_dfs) > 0:
+                nrows = corner_dfs[0].shape[0] if hasattr(corner_dfs[0], 'shape') else len(corner_dfs[0])
+                return np.zeros((nrows, 1)), corner_dfs
+            else:
+                return np.zeros((1, 1)), []
+
         # Stack the column vectors horizontally to form a 2D matrix
         matrix = np.column_stack(column_vectors)
         return matrix, corner_dfs if not isinstance(corners_to_use, dict) else list(corners_to_use.values())
@@ -169,18 +254,40 @@ class ROAREquationSolver:
         sorted_equations.reverse()  # Process from the bottom up
         results = {}
         for equation in sorted_equations:
-            if equation in self.lookup_vals or ":" in equation:
-                result, corner_collection = self.create_matrix_from_lookup(equation, corner_dfs=corner_dfs)
-                if equation in symbols_to_add_strings:
-                    for corner in corner_collection:
-                        print("TODO")
-                results[equation] = result
-                # Debug: show what the lookup returned
-                if hasattr(result, 'shape'):
-                    unique_count = len(np.unique(result)) if isinstance(result, np.ndarray) else 'N/A'
-                    print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
-                else:
-                    print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', value: {result}")
+            # Check if this is a lookup by examining the equation value
+            equation_value = self.equations.get(equation)
+            is_lookup = (equation in self.lookup_vals or
+                        (isinstance(equation_value, str) and ":" in equation_value))
+
+            if is_lookup:
+                # Special case for 3D meshgrid: check if the equation name itself exists as a column
+                # For example, if equation="kgm1" and corner_dfs has a "kgm1" column, use it directly
+                direct_column_found = False
+                if corner_dfs and len(corner_dfs) > 0:
+                    first_df = corner_dfs[0]
+                    if hasattr(first_df, 'columns') and equation in first_df.columns:
+                        # Use the column directly!
+                        print(f"[LOOKUP DEBUG] Found '{equation}' as direct column in dataframe")
+                        result = first_df[equation].values.reshape(-1, 1)
+                        direct_column_found = True
+                        results[equation] = result
+                        unique_count = len(np.unique(result))
+                        print(f"[SOLVER DEBUG] Evaluated direct column '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
+
+                if not direct_column_found:
+                    # For equation assignments like "kcgd4 = kcgd:M3", use the VALUE (kcgd:M3) for lookup
+                    lookup_string = equation_value if isinstance(equation_value, str) else equation
+                    result, corner_collection = self.create_matrix_from_lookup(lookup_string, corner_dfs=corner_dfs)
+                    if equation in symbols_to_add_strings:
+                        for corner in corner_collection:
+                            print("TODO")
+                    results[equation] = result
+                    # Debug: show what the lookup returned
+                    if hasattr(result, 'shape'):
+                        unique_count = len(np.unique(result)) if isinstance(result, np.ndarray) else 'N/A'
+                        print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
+                    else:
+                        print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', value: {result}")
                 continue
             equation_to_evaluate = self.equations[equation]
             print(f"[SOLVER DEBUG] Evaluating equation '{equation}' = {equation_to_evaluate}")
@@ -228,6 +335,12 @@ class ROAREquationSolver:
 
     def evaluate_equation(self, symbolic_equation, results, corner_dfs=None):
         try:
+            # Handle string equations (lookups like "kcgd:M3")
+            if isinstance(symbolic_equation, str):
+                # This shouldn't be evaluated here - it should have been handled as a lookup
+                print(f"Warning: evaluate_equation called with string: {symbolic_equation}")
+                return None
+
             # Convert the symbolic equation to a lambda function
             free_syms = list(symbolic_equation.free_symbols)
 
@@ -298,15 +411,39 @@ class ROAREquationSolver:
     def build_dependency_graph(self):
         dependency_graph = defaultdict(set)
         for name, equation in self.equations.items():
-            #variables = set(symbol for symbol in re.split(self.delimiters, str(equation)) if symbol.isalpha())
-            variables = set(symbol for symbol in re.split(self.delimiters, str(equation)))
+            # If equation is a string (lookup like "kgm:M1"), handle separately
+            if isinstance(equation, str):
+                # For lookup strings, just extract the variable part
+                if ":" in equation:
+                    var = equation.split(":")[0]
+                    if var and var != name and var not in self.math_functions:
+                        dependency_graph[name].add(var)
+                continue
 
-            for var in variables:
-                # Skip if it's the equation name itself, empty, a number, or a mathematical function
-                if (var != name and var != "" and
-                    not var.isdigit() and
-                    var not in self.math_functions):
-                    dependency_graph[name].add(var)
+            # For SymPy expressions, use free_symbols to get actual symbols
+            try:
+                # Get all symbols from the SymPy expression
+                free_syms = equation.free_symbols
+                for sym in free_syms:
+                    var = str(sym)
+                    # Skip if it's the equation name itself or a math function
+                    if var != name and var not in self.math_functions:
+                        dependency_graph[name].add(var)
+            except (AttributeError, TypeError):
+                # Fallback: if equation doesn't have free_symbols, use string parsing
+                variables = set(symbol for symbol in re.split(self.delimiters, str(equation)))
+                for var in variables:
+                    # Skip if it's:
+                    # - the equation name itself
+                    # - empty string
+                    # - a plain number (integer or float)
+                    # - scientific notation (e.g., 1e-10, 100e-6)
+                    # - a mathematical function
+                    if (var != name and var != "" and
+                        not var.isdigit() and
+                        not re.match(r'^-?\d+\.?\d*([eE][+-]?\d+)?$', var) and
+                        var not in self.math_functions):
+                        dependency_graph[name].add(var)
         return dependency_graph
 
     def has_cycle(self, graph):

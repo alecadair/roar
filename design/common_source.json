@@ -1,8 +1,62 @@
 {
     "expression_editor": [
         {
+            "Symbol": "cload",
+            "Expression": "100e-12",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "wu",
+            "Expression": "100e6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "av_total",
+            "Expression": "50",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "bw",
+            "Expression": "wu/av_total",
+            "disabled": true,
+            "plot": false
+        },
+        {
+            "Symbol": "bw",
+            "Expression": "1/(rload*cout)",
+            "disabled": false,
+            "plot": false
+        },
+        {
             "Symbol": "kgm1",
             "Expression": "kgm:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs1",
+            "Expression": "kcgs:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgd1",
+            "Expression": "kcgd:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcds1",
+            "Expression": "kcds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcs1",
+            "Expression": "kcgs1 + kcgd1*(1 + av_total) + kcds1",
             "disabled": false,
             "plot": false
         },
@@ -13,65 +67,103 @@
             "plot": false
         },
         {
-            "Symbol": "kco1",
-            "Expression": "kcds:M1 + kcgs:M1 + (1 + 1/Av)*(kcds:M1)",
+            "Symbol": "idensity1",
+            "Expression": "iden:M1",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "Av",
+            "Symbol": "av1",
             "Expression": "kgm1/kgds1",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "gbw",
-            "Expression": "100e6",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "cload",
-            "Expression": "50e-15",
+            "Symbol": "ws",
+            "Expression": "kgm1/kcs1",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "ids0",
-            "Expression": "(gbw*cload)/kgm1",
+            "Expression": "(wu*cload)/kgm1",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "f0",
-            "Expression": "kgm1/(2*pi*kco1)",
+            "Symbol": "i_total",
+            "Expression": "ids0*(1/(1 - wu/ws))",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "ids1",
-            "Expression": "ids0*(1/(1 - gw/f0))",
+            "Symbol": "m1_width",
+            "Expression": "idensity1/i_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cs1",
+            "Expression": "kcs1*i_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cout",
+            "Expression": "cload + cs1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "k",
+            "Expression": "1.38e-23",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "gm1",
+            "Expression": "kgm1*i_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "gds1",
+            "Expression": "kgds1*i_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "rload",
+            "Expression": "av_total/gm1",
             "disabled": false,
             "plot": false
         }
     ],
     "constraint_editor": [
         {
-            "Symbol": "positive_current",
-            "Constraint Expression": "ids1 > 0",
+            "Symbol": "min_kcgs",
+            "Constraint Expression": "kcgs1 > 0",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "pos_current",
+            "Constraint Expression": "i_total > 0",
             "disabled": false,
             "plot": false
         }
     ],
     "instance_table": [
         {
-            "Instance Name": "M1",
+            "Instance": "M1",
             "kgm": "",
             "ID": "",
             "W": "",
             "L": "",
+            "Corners": "[*Global*]",
             "disabled": false,
-            "plot": false
+            "plot": false,
+            "_corners_data": null
         }
     ]
 }

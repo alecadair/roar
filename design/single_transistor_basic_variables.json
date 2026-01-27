@@ -13,6 +13,18 @@
             "plot": false
         },
         {
+            "Symbol": "av_total",
+            "Expression": "50",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "bw",
+            "Expression": "wu/av_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
             "Symbol": "kgm1",
             "Expression": "kgm:M1",
             "disabled": false,
@@ -25,14 +37,32 @@
             "plot": false
         },
         {
-            "Symbol": "idensity1",
-            "Expression": "iden:M1",
+            "Symbol": "kcgd1",
+            "Expression": "kcgd:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcds1",
+            "Expression": "kcds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcs1",
+            "Expression": "kcgs1 + kcgd1 + kcds1",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "kgds1",
             "Expression": "kgds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "idensity1",
+            "Expression": "iden:M1",
             "disabled": false,
             "plot": false
         },
@@ -44,7 +74,7 @@
         },
         {
             "Symbol": "ws",
-            "Expression": "kgm1/kcgs1",
+            "Expression": "kgm1/kcs1",
             "disabled": false,
             "plot": false
         },
@@ -65,6 +95,24 @@
             "Expression": "idensity1/i_total",
             "disabled": false,
             "plot": false
+        },
+        {
+            "Symbol": "cs1",
+            "Expression": "kcs1*i_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cout",
+            "Expression": "cload + cs1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "k",
+            "Expression": "1.38e-23",
+            "disabled": false,
+            "plot": false
         }
     ],
     "constraint_editor": [
@@ -77,13 +125,25 @@
     ],
     "instance_table": [
         {
-            "Instance Name": "M1",
+            "Instance": "M1",
             "kgm": "",
             "ID": "",
             "W": "",
             "L": "",
+            "Corners": "[nfetmos_ff-25, nfetmos_ff27, nfetmos_ff75, nfetmos_ss-25, nfetmos_ss27, nfetmos_ss75, nfetmos_tt-25, nfetmos_tt27, nfetmos_tt75]",
             "disabled": false,
-            "plot": false
+            "plot": false,
+            "_corners_data": [
+                "nfetmos_ff-25",
+                "nfetmos_ff27",
+                "nfetmos_ff75",
+                "nfetmos_ss-25",
+                "nfetmos_ss27",
+                "nfetmos_ss75",
+                "nfetmos_tt-25",
+                "nfetmos_tt27",
+                "nfetmos_tt75"
+            ]
         }
     ]
 }

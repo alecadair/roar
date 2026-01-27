@@ -21,6 +21,11 @@ import matplotlib.pyplot as plt
 
 
 def format_eng(num):
+    # Handle NaN, inf, and zero cases
+    if np.isnan(num):
+        return "NaN"
+    if np.isinf(num):
+        return "inf" if num > 0 else "-inf"
     if num == 0:
         return "0"
 
@@ -1073,6 +1078,10 @@ class ROARLookupWindow(QWidget):
 
         self.plot_widget = ROARPlotWidget(parent_lookup_window=self, top_level_app=self.top_level_app)
 
+        # Initialize marker lists for this window
+        self.line_markers = []  # Horizontal and vertical line markers
+        self.selected_marker = None  # Currently selected marker
+
         # Create matplotlib 3D canvas for superior 3D plotting
         try:
             self.mpl_figure = Figure(figsize=(8, 6), dpi=100)
@@ -1944,8 +1953,19 @@ class ROARLookupWindow(QWidget):
 
                                             # Copy ALL other columns from original corner
                                             # This ensures any variables referenced by param3 equation are available
-                                            # IMPORTANT: Don't overwrite the meshgrid columns!
+                                            # IMPORTANT: Don't overwrite the meshgrid columns OR their base lookup columns!
                                             columns_to_preserve = set([param1, param2, col1, col2])
+
+                                            # Also preserve base columns for ALL equation params to avoid constant overwrite
+                                            # For example, if param3 = kgm1 * kgm3, we need 'kgm' to not be constant
+                                            for eq_name in [param1, param2, param3 if 'param3' in locals() else None]:
+                                                if eq_name and eq_name in equation_solver.equations:
+                                                    eq = equation_solver.equations[eq_name]
+                                                    eq_str = str(eq)
+                                                    if ':' in eq_str:
+                                                        base_name = eq_str.split(':')[0].strip()
+                                                        columns_to_preserve.add(base_name)
+
                                             for col in cid_corner.df.columns:
                                                 if col not in columns_to_preserve:
                                                     # Use the first value as representative for other variables
@@ -1960,8 +1980,15 @@ class ROARLookupWindow(QWidget):
                                             print(f"  {param1} unique values in temp_df: {len(temp_df[param1].unique())}")
                                             print(f"  {param2} unique values in temp_df: {len(temp_df[param2].unique())}")
 
-                                            # Now evaluate Z using this grid
-                                            result_matrix_3d = equation_solver.evaluate_equations(
+                                            # Create a FRESH equation solver for meshgrid evaluation
+                                            # This avoids reusing cached results from the original dataframe
+                                            equation_solver_3d = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
+                                            for expression_sym in expressions:
+                                                expression = expressions[expression_sym]
+                                                equation_solver_3d.add_equation(expression_sym, expression)
+
+                                            # Now evaluate Z using this grid with the fresh solver
+                                            result_matrix_3d = equation_solver_3d.evaluate_equations(
                                                 symbols_to_add=[param3],
                                                 corner_dfs=[temp_df]
                                             )

@@ -1,0 +1,288 @@
+{
+    "expression_editor": [
+        {
+            "Symbol": "cload",
+            "Expression": "100e-12",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "wu",
+            "Expression": "100e6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm1",
+            "Expression": "kgm:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm2",
+            "Expression": "kgm1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm3",
+            "Expression": "kgm:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm4",
+            "Expression": "kgm3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm5",
+            "Expression": "kgm1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm6",
+            "Expression": "kgm1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm7",
+            "Expression": "kgm3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm8",
+            "Expression": "kgm3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs1",
+            "Expression": "kcgs:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs4",
+            "Expression": "kcgs:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgd4",
+            "Expression": "kcgd:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcds4",
+            "Expression": "kcds:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgd6",
+            "Expression": "kcgd:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcds6",
+            "Expression": "kcds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgd8",
+            "Expression": "kcgd:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcds8",
+            "Expression": "kcds:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs8",
+            "Expression": "kcgs:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcs4",
+            "Expression": "kcgs4 + kcgd4 + kcds4",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcs8",
+            "Expression": "kcs4",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "idensity1",
+            "Expression": "iden:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgds1",
+            "Expression": "kgds:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "idso1_2",
+            "Expression": "wu*cload/(beta*kgm1)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "beta",
+            "Expression": "(kgm4 - alpha*wu*kcs4)/(alpha*wu*kcs8)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "alpha",
+            "Expression": "1/0.5774",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kco",
+            "Expression": "kcgd8 + kcds8 + kcgd6 + kcds6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "idsl1_2",
+            "Expression": "1/(1 - wu*kco/kgm1)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "id1_2",
+            "Expression": "idso1_2*idsl1_2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "i_total",
+            "Expression": "id1_2 + beta*id1_2",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "constraint_editor": [
+        {
+            "Symbol": "min_kcgs",
+            "Constraint Expression": "kcgs1 > 0",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "pos_current",
+            "Constraint Expression": "id1_2 > 0",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "instance_table": [
+        {
+            "Instance": "M1",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        },
+        {
+            "Instance": "M2",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        },
+        {
+            "Instance": "M3",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        },
+        {
+            "Instance": "M4",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        },
+        {
+            "Instance": "M5",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        },
+        {
+            "Instance": "M6",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        },
+        {
+            "Instance": "M7",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        },
+        {
+            "Instance": "M8",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        }
+    ]
+}
