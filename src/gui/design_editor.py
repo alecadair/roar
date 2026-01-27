@@ -1093,6 +1093,7 @@ class ROAREditorWindow(QWidget):
         self.expression_editor.tree.itemChanged.connect(self.on_expressions_changed)
         self.expression_editor.add_button.clicked.connect(self.on_expressions_changed)
         self.expression_editor.delete_button.clicked.connect(self.on_expressions_changed)
+        self.expression_editor.enable_disable_button.clicked.connect(self.on_expressions_changed)  # Update when toggling enable/disable
 
         # Connect the open editor button to toggle dock/undock
         self.open_editor_button.clicked.connect(self.toggle_dock_undock)
@@ -1109,6 +1110,16 @@ class ROAREditorWindow(QWidget):
         symbols = []
         for i in range(self.expression_editor.tree.topLevelItemCount()):
             item = self.expression_editor.tree.topLevelItem(i)
+            # Check if the row is disabled (UserRole data is True for disabled rows)
+            try:
+                disabled = bool(item.data(0, Qt.ItemDataRole.UserRole))
+            except Exception:
+                disabled = False
+
+            # Skip disabled expressions
+            if disabled:
+                continue
+
             symbol = item.text(0)
             if symbol:
                 symbols.append(symbol)
@@ -1118,6 +1129,16 @@ class ROAREditorWindow(QWidget):
         expressions = {}
         for i in range(self.expression_editor.tree.topLevelItemCount()):
             item = self.expression_editor.tree.topLevelItem(i)
+            # Check if the row is disabled (UserRole data is True for disabled rows)
+            try:
+                disabled = bool(item.data(0, Qt.ItemDataRole.UserRole))
+            except Exception:
+                disabled = False
+
+            # Skip disabled expressions
+            if disabled:
+                continue
+
             symbol = item.text(0)
             expr = item.text(1)
             if symbol:
@@ -1126,6 +1147,16 @@ class ROAREditorWindow(QWidget):
         constraints = {}
         for i in range(self.constraint_editor.tree.topLevelItemCount()):
             item = self.constraint_editor.tree.topLevelItem(i)
+            # Check if the row is disabled
+            try:
+                disabled = bool(item.data(0, Qt.ItemDataRole.UserRole))
+            except Exception:
+                disabled = False
+
+            # Skip disabled constraints
+            if disabled:
+                continue
+
             symbol = item.text(0)
             constraint_expr = item.text(1)
             if symbol:
