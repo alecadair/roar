@@ -1081,12 +1081,18 @@ class ROARLookupWindow(QWidget):
             self.mpl_canvas.setVisible(False)
             self.mpl_ax = None  # Will be created when needed
             self.mpl_3d_items = []  # Track plotted items
+
+            # Create navigation toolbar for better 3D interaction
+            # This provides pan, zoom, and home buttons for better control
+            self.mpl_toolbar = NavigationToolbar(self.mpl_canvas, self)
+            self.mpl_toolbar.setVisible(False)  # Hidden by default, shown with 3D plots
         except Exception as e:
             print(f"Could not create matplotlib canvas: {e}")
             self.mpl_canvas = None
             self.mpl_figure = None
             self.mpl_ax = None
             self.mpl_3d_items = []
+            self.mpl_toolbar = None
 
         # Keep old gl_widget for backward compatibility (but prefer matplotlib)
         try:
@@ -1102,6 +1108,8 @@ class ROARLookupWindow(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         right_layout.addWidget(self.plot_widget)
+        if self.mpl_toolbar is not None:
+            right_layout.addWidget(self.mpl_toolbar)  # Add toolbar above canvas
         if self.mpl_canvas is not None:
             right_layout.addWidget(self.mpl_canvas)
         self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser + controls)
@@ -2027,6 +2035,9 @@ class ROARLookupWindow(QWidget):
                                     pass
                                 try:
                                     self.mpl_canvas.setVisible(True)
+                                    # Show toolbar for better 3D control
+                                    if self.mpl_toolbar is not None:
+                                        self.mpl_toolbar.setVisible(True)
                                 except Exception:
                                     pass
 
@@ -2230,8 +2241,22 @@ class ROARLookupWindow(QWidget):
                                                     legend.get_frame().set_facecolor('white')
                                                     legend.get_frame().set_edgecolor('black')
 
-                                            # Set viewing angle for better perspective
-                                            self.mpl_ax.view_init(elev=20, azim=45)
+                                            # Set viewing angle with origin (0,0) pointing at user
+                                            # azim=-135: Positions view from front-right, looking towards origin
+                                            # elev=30: Comfortable viewing angle from above
+                                            self.mpl_ax.view_init(elev=30, azim=-135)
+
+                                            # Improve mouse rotation sensitivity and control
+                                            # Set mouse sensitivity for smoother rotation
+                                            try:
+                                                # Adjust the mouse sensitivity for better control
+                                                # Lower values = slower rotation = more precise control
+                                                self.mpl_ax.mouse_init(rotate_btn=1, zoom_btn=3)
+
+                                                # Set distance for better zoom/perspective
+                                                self.mpl_ax.dist = 10  # Default is 10, adjust if needed
+                                            except Exception as e:
+                                                pass  # mouse_init might not be available in all matplotlib versions
 
                                     # Auto-scale to fit data
                                     self.mpl_ax.autoscale(enable=True, axis='both', tight=True)
@@ -2286,6 +2311,9 @@ class ROARLookupWindow(QWidget):
                                 # Hide matplotlib canvas when not in 3D mode
                                 if self.mpl_canvas is not None:
                                     self.mpl_canvas.setVisible(False)
+                                # Hide toolbar when not in 3D mode
+                                if self.mpl_toolbar is not None:
+                                    self.mpl_toolbar.setVisible(False)
                             except Exception:
                                 pass
                             try:
