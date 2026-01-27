@@ -741,10 +741,14 @@ class BaseEditor(QWidget):
             if order[i] in sel_set and order[i-1] not in sel_set:
                 order[i-1], order[i] = order[i], order[i-1]
 
-        # Rebuild tree according to new order
+        # Rebuild tree according to new order and track new positions of selected items
         selected_new_positions = set()
         self.tree.clear()
         for new_idx, orig_idx in enumerate(order):
+            # Track if this original index was selected
+            if orig_idx in sel_set:
+                selected_new_positions.add(new_idx)
+
             r = rows[orig_idx]
             item = QTreeWidgetItem(r['texts'])
             try:
@@ -773,11 +777,18 @@ class BaseEditor(QWidget):
                 self.update_corners_display(item, r['corners'])
             self.tree.addTopLevelItem(item)
 
-        # Reselect moved items
+        # Reselect moved items at their new positions
         for idx in selected_new_positions:
             it = self.tree.topLevelItem(idx)
             if it:
                 it.setSelected(True)
+
+        # Set the current item to the first selected item for keyboard navigation
+        if selected_new_positions:
+            first_selected_idx = min(selected_new_positions)
+            first_item = self.tree.topLevelItem(first_selected_idx)
+            if first_item:
+                self.tree.setCurrentItem(first_item)
 
         self.update_row_colors()
 
@@ -813,10 +824,14 @@ class BaseEditor(QWidget):
             if order[i] in sel_set and order[i+1] not in sel_set:
                 order[i], order[i+1] = order[i+1], order[i]
 
-        # Rebuild tree according to new order
+        # Rebuild tree according to new order and track new positions of selected items
         selected_new_positions = set()
         self.tree.clear()
         for new_idx, orig_idx in enumerate(order):
+            # Track if this original index was selected
+            if orig_idx in sel_set:
+                selected_new_positions.add(new_idx)
+
             r = rows[orig_idx]
             item = QTreeWidgetItem(r['texts'])
             try:
@@ -845,11 +860,18 @@ class BaseEditor(QWidget):
                 self.update_corners_display(item, r['corners'])
             self.tree.addTopLevelItem(item)
 
-        # Reselect moved items
+        # Reselect moved items at their new positions
         for idx in selected_new_positions:
             it = self.tree.topLevelItem(idx)
             if it:
                 it.setSelected(True)
+
+        # Set the current item to the first selected item for keyboard navigation
+        if selected_new_positions:
+            first_selected_idx = min(selected_new_positions)
+            first_item = self.tree.topLevelItem(first_selected_idx)
+            if first_item:
+                self.tree.setCurrentItem(first_item)
 
         self.update_row_colors()
 
