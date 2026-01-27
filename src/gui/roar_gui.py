@@ -294,6 +294,7 @@ class ROARTechBrowser(QWidget):
             return 0
         self.lookup_window.update_graph_from_tech_browser()
 
+
     def set_graphing_widget(self, graphing_widget):
         self.graphing_widget = graphing_widget
 
