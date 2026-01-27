@@ -1236,6 +1236,15 @@ class ROARLookupWindow(QWidget):
 
     def on_mode_changed(self, _checked):
         self.is_device_params_mode = self.radio_device_params.isChecked()
+
+        # When switching to Device Params mode, hide any 3D plots
+        if self.is_device_params_mode:
+            if self.mpl_canvas is not None:
+                self.mpl_canvas.setVisible(False)
+            if self.mpl_toolbar is not None:
+                self.mpl_toolbar.setVisible(False)
+            self.plot_widget.show()
+
         self.update_combobox_items()
         self.update_attachment_checkboxes()
 
@@ -1659,6 +1668,15 @@ class ROARLookupWindow(QWidget):
 
     def toggle_three_d_mode(self):
         self.is_3d_mode = self.three_d_checkbox.isChecked()
+
+        # If turning OFF 3D mode, hide the 3D canvas and show the 2D plot widget
+        if not self.is_3d_mode:
+            if self.mpl_canvas is not None:
+                self.mpl_canvas.setVisible(False)
+            if self.mpl_toolbar is not None:
+                self.mpl_toolbar.setVisible(False)
+            self.plot_widget.show()
+
         self.plot_scientific_data()
 
     def change_plot_colors(self):
@@ -1802,6 +1820,66 @@ class ROARLookupWindow(QWidget):
                         except Exception:
                             pass
                         continue
+
+                    # Apply constraint filtering
+                    constraint_mask = None
+                    if constraints:
+                        print(f"[CONSTRAINT] Evaluating {len(constraints)} constraints")
+                        # Evaluate all constraints
+                        for constraint_name, constraint_expr in constraints.items():
+                            try:
+                                # Add constraint equation to solver
+                                equation_solver.add_equation(constraint_name, constraint_expr)
+                            except Exception as e:
+                                print(f"[CONSTRAINT] Error adding constraint '{constraint_name}': {e}")
+
+                        # Evaluate constraints
+                        constraint_symbols = list(constraints.keys())
+                        if constraint_symbols:
+                            try:
+                                constraint_results = equation_solver.evaluate_equations(symbols_to_add=constraint_symbols, corner_dfs=[cid_corner.df])
+                                if constraint_results:
+                                    # Create mask for points that meet ALL constraints
+                                    constraint_mask = np.ones(len(result_matrix[param1]), dtype=bool)
+
+                                    for constraint_name in constraint_symbols:
+                                        if constraint_name in constraint_results:
+                                            constraint_values = np.asarray(constraint_results[constraint_name]).ravel()
+                                            # Constraint is met if value is True (non-zero)
+                                            # Handle different shapes
+                                            if len(constraint_values) == 1:
+                                                # Scalar constraint applies to all points
+                                                met = bool(constraint_values[0])
+                                                constraint_mask &= met
+                                            else:
+                                                # Per-point constraint
+                                                if len(constraint_values) == len(constraint_mask):
+                                                    constraint_mask &= (constraint_values != 0)
+                                                else:
+                                                    print(f"[CONSTRAINT] Warning: {constraint_name} shape mismatch: {len(constraint_values)} vs {len(constraint_mask)}")
+
+                                            points_passing = np.sum(constraint_mask)
+                                            total_points = len(constraint_mask)
+                                            print(f"[CONSTRAINT] {constraint_name}: {points_passing}/{total_points} points pass")
+
+                                    # Filter result_matrix based on constraint_mask
+                                    points_before = len(result_matrix[param1])
+                                    for key in result_matrix:
+                                        val = np.asarray(result_matrix[key]).ravel()
+                                        if len(val) == len(constraint_mask):
+                                            result_matrix[key] = val[constraint_mask]
+
+                                    points_after = len(result_matrix[param1])
+                                    print(f"[CONSTRAINT] Filtered {points_before - points_after} points, {points_after} remaining")
+
+                                    if points_after == 0:
+                                        print(f"[CONSTRAINT] No points meet all constraints - skipping plot")
+                                        continue
+                            except Exception as e:
+                                print(f"[CONSTRAINT] Error evaluating constraints: {e}")
+                                import traceback
+                                traceback.print_exc()
+
                     params1 = result_matrix[param1]
                     params2 = result_matrix[param2]
                     try:
@@ -1987,38 +2065,101 @@ class ROARLookupWindow(QWidget):
                                                 expression = expressions[expression_sym]
                                                 equation_solver_3d.add_equation(expression_sym, expression)
 
+                                            # Add constraints to the 3D solver
+                                            if constraints:
+                                                for constraint_name, constraint_expr in constraints.items():
+                                                    try:
+                                                        equation_solver_3d.add_equation(constraint_name, constraint_expr)
+                                                    except Exception as e:
+                                                        print(f"[CONSTRAINT 3D] Error adding constraint '{constraint_name}': {e}")
+
                                             # Now evaluate Z using this grid with the fresh solver
+                                            symbols_to_evaluate = [param3]
+                                            if constraints:
+                                                symbols_to_evaluate.extend(list(constraints.keys()))
+
                                             result_matrix_3d = equation_solver_3d.evaluate_equations(
-                                                symbols_to_add=[param3],
+                                                symbols_to_add=symbols_to_evaluate,
                                                 corner_dfs=[temp_df]
                                             )
 
                                             if result_matrix_3d is not None and param3 in result_matrix_3d:
                                                 z_data = np.asarray(result_matrix_3d[param3]).ravel()
 
+                                                # Apply constraint filtering for 3D
+                                                # Use NaN masking to maintain surface structure with holes
+                                                constraint_mask_3d = None
+                                                if constraints:
+                                                    print(f"[CONSTRAINT 3D] Evaluating {len(constraints)} constraints on meshgrid")
+                                                    constraint_mask_3d = np.ones(len(z_data), dtype=bool)
+
+                                                    for constraint_name in constraints.keys():
+                                                        if constraint_name in result_matrix_3d:
+                                                            constraint_values = np.asarray(result_matrix_3d[constraint_name]).ravel()
+                                                            if len(constraint_values) == 1:
+                                                                met = bool(constraint_values[0])
+                                                                constraint_mask_3d &= met
+                                                            else:
+                                                                if len(constraint_values) == len(constraint_mask_3d):
+                                                                    constraint_mask_3d &= (constraint_values != 0)
+
+                                                            points_passing = np.sum(constraint_mask_3d)
+                                                            total_points = len(constraint_mask_3d)
+                                                            print(f"[CONSTRAINT 3D] {constraint_name}: {points_passing}/{total_points} points pass")
+
+                                                    # Set invalid points to NaN instead of removing them
+                                                    # This preserves the grid structure for surface plotting
+                                                    points_before = len(z_data)
+                                                    points_passing = np.sum(constraint_mask_3d)
+                                                    z_data = z_data.astype(float)  # Ensure float type for NaN
+                                                    z_data[~constraint_mask_3d] = np.nan  # Set failed points to NaN
+
+                                                    print(f"[CONSTRAINT 3D] Set {points_before - points_passing} points to NaN, {points_passing} remain valid")
+
+                                                    if points_passing == 0:
+                                                        print(f"[CONSTRAINT 3D] No points meet all constraints - skipping 3D plot")
+                                                        results_3d = None
+                                                        continue
+
                                                 print(f"\n[DEBUG] Z evaluation results:")
                                                 print(f"  param3 ({param3}) shape: {z_data.shape}")
-                                                print(f"  Z range: {np.min(z_data)} to {np.max(z_data)}")
-                                                print(f"  Z unique values: {len(np.unique(z_data))}")
-                                                if len(np.unique(z_data)) == 1:
+                                                # Calculate range ignoring NaN values
+                                                valid_z = z_data[~np.isnan(z_data)]
+                                                if len(valid_z) > 0:
+                                                    print(f"  Z range: {np.min(valid_z)} to {np.max(valid_z)}")
+                                                    print(f"  Z unique values: {len(np.unique(valid_z))}")
+                                                else:
+                                                    print(f"  Z range: all NaN")
+                                                if len(np.unique(valid_z)) == 1:
                                                     print(f"  ⚠ WARNING: Z has only ONE unique value (flat plane)!")
                                                 print(f"  First 5 Z values: {z_data[:5]}")
                                                 print(f"  Last 5 Z values: {z_data[-5:]}")
+                                                if constraint_mask_3d is not None:
+                                                    print(f"  NaN count: {np.sum(np.isnan(z_data))}")
 
                                                 # Reshape Z to match the meshgrid
                                                 try:
+                                                    # Always try surface plot first (NaN values create holes)
                                                     Z_grid = z_data.reshape(X_grid.shape)
                                                     results_3d = (X_grid, Y_grid, Z_grid, 'surface')
-                                                    print(f"  ✓ Created surface plot: {X_grid.shape} grid")
+                                                    if constraint_mask_3d is not None:
+                                                        print(f"  ✓ Created surface plot with NaN holes: {X_grid.shape} grid ({np.sum(~np.isnan(z_data))} valid points)")
+                                                    else:
+                                                        print(f"  ✓ Created surface plot: {X_grid.shape} grid")
                                                     print(f"  Z grid corner values:")
                                                     print(f"    Z[0,0]={Z_grid[0,0]}, Z[0,-1]={Z_grid[0,-1]}")
                                                     print(f"    Z[-1,0]={Z_grid[-1,0]}, Z[-1,-1]={Z_grid[-1,-1]}")
                                                 except Exception as e:
                                                     print(f"Reshape failed: {e}, falling back to scatter")
-                                                    # Fall back to scatter
-                                                    results_3d = (x_data, y_data,
-                                                                np.asarray(equation_solver.evaluate_equations([param3], [cid_corner.df])[param3]).ravel(),
-                                                                'scatter')
+                                                    # Fall back to scatter (filter out NaN for scatter)
+                                                    if constraint_mask_3d is not None:
+                                                        valid_mask = ~np.isnan(z_data)
+                                                        x_valid = x_flat[valid_mask]
+                                                        y_valid = y_flat[valid_mask]
+                                                        z_valid = z_data[valid_mask]
+                                                        results_3d = (x_valid, y_valid, z_valid, 'scatter')
+                                                    else:
+                                                        results_3d = (x_data, y_data, z_data, 'scatter')
                                             else:
                                                 results_3d = None
                                         except Exception as e:
