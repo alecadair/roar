@@ -166,22 +166,46 @@ class ROAREquationSolver:
             lookup_var = split_lookup[0]
 
         # Determine which corners to use for this device
+        device_specific_info = None
         device_specific_corners = None
         if device and device in self.device_corners:
-            device_specific_corners = self.device_corners[device]
+            device_specific_info = self.device_corners[device]
+            # Handle both old format (list) and new format (dict with 'corners' key)
+            if isinstance(device_specific_info, dict):
+                device_specific_corners = device_specific_info.get('corners')
+            else:
+                device_specific_corners = device_specific_info
+            print(f"[LOOKUP DEBUG] Device '{device}' has specific corners: {device_specific_corners}")
 
         # Filter corner_dfs if device has specific corners
         corners_to_use = corner_dfs
         if device_specific_corners is not None:
             # Device has custom corner selection
-            # Note: This assumes corner_dfs is a dict with corner names as keys
-            # If it's a list, we need to filter it differently
             if isinstance(corner_dfs, dict):
-                corners_to_use = {k: v for k, v in corner_dfs.items() if k in device_specific_corners}
+                # Filter to only the corners specified for this device
+                # Handle both simple corner names and full path keys (PDK>model>length>corner)
+                corners_to_use = {}
+                for full_path, df in corner_dfs.items():
+                    # Extract corner name from full path (last segment after '>')
+                    corner_name = full_path.split('>')[-1] if '>' in full_path else full_path
+                    if corner_name in device_specific_corners:
+                        corners_to_use[full_path] = df
+                print(f"[LOOKUP DEBUG] Filtered corners for device '{device}': {list(corners_to_use.keys())}")
+                if not corners_to_use:
+                    print(f"[LOOKUP DEBUG] WARNING: No matching corners found for device '{device}'!")
+                    print(f"[LOOKUP DEBUG]   Requested: {device_specific_corners}")
+                    print(f"[LOOKUP DEBUG]   Available corner names: {[k.split('>')[-1] if '>' in k else k for k in corner_dfs.keys()]}")
             elif isinstance(corner_dfs, list):
                 # If corner_dfs is a list, we need corner names from somewhere else
                 # For now, use all corners (global behavior)
-                print(f"[SOLVER DEBUG] Device {device} has custom corners {device_specific_corners} but corner_dfs is a list")
+                print(f"[LOOKUP DEBUG] Device {device} has custom corners {device_specific_corners} but corner_dfs is a list")
+                print(f"[LOOKUP DEBUG] Cannot filter - using all {len(corner_dfs)} corners")
+        else:
+            # No device-specific corners, use all available corners (global selection)
+            if device:
+                print(f"[LOOKUP DEBUG] Device '{device}' using global corner selection")
+            else:
+                print(f"[LOOKUP DEBUG] No device specified, using global corner selection")
 
         #corner_collection = self.top_level_app.roar_design.devices[device].corner_collection
         #corners_to_eval = self.top_level_app.roar_design.
@@ -209,8 +233,9 @@ class ROAREquationSolver:
             print(f"[LOOKUP DEBUG]   Device: {device if device else 'None'}")
             print(f"[LOOKUP DEBUG]   Available corners: {len(corners_to_use) if not isinstance(corners_to_use, dict) else len(corners_to_use)}")
             # Return empty array with proper shape instead of crashing
-            if isinstance(corner_dfs, list) and len(corner_dfs) > 0:
-                nrows = corner_dfs[0].shape[0] if hasattr(corner_dfs[0], 'shape') else len(corner_dfs[0])
+            if corner_dfs and len(corner_dfs) > 0:
+                first_df = next(iter(corner_dfs.values())) if isinstance(corner_dfs, dict) else corner_dfs[0]
+                nrows = first_df.shape[0] if hasattr(first_df, 'shape') else len(first_df)
                 return np.zeros((nrows, 1)), corner_dfs
             else:
                 return np.zeros((1, 1)), []
@@ -264,7 +289,8 @@ class ROAREquationSolver:
                 # For example, if equation="kgm1" and corner_dfs has a "kgm1" column, use it directly
                 direct_column_found = False
                 if corner_dfs and len(corner_dfs) > 0:
-                    first_df = corner_dfs[0]
+                    # Get first dataframe whether corner_dfs is a list or dict
+                    first_df = next(iter(corner_dfs.values())) if isinstance(corner_dfs, dict) else corner_dfs[0]
                     if hasattr(first_df, 'columns') and equation in first_df.columns:
                         # Use the column directly!
                         print(f"[LOOKUP DEBUG] Found '{equation}' as direct column in dataframe")
@@ -293,30 +319,21 @@ class ROAREquationSolver:
             print(f"[SOLVER DEBUG] Evaluating equation '{equation}' = {equation_to_evaluate}")
             print(f"[SOLVER DEBUG]   Available in results: {list(results.keys())}")
             if self.is_number(equation_to_evaluate):
-                # If corner_dfs provided, create a 2D array (nrows x n_corners)
-                # where every entry equals the constant. This keeps result
-                # shapes consistent for downstream code that expects arrays.
+                # Store constant as scalar value
+                # NumPy broadcasting will automatically expand it when used with arrays
+                # This allows constants to work with device-specific lookups that have
+                # different numbers of corners
                 val = float(equation_to_evaluate)
-                if corner_dfs:
-                    try:
-                        # Determine number of rows from the first corner dataframe
-                        first = corner_dfs[0]
-                        # pandas DataFrame -> use shape[0], otherwise try len()
-                        nrows = first.shape[0] if hasattr(first, 'shape') else len(first)
-                    except Exception:
-                        nrows = 1
-                    ncols = len(corner_dfs)
-                    arr = np.full((nrows, ncols), val, dtype=float)
-                    results[equation] = arr
-                else:
-                    results[equation] = val
+                results[equation] = val
                 continue
             result = self.evaluate_equation(equation_to_evaluate, results, corner_dfs=corner_dfs)
             if result is not None:
                 corner_equation_dict = {}
                 if equation in symbols_to_add_strings:
                     corner_count = 0
-                    for corner_df in corner_dfs:
+                    # Iterate over corner dataframes (handle both dict and list)
+                    corner_dfs_iter = corner_dfs.values() if isinstance(corner_dfs, dict) else corner_dfs
+                    for corner_df in corner_dfs_iter:
                         result_column = result[:, corner_count]
                         corner_df[equation] = result_column
                         corner_count += 1

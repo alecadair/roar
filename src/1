@@ -1,0 +1,31 @@
+=== Device Corner Configuration ===
+M1: GLOBAL (uses tech browser selection)
+M2: ['pfettt25', 'pfettt-25'] from SKY130A>pfet>180n
+M3: ['nfettt75'] from SKY130A>nfet>180n
+
+=== Available Corner Dataframes ===
+  SKY130A>nfet>180n>nfettt25
+  SKY130A>pfet>180n>pfettt25
+  SKY130A>pfet>180n>pfettt-25
+  SKY130A>nfet>180n>nfettt75
+
+=== Testing Lookup Logic ===
+
+1. Lookup 'kgm:M1' for device M1
+   → Using GLOBAL selection (all corners in corner_dfs_dict)
+   Corners to use: ['SKY130A>nfet>180n>nfettt25', 'SKY130A>pfet>180n>pfettt25', 'SKY130A>pfet>180n>pfettt-25', 'SKY130A>nfet>180n>nfettt75']
+
+2. Lookup 'vth:M2' for device M2
+   → Using device-specific corners: ['pfettt25', 'pfettt-25']
+   Corners to use: ['SKY130A>pfet>180n>pfettt25', 'SKY130A>pfet>180n>pfettt-25']
+
+3. Lookup 'kgm:M3' for device M3
+   → Using device-specific corners: ['nfettt75']
+   Corners to use: ['SKY130A>nfet>180n>nfettt75']
+
+=== Test Summary ===
+✓ M1 uses global selection → should get all 4 corners
+✓ M2 uses device-specific pfet corners → should get 2 pfet corners
+✓ M3 uses device-specific nfet corner → should get 1 nfet corner
+
+This allows different devices to use corners from different models/PDKs/lengths!

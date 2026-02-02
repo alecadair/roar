@@ -1795,13 +1795,55 @@ class ROARLookupWindow(QWidget):
                         except Exception as e:
                             print(f"[DESIGN EQS] Could not get device corners: {e}")
 
+                    # Collect all corner dataframes needed for this evaluation
+                    # We need corners from: 1) current tech browser selection, 2) device-specific selections
+                    corner_dfs_dict = {}
+
+                    # Create full path key for current corner (used for devices with global selection)
+                    current_corner_path = f"{pdk}>{model_name}>{length}>{corner}"
+                    corner_dfs_dict[current_corner_path] = cid_corner.df
+
+                    # Add any device-specific corners
+                    if device_corners:
+                        for device_name, device_info in device_corners.items():
+                            # device_info is now a dict with 'corners', 'corner_paths', 'pdk', 'model', 'length' keys
+                            if not isinstance(device_info, dict):
+                                continue
+
+                            corner_paths = device_info.get('corner_paths')
+                            if corner_paths:  # Has device-specific corners with full paths
+                                for corner_path in corner_paths:
+                                    if corner_path and corner_path not in corner_dfs_dict:
+                                        # Parse the full path: PDK>model>length>corner
+                                        parts = corner_path.split('>')
+                                        if len(parts) >= 5:
+                                            dev_pdk = parts[1]
+                                            dev_model = parts[2]
+                                            dev_length = parts[3]
+                                            dev_corner_name = parts[4]
+
+                                            try:
+                                                # Look up corner using full path info
+                                                dev_cid_corner = self.tech_browser.tech_dict.get(dev_pdk, {}).get(dev_model, {}).get(dev_length, {}).get("corners", {}).get(dev_corner_name)
+                                                if dev_cid_corner:
+                                                    corner_dfs_dict[corner_path] = dev_cid_corner.df
+                                                    print(f"[DESIGN EQS] Added corner '{corner_path}' for device {device_name}")
+                                                else:
+                                                    print(f"[DESIGN EQS] Warning: Corner not found at path '{corner_path}' for device {device_name}")
+                                            except Exception as e:
+                                                print(f"[DESIGN EQS] Error loading corner '{corner_path}': {e}")
+
+                    print(f"[DESIGN EQS] Using corners: {list(corner_dfs_dict.keys())}")
+
                     equation_solver = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
                     equation_solver.corners = [cid_corner.df]
                     expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
                     for expression_sym in expressions:
                         expression = expressions[expression_sym]
                         equation_solver.add_equation(expression_sym, expression)
-                    result_matrix = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=[cid_corner.df])
+
+                    # Pass corner_dfs_dict instead of list
+                    result_matrix = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=corner_dfs_dict)
                     if not result_matrix or not isinstance(result_matrix, dict):
                         msg = f"Design Eq solver returned no results for {param1},{param2}"
                         print(msg)
@@ -1940,8 +1982,8 @@ class ROARLookupWindow(QWidget):
                             results_3d = None
                             try:
                                 # For 3D surface plotting, we need to evaluate Z at all combinations of X and Y
-                                # First, get X and Y data from the corner
-                                result_matrix_xy = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=[cid_corner.df])
+                                # First, get X and Y data from the corner (use corner_dfs_dict for device-specific corners)
+                                result_matrix_xy = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=corner_dfs_dict)
 
                                 if result_matrix_xy is not None and param1 in result_matrix_xy and param2 in result_matrix_xy:
                                     # Get X and Y data
@@ -2169,7 +2211,7 @@ class ROARLookupWindow(QWidget):
                                             # Fall back to scatter plot with original data
                                             result_matrix_3d = equation_solver.evaluate_equations(
                                                 symbols_to_add=[param1, param2, param3],
-                                                corner_dfs=[cid_corner.df]
+                                                corner_dfs=corner_dfs_dict
                                             )
                                             if result_matrix_3d is not None and param3 in result_matrix_3d:
                                                 z_data = np.asarray(result_matrix_3d[param3]).ravel()
@@ -2180,7 +2222,7 @@ class ROARLookupWindow(QWidget):
                                         # Not enough unique values for surface, use scatter/line plot
                                         result_matrix_3d = equation_solver.evaluate_equations(
                                             symbols_to_add=[param1, param2, param3],
-                                            corner_dfs=[cid_corner.df]
+                                            corner_dfs=corner_dfs_dict
                                         )
                                         if result_matrix_3d is not None and param3 in result_matrix_3d:
                                             z_data = np.asarray(result_matrix_3d[param3]).ravel()
