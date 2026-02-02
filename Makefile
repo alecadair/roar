@@ -40,7 +40,7 @@ generate_roar_env:
 	@echo 'setenv ROAR_CHARACTERIZATION "$$ROAR_HOME/characterization"' >> $(OUTPUT_FILE)
 	@echo "" >> $(OUTPUT_FILE)
 
-
+	@echo 'if ( ! $$?LD_LIBRARY_PATH ) then' >> $(OUTPUT_FILE)
 	@echo '    setenv LD_LIBRARY_PATH "$$ROAR_DEPENDENCIES/lib64"' >> $(OUTPUT_FILE)
 	@echo 'else' >> $(OUTPUT_FILE)
 	@echo '    setenv LD_LIBRARY_PATH "$$ROAR_DEPENDENCIES/lib64:$$LD_LIBRARY_PATH"' >> $(OUTPUT_FILE)
@@ -50,7 +50,7 @@ generate_roar_env:
 
 	@echo 'echo "ROAR environment variables set."' >> $(OUTPUT_FILE)
 	@echo "ROAR environment script generated: $(OUTPUT_FILE)"
-	@echo "Run: source $(OUTPUT_FILE) before using ROAR."
+	@echo "Run: source $(OUTPUT_FILE) before using ROAR"
 
 
 clean:
