@@ -329,11 +329,21 @@ class ROARTechBrowser(QWidget):
             self.lookup_window.update_graph_from_tech_browser()
 
     def handle_item_changed(self, item, column):
-        check_state = item.checkState(0)
-        for i in range(item.childCount()):
-            item.child(i).setCheckState(0, check_state)
+        # Block signals to prevent recursive calls while we update states
+        self.tree.blockSignals(True)
+
+        try:
+            check_state = item.checkState(0)
+            # Propagate check state to all children
+            self._set_children_check_state(item, check_state)
+
+            # Update parent states to reflect children's check states
+            self._update_parent_states(item)
+
+        finally:
+            self.tree.blockSignals(False)
+
         if self.startup == True:
-            # self.startup = False
             return 0
         # Check if app is in restore mode
         if self.top_level_app is not None and getattr(self.top_level_app, '_is_restoring_state', False):
@@ -343,6 +353,44 @@ class ROARTechBrowser(QWidget):
             return 0
         if self.lookup_window is not None:
             self.lookup_window.update_graph_from_tech_browser()
+
+    def _set_children_check_state(self, item, check_state):
+        """Recursively set check state on all children."""
+        for i in range(item.childCount()):
+            child = item.child(i)
+            child.setCheckState(0, check_state)
+            self._set_children_check_state(child, check_state)
+
+    def _update_parent_states(self, item):
+        """Update parent items' check states based on their children."""
+        parent = item.parent()
+        while parent is not None:
+            self._update_single_parent_state(parent)
+            parent = parent.parent()
+
+    def _update_single_parent_state(self, item):
+        """Update a single parent's check state based on its children."""
+        if item.childCount() == 0:
+            return
+
+        checked_count = 0
+        partially_checked = False
+        total_count = item.childCount()
+
+        for i in range(total_count):
+            child = item.child(i)
+            state = child.checkState(0)
+            if state == Qt.CheckState.Checked:
+                checked_count += 1
+            elif state == Qt.CheckState.PartiallyChecked:
+                partially_checked = True
+
+        if partially_checked or (0 < checked_count < total_count):
+            item.setCheckState(0, Qt.CheckState.PartiallyChecked)
+        elif checked_count == total_count:
+            item.setCheckState(0, Qt.CheckState.Checked)
+        else:
+            item.setCheckState(0, Qt.CheckState.Unchecked)
 
 
     def set_graphing_widget(self, graphing_widget):

@@ -2267,7 +2267,7 @@ class ROARLookupWindow(QWidget):
                     result_matrix = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=corner_dfs_dict)
                     if not result_matrix or not isinstance(result_matrix, dict):
                         msg = f"Design Eq solver returned no results for {param1},{param2}"
-                        print(msg)
+                        debug_print(msg)
                         try:
                             if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
                                 self.top_level_app.statusBar().showMessage(msg, 5000)
@@ -2276,7 +2276,7 @@ class ROARLookupWindow(QWidget):
                         continue
                     if param1 not in result_matrix or param2 not in result_matrix:
                         msg = f"Design Eq results missing requested symbols: {param1} or {param2}. Available: {list(result_matrix.keys())}"
-                        print(msg)
+                        debug_print(msg)
                         try:
                             if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
                                 self.top_level_app.statusBar().showMessage(msg, 5000)
