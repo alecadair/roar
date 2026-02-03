@@ -1890,6 +1890,12 @@ class ROARLookupWindow(QWidget):
     def restore_tech_browser_checks(self, checked_paths):
         """Restore the checked state of items in the tech browser"""
         try:
+            # Set updating flag on both the lookup window and tech browser
+            self._is_updating = True
+            if hasattr(self.tech_browser, 'startup'):
+                old_startup = self.tech_browser.startup
+                self.tech_browser.startup = True
+
             # Temporarily block signals to prevent handle_item_changed from propagating checks
             self.tech_browser.tree.blockSignals(True)
 
@@ -1949,8 +1955,15 @@ class ROARLookupWindow(QWidget):
             # Re-enable signals
             self.tech_browser.tree.blockSignals(False)
 
+            # Restore startup flag
+            if hasattr(self.tech_browser, 'startup'):
+                self.tech_browser.startup = old_startup
+
         except Exception as e:
             debug_print(f"Error restoring tech browser checks: {e}")
+        finally:
+            # Note: Don't reset _is_updating here - let the caller handle it
+            pass
 
     def keyPressEvent(self, event):
         """Handle keyboard events for the lookup window"""
