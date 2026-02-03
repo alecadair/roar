@@ -84,6 +84,12 @@ class ROAREquationSolver:
 
 
     def add_equation(self, symbol, equation):
+        # Skip empty equations or empty symbols
+        if not symbol or not equation or (isinstance(equation, str) and not equation.strip()):
+            return 0
+        if not symbol.strip():
+            return 0
+
         if ":" in equation:
             self.equations[symbol] = equation
             return 0
@@ -317,7 +323,7 @@ class ROAREquationSolver:
                     result, corner_collection = self.create_matrix_from_lookup(lookup_string, corner_dfs=corner_dfs)
                     if equation in symbols_to_add_strings:
                         for corner in corner_collection:
-                            print("TODO")
+                            debug_print(f"[SOLVER DEBUG] Corner collected: {corner}")
                     results[equation] = result
                     # Debug: show what the lookup returned
                     if hasattr(result, 'shape'):

@@ -1,17 +1,17 @@
 {
   "version": "1.0",
-  "saved_at": "2026-02-03T05:44:56.013684",
+  "saved_at": "2026-02-03T07:09:50.946318",
   "app_name": "ROAR",
   "window": {
     "geometry": {
-      "x": 95,
-      "y": 71,
+      "x": 85,
+      "y": 13,
       "width": 1728,
       "height": 1080
     },
     "maximized": false
   },
-  "theme": "light",
+  "theme": "dark",
   "design_editor": {
     "expression_editor": [
       {
@@ -182,15 +182,15 @@
         "name": "Graph 1",
         "windows": [
           {
-            "is_device_params_mode": true,
-            "combo_x_text": "kgm",
-            "combo_y_text": "kcgs",
-            "combo_z_text": "iden",
+            "is_device_params_mode": false,
+            "combo_x_text": "kgm1",
+            "combo_y_text": "i_total",
+            "combo_z_text": "av_total",
             "spin_x_value": 0.0,
             "spin_y_value": 0.0,
             "spin_z_value": 0.0,
             "checkbox_logx": false,
-            "checkbox_logy": false,
+            "checkbox_logy": true,
             "checkbox_logz": false,
             "checkbox_3d": false,
             "checkbox_contour": false,
@@ -572,7 +572,12 @@
               "PDK>IHP-SG13G2>pfet_sg13_lv>500u>pfetmos_ff-25": "#2bc8c0",
               "PDK>IHP-SG13G2>pfet_sg13_lv>500u>pfetmos_ss-25": "#2b67c8"
             },
-            "markers": [],
+            "markers": [
+              {
+                "vertical": true,
+                "linear_pos": 9.230201069515736
+              }
+            ],
             "index": 0
           },
           {
