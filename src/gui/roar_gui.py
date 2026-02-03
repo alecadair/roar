@@ -590,6 +590,7 @@ class ROARHeader(QWidget):
                 background: white;
             }
         """)
+        self.layout_button.clicked.connect(self.on_layout_button_clicked)
 
         # Add widgets to layout
         layout.addWidget(self.graph_calc_icon)
@@ -598,6 +599,14 @@ class ROARHeader(QWidget):
         layout.addWidget(self.logo_label, alignment=Qt.AlignmentFlag.AlignRight)
 
         self.setLayout(layout)
+
+    def on_layout_button_clicked(self):
+        """Show a popup when the layout button is clicked."""
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle("Layout Integration")
+        msg_box.setText("Feature Coming Soon\n\nWhat would you like to see with layout integration?")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.exec()
 
 
 class ROARApp(QMainWindow):
@@ -667,7 +676,7 @@ class ROARApp(QMainWindow):
 
         # Window properties
         self.setWindowTitle("ROAR - Robust Optimal Analog Reuse")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1800, 1000)
 
         # Create UI elements
         central_widget = QWidget()
@@ -928,12 +937,15 @@ class ROARApp(QMainWindow):
 
         run_solver_action = QAction("Run Solver", self)
         run_solver_action.triggered.connect(self.run_solver)
+        run_solver_action.setEnabled(False)  # Disabled - feature coming soon
 
         stop_solver_action = QAction("Stop Solver", self)
         stop_solver_action.triggered.connect(self.stop_solver)
+        stop_solver_action.setEnabled(False)  # Disabled - feature coming soon
 
         solver_prefs_action = QAction("Preferences", self)
         solver_prefs_action.triggered.connect(self.open_solver_preferences)
+        solver_prefs_action.setEnabled(False)  # Disabled - feature coming soon
 
         solver_menu.addAction(run_solver_action)
         solver_menu.addAction(stop_solver_action)
@@ -986,6 +998,7 @@ class ROARApp(QMainWindow):
         export_menu = menubar.addMenu("Export")
         export_action = QAction("Export Data", self)
         export_action.triggered.connect(self.export_data)
+        export_action.setEnabled(False)  # Disabled - feature coming soon
         export_menu.addAction(export_action)
 
         # ----- HELP MENU -----
