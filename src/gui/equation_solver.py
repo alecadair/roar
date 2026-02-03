@@ -10,6 +10,17 @@ import token
 import tokenize
 from io import StringIO
 
+# Import debug_print function - handles case where this module is imported before roar_gui
+try:
+    from roar_gui import debug_print
+except ImportError:
+    try:
+        from gui.roar_gui import debug_print
+    except ImportError:
+        # Fallback: define a no-op debug_print if roar_gui isn't available
+        def debug_print(*args, **kwargs):
+            pass
+
 # Create degree-based trig functions by wrapping radian functions
 # These convert degrees to radians before calling the trig function
 def sind(angle_degrees):
@@ -131,8 +142,8 @@ class ROAREquationSolver:
             self.equations[symbol] = sympified_equation
 
         except (SympifyError, TypeError, ValueError, NameError) as e:
-            print(f"Error adding equation '{symbol}': {e}")
-            print(f"  Equation string: '{equation}'")
+            debug_print(f"Error adding equation '{symbol}': {e}")
+            debug_print(f"  Equation string: '{equation}'")
             import traceback
             traceback.print_exc()
             # Do NOT store equation as string - this causes issues with dependency graph
@@ -175,7 +186,7 @@ class ROAREquationSolver:
                 device_specific_corners = device_specific_info.get('corners')
             else:
                 device_specific_corners = device_specific_info
-            print(f"[LOOKUP DEBUG] Device '{device}' has specific corners: {device_specific_corners}")
+            debug_print(f"[LOOKUP DEBUG] Device '{device}' has specific corners: {device_specific_corners}")
 
         # Filter corner_dfs if device has specific corners
         corners_to_use = corner_dfs
@@ -190,22 +201,22 @@ class ROAREquationSolver:
                     corner_name = full_path.split('>')[-1] if '>' in full_path else full_path
                     if corner_name in device_specific_corners:
                         corners_to_use[full_path] = df
-                print(f"[LOOKUP DEBUG] Filtered corners for device '{device}': {list(corners_to_use.keys())}")
+                debug_print(f"[LOOKUP DEBUG] Filtered corners for device '{device}': {list(corners_to_use.keys())}")
                 if not corners_to_use:
-                    print(f"[LOOKUP DEBUG] WARNING: No matching corners found for device '{device}'!")
-                    print(f"[LOOKUP DEBUG]   Requested: {device_specific_corners}")
-                    print(f"[LOOKUP DEBUG]   Available corner names: {[k.split('>')[-1] if '>' in k else k for k in corner_dfs.keys()]}")
+                    debug_print(f"[LOOKUP DEBUG] WARNING: No matching corners found for device '{device}'!")
+                    debug_print(f"[LOOKUP DEBUG]   Requested: {device_specific_corners}")
+                    debug_print(f"[LOOKUP DEBUG]   Available corner names: {[k.split('>')[-1] if '>' in k else k for k in corner_dfs.keys()]}")
             elif isinstance(corner_dfs, list):
                 # If corner_dfs is a list, we need corner names from somewhere else
                 # For now, use all corners (global behavior)
-                print(f"[LOOKUP DEBUG] Device {device} has custom corners {device_specific_corners} but corner_dfs is a list")
-                print(f"[LOOKUP DEBUG] Cannot filter - using all {len(corner_dfs)} corners")
+                debug_print(f"[LOOKUP DEBUG] Device {device} has custom corners {device_specific_corners} but corner_dfs is a list")
+                debug_print(f"[LOOKUP DEBUG] Cannot filter - using all {len(corner_dfs)} corners")
         else:
             # No device-specific corners, use all available corners (global selection)
             if device:
-                print(f"[LOOKUP DEBUG] Device '{device}' using global corner selection")
+                debug_print(f"[LOOKUP DEBUG] Device '{device}' using global corner selection")
             else:
-                print(f"[LOOKUP DEBUG] No device specified, using global corner selection")
+                debug_print(f"[LOOKUP DEBUG] No device specified, using global corner selection")
 
         #corner_collection = self.top_level_app.roar_design.devices[device].corner_collection
         #corners_to_eval = self.top_level_app.roar_design.
@@ -220,18 +231,18 @@ class ROAREquationSolver:
                 # Debug: show what we extracted
                 if len(column_vectors) == 1:  # Only print for first corner to avoid spam
                     unique_count = len(np.unique(col_values))
-                    print(f"[LOOKUP DEBUG] Extracting '{lookup_var}' from df: {len(col_values)} values, {unique_count} unique, range=[{np.min(col_values):.3f}, {np.max(col_values):.3f}]")
+                    debug_print(f"[LOOKUP DEBUG] Extracting '{lookup_var}' from df: {len(col_values)} values, {unique_count} unique, range=[{np.min(col_values):.3f}, {np.max(col_values):.3f}]")
                     if device_specific_corners:
-                        print(f"[LOOKUP DEBUG]   Using device-specific corners for {device}: {device_specific_corners}")
+                        debug_print(f"[LOOKUP DEBUG]   Using device-specific corners for {device}: {device_specific_corners}")
                     if unique_count == 1:
-                        print(f"[LOOKUP DEBUG]   ⚠ WARNING: Column '{lookup_var}' has only ONE unique value in dataframe!")
-                        print(f"[LOOKUP DEBUG]   DataFrame shape: {df.shape}, columns: {list(df.columns[:5])}...")
+                        debug_print(f"[LOOKUP DEBUG]   ⚠ WARNING: Column '{lookup_var}' has only ONE unique value in dataframe!")
+                        debug_print(f"[LOOKUP DEBUG]   DataFrame shape: {df.shape}, columns: {list(df.columns[:5])}...")
 
         # Check if we found any data
         if not column_vectors:
-            print(f"[LOOKUP DEBUG] ⚠ WARNING: No data found for lookup '{lookup_var}' in any dataframe!")
-            print(f"[LOOKUP DEBUG]   Device: {device if device else 'None'}")
-            print(f"[LOOKUP DEBUG]   Available corners: {len(corners_to_use) if not isinstance(corners_to_use, dict) else len(corners_to_use)}")
+            debug_print(f"[LOOKUP DEBUG] ⚠ WARNING: No data found for lookup '{lookup_var}' in any dataframe!")
+            debug_print(f"[LOOKUP DEBUG]   Device: {device if device else 'None'}")
+            debug_print(f"[LOOKUP DEBUG]   Available corners: {len(corners_to_use) if not isinstance(corners_to_use, dict) else len(corners_to_use)}")
             # Return empty array with proper shape instead of crashing
             if corner_dfs and len(corner_dfs) > 0:
                 first_df = next(iter(corner_dfs.values())) if isinstance(corner_dfs, dict) else corner_dfs[0]
@@ -293,12 +304,12 @@ class ROAREquationSolver:
                     first_df = next(iter(corner_dfs.values())) if isinstance(corner_dfs, dict) else corner_dfs[0]
                     if hasattr(first_df, 'columns') and equation in first_df.columns:
                         # Use the column directly!
-                        print(f"[LOOKUP DEBUG] Found '{equation}' as direct column in dataframe")
+                        debug_print(f"[LOOKUP DEBUG] Found '{equation}' as direct column in dataframe")
                         result = first_df[equation].values.reshape(-1, 1)
                         direct_column_found = True
                         results[equation] = result
                         unique_count = len(np.unique(result))
-                        print(f"[SOLVER DEBUG] Evaluated direct column '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
+                        debug_print(f"[SOLVER DEBUG] Evaluated direct column '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
 
                 if not direct_column_found:
                     # For equation assignments like "kcgd4 = kcgd:M3", use the VALUE (kcgd:M3) for lookup
@@ -311,13 +322,13 @@ class ROAREquationSolver:
                     # Debug: show what the lookup returned
                     if hasattr(result, 'shape'):
                         unique_count = len(np.unique(result)) if isinstance(result, np.ndarray) else 'N/A'
-                        print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
+                        debug_print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
                     else:
-                        print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', value: {result}")
+                        debug_print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', value: {result}")
                 continue
             equation_to_evaluate = self.equations[equation]
-            print(f"[SOLVER DEBUG] Evaluating equation '{equation}' = {equation_to_evaluate}")
-            print(f"[SOLVER DEBUG]   Available in results: {list(results.keys())}")
+            debug_print(f"[SOLVER DEBUG] Evaluating equation '{equation}' = {equation_to_evaluate}")
+            debug_print(f"[SOLVER DEBUG]   Available in results: {list(results.keys())}")
             if self.is_number(equation_to_evaluate):
                 # Store constant as scalar value
                 # NumPy broadcasting will automatically expand it when used with arrays
@@ -355,7 +366,7 @@ class ROAREquationSolver:
             # Handle string equations (lookups like "kcgd:M3")
             if isinstance(symbolic_equation, str):
                 # This shouldn't be evaluated here - it should have been handled as a lookup
-                print(f"Warning: evaluate_equation called with string: {symbolic_equation}")
+                debug_print(f"Warning: evaluate_equation called with string: {symbolic_equation}")
                 return None
 
             # Convert the symbolic equation to a lambda function
@@ -387,9 +398,9 @@ class ROAREquationSolver:
                     val = results[name]
                     if hasattr(val, 'shape'):
                         unique_count = len(np.unique(val)) if isinstance(val, np.ndarray) else 'N/A'
-                        print(f"[SOLVER DEBUG]     Using {name} from results: shape={val.shape}, unique={unique_count}, range=[{np.min(val):.3f}, {np.max(val):.3f}]")
+                        debug_print(f"[SOLVER DEBUG]     Using {name} from results: shape={val.shape}, unique={unique_count}, range=[{np.min(val):.3f}, {np.max(val):.3f}]")
                     else:
-                        print(f"[SOLVER DEBUG]     Using {name} from results: value={val}")
+                        debug_print(f"[SOLVER DEBUG]     Using {name} from results: value={val}")
                 elif (name in self.lookup_vals) or (":" in name):
                     # Pull lookup column arrays from corner_dfs
                     # USE THE PASSED corner_dfs if available, otherwise fall back to self.corners
@@ -420,7 +431,7 @@ class ROAREquationSolver:
             if symbolic_equation in results:
                 result = results[symbolic_equation]
                 return result
-            print(f"Error evaluating equation: {e}")
+            debug_print(f"Error evaluating equation: {e}")
             import traceback
             traceback.print_exc()
             return None

@@ -19,6 +19,17 @@ from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
+# Import debug_print function - handles case where this module is imported before roar_gui
+try:
+    from roar_gui import debug_print
+except ImportError:
+    try:
+        from gui.roar_gui import debug_print
+    except ImportError:
+        # Fallback: define a no-op debug_print if roar_gui isn't available
+        def debug_print(*args, **kwargs):
+            pass
+
 
 def format_eng(num):
     # Handle NaN, inf, and zero cases
@@ -100,6 +111,9 @@ class ROARPlotWidget(pg.PlotWidget):
         self.markers = []  # for scatter markers
         self.line_markers = []  # for line markers
         self.difference_items = []  # for difference lines and texts
+        self._hovered_marker = None  # Track currently hovered scatter marker for highlighting
+        self._hovered_text = None  # Track currently hovered line marker text for highlighting
+        self._hovered_text_original_html = None  # Store original HTML to restore on unhover
 
         # Connect mouse events
         try:
@@ -123,6 +137,26 @@ class ROARPlotWidget(pg.PlotWidget):
         self._mouse_inside = False
         if self.top_level_app and hasattr(self.top_level_app, "coord_label"):
             self.top_level_app.coord_label.setText("Coordinates: ")
+        # Reset any hovered marker highlighting
+        if self._hovered_marker is not None:
+            try:
+                marker = self._hovered_marker.get("marker")
+                if marker:
+                    marker.setSize(10)
+                    marker.setPen(pg.mkPen('r'))
+                    marker.setBrush(pg.mkBrush('r'))
+            except Exception:
+                pass
+            self._hovered_marker = None
+        # Reset any hovered text highlighting
+        if self._hovered_text is not None and self._hovered_text_original_html is not None:
+            try:
+                self._hovered_text.setHtml(self._hovered_text_original_html)
+                self._hovered_text.setZValue(0)
+            except Exception:
+                pass
+            self._hovered_text = None
+            self._hovered_text_original_html = None
         super().leaveEvent(event)
 
     def on_mouse_moved(self, pos):
@@ -153,6 +187,12 @@ class ROARPlotWidget(pg.PlotWidget):
                 self.h_line.setPos(y)
             except Exception:
                 pass
+
+            # Check for hover over scatter markers and highlight them
+            self._update_marker_hover(mouse_point)
+
+            # Check for hover over line marker texts and highlight them
+            self._update_text_hover(pos)
 
     def on_mouse_clicked(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -301,7 +341,8 @@ class ROARPlotWidget(pg.PlotWidget):
                     closest_point_index = i
 
         # Check if the closest point is reasonably close to the mouse click (in pixels)
-        if min_dist_sq > 75**2: # 75 pixels tolerance
+        # Use a smaller tolerance so markers only appear when clicking close to a trace
+        if min_dist_sq > 15**2: # 15 pixels tolerance
             return None, None
 
         return closest_curve, closest_point_index
@@ -313,6 +354,115 @@ class ROARPlotWidget(pg.PlotWidget):
             return (p1.x() - p2.x())**2 + (p1.y() - p2.y())**2 < 10**2 # 10 pixels tolerance
         except Exception:
             return False
+
+    def _update_marker_hover(self, mouse_point):
+        """Check if mouse is hovering over a scatter marker and highlight it."""
+        hovered_marker = None
+
+        # Check each marker to see if mouse is close (using same tolerance as deletion)
+        for marker_info in self.markers:
+            marker_item = marker_info.get("marker")
+            try:
+                if marker_item:
+                    marker_x = marker_item.getData()[0][0]
+                    marker_y = marker_item.getData()[1][0]
+                    if self.is_close(marker_x, marker_y, mouse_point.x(), mouse_point.y()):
+                        hovered_marker = marker_info
+                        break
+            except Exception:
+                pass
+
+        # If hovered marker changed, update highlighting
+        if hovered_marker != self._hovered_marker:
+            # Reset previous hovered marker to normal style
+            if self._hovered_marker is not None:
+                try:
+                    old_marker = self._hovered_marker.get("marker")
+                    if old_marker:
+                        old_marker.setSize(10)
+                        old_marker.setPen(pg.mkPen('r'))
+                        old_marker.setBrush(pg.mkBrush('r'))
+                except Exception:
+                    pass
+
+            # Highlight new hovered marker
+            if hovered_marker is not None:
+                try:
+                    new_marker = hovered_marker.get("marker")
+                    if new_marker:
+                        new_marker.setSize(14)
+                        new_marker.setPen(pg.mkPen('yellow', width=2))
+                        new_marker.setBrush(pg.mkBrush('orange'))
+                except Exception:
+                    pass
+
+            self._hovered_marker = hovered_marker
+
+    def _update_text_hover(self, scene_pos):
+        """Check if mouse is hovering over a line marker text and highlight it."""
+        hovered_text = None
+
+        # Check all line marker texts
+        for marker in self.line_markers:
+            # Check regular texts
+            for text in marker.get('texts', []):
+                try:
+                    if text.sceneBoundingRect().contains(scene_pos):
+                        hovered_text = text
+                        break
+                except Exception:
+                    pass
+            if hovered_text:
+                break
+            # Check summary text
+            summary = marker.get('summary_text')
+            if summary:
+                try:
+                    if summary.sceneBoundingRect().contains(scene_pos):
+                        hovered_text = summary
+                        break
+                except Exception:
+                    pass
+
+        # Also check difference items texts
+        if not hovered_text:
+            for diff_item in self.difference_items:
+                diff_text = diff_item.get('text')
+                if diff_text:
+                    try:
+                        if diff_text.sceneBoundingRect().contains(scene_pos):
+                            hovered_text = diff_text
+                            break
+                    except Exception:
+                        pass
+
+        # If hovered text changed, update highlighting
+        if hovered_text != self._hovered_text:
+            # Reset previous hovered text
+            if self._hovered_text is not None and self._hovered_text_original_html is not None:
+                try:
+                    self._hovered_text.setHtml(self._hovered_text_original_html)
+                    self._hovered_text.setZValue(0)
+                except Exception:
+                    pass
+
+            # Highlight new hovered text
+            if hovered_text is not None:
+                try:
+                    # Store original HTML
+                    self._hovered_text_original_html = hovered_text.toHtml()
+                    original_text = hovered_text.toPlainText()
+                    # Create highlighted HTML with yellow background (keep same font size)
+                    highlighted_html = f'<div style="background-color: rgba(255, 255, 0, 200); padding: 2px; border: 1px solid orange; border-radius: 2px;"><span style="color: black;">{original_text}</span></div>'
+                    hovered_text.setHtml(highlighted_html)
+                    # Bring to front
+                    hovered_text.setZValue(1000)
+                except Exception:
+                    pass
+            else:
+                self._hovered_text_original_html = None
+
+            self._hovered_text = hovered_text
 
     def add_vertical_marker(self, linear_pos=None, sync=True):
         if linear_pos is None:
@@ -379,19 +529,56 @@ class ROARPlotWidget(pg.PlotWidget):
         vertical = marker['vertical']
         pos = line.value()
 
+        # Get log mode status
+        x_log = self.plotItem.getAxis('bottom').logMode
+        y_log = self.plotItem.getAxis('left').logMode
+
         # Update linear_pos based on current position
         if vertical:
-            x_log = self.plotItem.getAxis('bottom').logMode
             marker['linear_pos'] = 10**pos if x_log else pos
         else:
-            y_log = self.plotItem.getAxis('left').logMode
             marker['linear_pos'] = 10**pos if y_log else pos
 
+        # Save current text offsets before removing them
+        # Key by curve index to persist offsets when marker moves
+        if 'text_offsets' not in marker:
+            marker['text_offsets'] = {}
+
+        for i, text in enumerate(marker.get('texts', [])):
+            try:
+                # Get curve index from text property
+                curve_idx = text.property('curve_idx')
+                if curve_idx is None:
+                    curve_idx = i
+                # Get current position and base position to calculate offset
+                current_pos = text.pos()
+                base_pos = text.property('base_pos')
+                if base_pos is not None:
+                    offset_x = current_pos.x() - base_pos[0]
+                    offset_y = current_pos.y() - base_pos[1]
+                    if offset_x != 0 or offset_y != 0:
+                        marker['text_offsets'][curve_idx] = (offset_x, offset_y)
+            except Exception:
+                pass
+
+        # Save summary text offset
+        if 'summary_text' in marker:
+            try:
+                summary = marker['summary_text']
+                current_pos = summary.pos()
+                base_pos = summary.property('base_pos')
+                if base_pos is not None:
+                    offset_x = current_pos.x() - base_pos[0]
+                    offset_y = current_pos.y() - base_pos[1]
+                    if offset_x != 0 or offset_y != 0:
+                        marker['text_offsets']['__summary__'] = (offset_x, offset_y)
+            except Exception:
+                pass
 
         # remove old texts
-        for text in marker['texts']:
+        for text in marker.get('texts', []):
             self.plotItem.removeItem(text)
-        marker['texts'].clear()
+        marker['texts'] = []
         if 'summary_text' in marker:
             self.plotItem.removeItem(marker['summary_text'])
             del marker['summary_text']
@@ -400,6 +587,7 @@ class ROARPlotWidget(pg.PlotWidget):
         text_list = []
         y_values = []
         x_values = []
+        curve_idx = 0
         for curve in getattr(self.plotItem, 'curves', []):
             try:
                 xdata, ydata = curve.getData()
@@ -410,18 +598,41 @@ class ROARPlotWidget(pg.PlotWidget):
                     idx = np.argmin(np.abs(xdata - pos))
                     x = xdata[idx]
                     y = ydata[idx]
-                    text = pg.TextItem(f"({format_eng(pos)}, {format_eng(y)})", anchor=(0.5, 0.5))
-                    text.setPos(pos, y)
-                    y_values.append(y)
+                    # Convert to linear values for display
+                    display_x = 10**pos if x_log else pos
+                    display_y = 10**y if y_log else y
+                    text_content = f"({format_eng(display_x)}, {format_eng(display_y)})"
+                    text = pg.TextItem(text_content, anchor=(0.5, 0.5))
+                    base_x, base_y = pos, y
+                    text.setPos(base_x, base_y)
+                    text.setProperty('base_pos', (base_x, base_y))
+                    text.setProperty('curve_idx', curve_idx)
+                    # Apply stored offset if exists for this curve
+                    if curve_idx in marker['text_offsets']:
+                        offset = marker['text_offsets'][curve_idx]
+                        text.setPos(base_x + offset[0], base_y + offset[1])
+                    y_values.append(display_y)
                 else:
                     # Horizontal line at y=pos, find closest x
                     idx = np.argmin(np.abs(ydata - pos))
                     x = xdata[idx]
                     y = ydata[idx]
-                    text = pg.TextItem(f"({format_eng(x)}, {format_eng(pos)})", anchor=(0.5, 0.5))
-                    text.setPos(x, pos)
-                    x_values.append(x)
+                    # Convert to linear values for display
+                    display_x = 10**x if x_log else x
+                    display_y = 10**pos if y_log else pos
+                    text_content = f"({format_eng(display_x)}, {format_eng(display_y)})"
+                    text = pg.TextItem(text_content, anchor=(0.5, 0.5))
+                    base_x, base_y = x, pos
+                    text.setPos(base_x, base_y)
+                    text.setProperty('base_pos', (base_x, base_y))
+                    text.setProperty('curve_idx', curve_idx)
+                    # Apply stored offset if exists for this curve
+                    if curve_idx in marker['text_offsets']:
+                        offset = marker['text_offsets'][curve_idx]
+                        text.setPos(base_x + offset[0], base_y + offset[1])
+                    x_values.append(display_x)
                 text_list.append(text)
+                curve_idx += 1
             except Exception:
                 pass
 
@@ -447,7 +658,13 @@ class ROARPlotWidget(pg.PlotWidget):
                 percent = 200 * (max_y - min_y) / (max_y + min_y)
                 summary_text = pg.TextItem(f"ΔY: {percent:.1f}%", anchor=(0.5, 0.5))
                 y_center = (self.plotItem.viewRange()[1][0] + self.plotItem.viewRange()[1][1]) / 2
-                summary_text.setPos(pos, y_center)
+                base_x, base_y = pos, y_center
+                summary_text.setPos(base_x, base_y)
+                summary_text.setProperty('base_pos', (base_x, base_y))
+                # Apply stored offset if exists
+                if '__summary__' in marker['text_offsets']:
+                    offset = marker['text_offsets']['__summary__']
+                    summary_text.setPos(base_x + offset[0], base_y + offset[1])
                 self.plotItem.addItem(summary_text)
                 summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
                 marker['summary_text'] = summary_text
@@ -458,7 +675,13 @@ class ROARPlotWidget(pg.PlotWidget):
                 percent = 100 * (max_x - min_x) / ((max_x + min_x)/2)
                 summary_text = pg.TextItem(f"ΔX: {percent:.1f}%", anchor=(0.5, 0.5))
                 x_center = (self.plotItem.viewRange()[0][0] + self.plotItem.viewRange()[0][1]) / 2
-                summary_text.setPos(x_center, pos)
+                base_x, base_y = x_center, pos
+                summary_text.setPos(base_x, base_y)
+                summary_text.setProperty('base_pos', (base_x, base_y))
+                # Apply stored offset if exists
+                if '__summary__' in marker['text_offsets']:
+                    offset = marker['text_offsets']['__summary__']
+                    summary_text.setPos(base_x + offset[0], base_y + offset[1])
                 self.plotItem.addItem(summary_text)
                 summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
                 marker['summary_text'] = summary_text
@@ -1096,7 +1319,7 @@ class ROARLookupWindow(QWidget):
             self.mpl_toolbar = NavigationToolbar(self.mpl_canvas, self)
             self.mpl_toolbar.setVisible(False)  # Hidden by default, shown with 3D plots
         except Exception as e:
-            print(f"Could not create matplotlib canvas: {e}")
+            debug_print(f"Could not create matplotlib canvas: {e}")
             self.mpl_canvas = None
             self.mpl_figure = None
             self.mpl_ax = None
@@ -1313,6 +1536,8 @@ class ROARLookupWindow(QWidget):
             else:
                 new_pos = np.log10(linear_pos) if y_log and linear_pos > 0 else linear_pos
             marker['line'].setPos(new_pos)
+            # Update the text labels for the line marker
+            self.plot_widget.update_marker_labels(marker, sync=False)
         for marker_info in self.plot_widget.markers:
             x, y = marker_info['pos']
             plot_x = np.log10(x) if x_log and x > 0 else x
@@ -1490,7 +1715,7 @@ class ROARLookupWindow(QWidget):
 
         except Exception as e:
             self._is_updating = False
-            print(f"Error restoring state: {e}")
+            debug_print(f"Error restoring state: {e}")
 
     def restore_markers(self, markers_data):
         """Restore markers from captured marker data"""
@@ -1513,7 +1738,7 @@ class ROARLookupWindow(QWidget):
                     self.plot_widget.add_horizontal_marker(linear_pos=marker_data['linear_pos'], sync=False)
 
         except Exception as e:
-            print(f"Error restoring markers: {e}")
+            debug_print(f"Error restoring markers: {e}")
 
     def restore_tech_browser_checks(self, checked_paths):
         """Restore the checked state of items in the tech browser"""
@@ -1578,7 +1803,7 @@ class ROARLookupWindow(QWidget):
             self.tech_browser.tree.blockSignals(False)
 
         except Exception as e:
-            print(f"Error restoring tech browser checks: {e}")
+            debug_print(f"Error restoring tech browser checks: {e}")
 
     def keyPressEvent(self, event):
         """Handle keyboard events for the lookup window"""
@@ -1727,12 +1952,48 @@ class ROARLookupWindow(QWidget):
 
             line_marker_positions = []
             for m in self.plot_widget.line_markers:
-                line_marker_positions.append({'vertical': m['vertical'], 'linear_pos': m['linear_pos'], 'selected': m['selected']})
+                # Save text offsets before markers are cleared
+                text_offsets = m.get('text_offsets', {}).copy()
+                # Also capture any current offsets from texts that haven't been saved yet
+                for i, text in enumerate(m.get('texts', [])):
+                    try:
+                        curve_idx = text.property('curve_idx')
+                        if curve_idx is None:
+                            curve_idx = i
+                        current_pos = text.pos()
+                        base_pos = text.property('base_pos')
+                        if base_pos is not None:
+                            offset_x = current_pos.x() - base_pos[0]
+                            offset_y = current_pos.y() - base_pos[1]
+                            if offset_x != 0 or offset_y != 0:
+                                text_offsets[curve_idx] = (offset_x, offset_y)
+                    except Exception:
+                        pass
+                # Save summary text offset
+                if 'summary_text' in m:
+                    try:
+                        summary = m['summary_text']
+                        current_pos = summary.pos()
+                        base_pos = summary.property('base_pos')
+                        if base_pos is not None:
+                            offset_x = current_pos.x() - base_pos[0]
+                            offset_y = current_pos.y() - base_pos[1]
+                            if offset_x != 0 or offset_y != 0:
+                                text_offsets['__summary__'] = (offset_x, offset_y)
+                    except Exception:
+                        pass
+                line_marker_positions.append({
+                    'vertical': m['vertical'],
+                    'linear_pos': m['linear_pos'],
+                    'selected': m['selected'],
+                    'text_offsets': text_offsets
+                })
 
             auto_fit = not self.plot_widget.plotItem.curves
 
             self.plot_widget.clear()
             self.plot_widget.markers.clear()
+            self.plot_widget.line_markers.clear()
 
             if not models_selected:
                 self.plot_widget.getPlotItem().setXRange(0, 1)
@@ -1791,9 +2052,9 @@ class ROARLookupWindow(QWidget):
                     if self.top_level_app and hasattr(self.top_level_app, 'editor_window'):
                         try:
                             device_corners = self.top_level_app.editor_window.get_device_corners()
-                            print(f"[DESIGN EQS] Device corners mapping: {device_corners}")
+                            debug_print(f"[DESIGN EQS] Device corners mapping: {device_corners}")
                         except Exception as e:
-                            print(f"[DESIGN EQS] Could not get device corners: {e}")
+                            debug_print(f"[DESIGN EQS] Could not get device corners: {e}")
 
                     # Collect all corner dataframes needed for this evaluation
                     # We need corners from: 1) current tech browser selection, 2) device-specific selections
@@ -1827,13 +2088,13 @@ class ROARLookupWindow(QWidget):
                                                 dev_cid_corner = self.tech_browser.tech_dict.get(dev_pdk, {}).get(dev_model, {}).get(dev_length, {}).get("corners", {}).get(dev_corner_name)
                                                 if dev_cid_corner:
                                                     corner_dfs_dict[corner_path] = dev_cid_corner.df
-                                                    print(f"[DESIGN EQS] Added corner '{corner_path}' for device {device_name}")
+                                                    debug_print(f"[DESIGN EQS] Added corner '{corner_path}' for device {device_name}")
                                                 else:
-                                                    print(f"[DESIGN EQS] Warning: Corner not found at path '{corner_path}' for device {device_name}")
+                                                    debug_print(f"[DESIGN EQS] Warning: Corner not found at path '{corner_path}' for device {device_name}")
                                             except Exception as e:
-                                                print(f"[DESIGN EQS] Error loading corner '{corner_path}': {e}")
+                                                debug_print(f"[DESIGN EQS] Error loading corner '{corner_path}': {e}")
 
-                    print(f"[DESIGN EQS] Using corners: {list(corner_dfs_dict.keys())}")
+                    debug_print(f"[DESIGN EQS] Using corners: {list(corner_dfs_dict.keys())}")
 
                     equation_solver = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
                     equation_solver.corners = [cid_corner.df]
@@ -1866,14 +2127,14 @@ class ROARLookupWindow(QWidget):
                     # Apply constraint filtering
                     constraint_mask = None
                     if constraints:
-                        print(f"[CONSTRAINT] Evaluating {len(constraints)} constraints")
+                        debug_print(f"[CONSTRAINT] Evaluating {len(constraints)} constraints")
                         # Evaluate all constraints
                         for constraint_name, constraint_expr in constraints.items():
                             try:
                                 # Add constraint equation to solver
                                 equation_solver.add_equation(constraint_name, constraint_expr)
                             except Exception as e:
-                                print(f"[CONSTRAINT] Error adding constraint '{constraint_name}': {e}")
+                                debug_print(f"[CONSTRAINT] Error adding constraint '{constraint_name}': {e}")
 
                         # Evaluate constraints
                         constraint_symbols = list(constraints.keys())
@@ -1898,11 +2159,11 @@ class ROARLookupWindow(QWidget):
                                                 if len(constraint_values) == len(constraint_mask):
                                                     constraint_mask &= (constraint_values != 0)
                                                 else:
-                                                    print(f"[CONSTRAINT] Warning: {constraint_name} shape mismatch: {len(constraint_values)} vs {len(constraint_mask)}")
+                                                    debug_print(f"[CONSTRAINT] Warning: {constraint_name} shape mismatch: {len(constraint_values)} vs {len(constraint_mask)}")
 
                                             points_passing = np.sum(constraint_mask)
                                             total_points = len(constraint_mask)
-                                            print(f"[CONSTRAINT] {constraint_name}: {points_passing}/{total_points} points pass")
+                                            debug_print(f"[CONSTRAINT] {constraint_name}: {points_passing}/{total_points} points pass")
 
                                     # Filter result_matrix based on constraint_mask
                                     points_before = len(result_matrix[param1])
@@ -1912,13 +2173,13 @@ class ROARLookupWindow(QWidget):
                                             result_matrix[key] = val[constraint_mask]
 
                                     points_after = len(result_matrix[param1])
-                                    print(f"[CONSTRAINT] Filtered {points_before - points_after} points, {points_after} remaining")
+                                    debug_print(f"[CONSTRAINT] Filtered {points_before - points_after} points, {points_after} remaining")
 
                                     if points_after == 0:
-                                        print(f"[CONSTRAINT] No points meet all constraints - skipping plot")
+                                        debug_print(f"[CONSTRAINT] No points meet all constraints - skipping plot")
                                         continue
                             except Exception as e:
-                                print(f"[CONSTRAINT] Error evaluating constraints: {e}")
+                                debug_print(f"[CONSTRAINT] Error evaluating constraints: {e}")
                                 import traceback
                                 traceback.print_exc()
 
@@ -2002,11 +2263,11 @@ class ROARLookupWindow(QWidget):
                                     if len(unique_x) > max_grid_resolution:
                                         # Use linspace to get evenly distributed points
                                         unique_x = np.linspace(unique_x[0], unique_x[-1], max_grid_resolution)
-                                        print(f"[PERFORMANCE] Downsampled X from {len(np.unique(x_data))} to {max_grid_resolution} points")
+                                        debug_print(f"[PERFORMANCE] Downsampled X from {len(np.unique(x_data))} to {max_grid_resolution} points")
 
                                     if len(unique_y) > max_grid_resolution:
                                         unique_y = np.linspace(unique_y[0], unique_y[-1], max_grid_resolution)
-                                        print(f"[PERFORMANCE] Downsampled Y from {len(np.unique(y_data))} to {max_grid_resolution} points")
+                                        debug_print(f"[PERFORMANCE] Downsampled Y from {len(np.unique(y_data))} to {max_grid_resolution} points")
 
                                     # Decide between surface and scatter plot
                                     # For surface: need enough unique values and Z must be a function of X and Y
@@ -2043,7 +2304,7 @@ class ROARLookupWindow(QWidget):
                                                     if ':' in eq_str:
                                                         # Extract the lookup variable (before ':')
                                                         base_name = eq_str.split(':')[0].strip()
-                                                        print(f"[DEBUG] {param_name} is equation '{eq_str}' -> using base column '{base_name}'")
+                                                        debug_print(f"[DEBUG] {param_name} is equation '{eq_str}' -> using base column '{base_name}'")
                                                         return base_name
                                                 # Not an equation or not a lookup, use as-is
                                                 return param_name
@@ -2063,13 +2324,13 @@ class ROARLookupWindow(QWidget):
                                             if col2 != param2:
                                                 temp_df[param2] = y_flat
 
-                                            print(f"\n[DEBUG] Creating meshgrid for surface plot")
-                                            print(f"  param1 ({param1}): {len(unique_x)} unique values")
-                                            print(f"  param2 ({param2}): {len(unique_y)} unique values")
-                                            print(f"  Grid size: {X_grid.shape}")
-                                            print(f"  Total points: {len(x_flat)}")
-                                            print(f"  param1 range: {np.min(x_flat)} to {np.max(x_flat)}")
-                                            print(f"  param2 range: {np.min(y_flat)} to {np.max(y_flat)}")
+                                            debug_print(f"\n[DEBUG] Creating meshgrid for surface plot")
+                                            debug_print(f"  param1 ({param1}): {len(unique_x)} unique values")
+                                            debug_print(f"  param2 ({param2}): {len(unique_y)} unique values")
+                                            debug_print(f"  Grid size: {X_grid.shape}")
+                                            debug_print(f"  Total points: {len(x_flat)}")
+                                            debug_print(f"  param1 range: {np.min(x_flat)} to {np.max(x_flat)}")
+                                            debug_print(f"  param2 range: {np.min(y_flat)} to {np.max(y_flat)}")
 
                                             # Copy ALL other columns from original corner
                                             # This ensures any variables referenced by param3 equation are available
@@ -2091,14 +2352,14 @@ class ROARLookupWindow(QWidget):
                                                     # Use the first value as representative for other variables
                                                     temp_df[col] = cid_corner.df[col].iloc[0]
 
-                                            print(f"  Preserved columns from overwrite: {columns_to_preserve}")
+                                            debug_print(f"  Preserved columns from overwrite: {columns_to_preserve}")
 
-                                            print(f"  temp_df columns: {list(temp_df.columns)}")
-                                            print(f"  temp_df shape: {temp_df.shape}")
-                                            print(f"  {param1} in temp_df: {param1 in temp_df.columns}")
-                                            print(f"  {param2} in temp_df: {param2 in temp_df.columns}")
-                                            print(f"  {param1} unique values in temp_df: {len(temp_df[param1].unique())}")
-                                            print(f"  {param2} unique values in temp_df: {len(temp_df[param2].unique())}")
+                                            debug_print(f"  temp_df columns: {list(temp_df.columns)}")
+                                            debug_print(f"  temp_df shape: {temp_df.shape}")
+                                            debug_print(f"  {param1} in temp_df: {param1 in temp_df.columns}")
+                                            debug_print(f"  {param2} in temp_df: {param2 in temp_df.columns}")
+                                            debug_print(f"  {param1} unique values in temp_df: {len(temp_df[param1].unique())}")
+                                            debug_print(f"  {param2} unique values in temp_df: {len(temp_df[param2].unique())}")
 
                                             # Create a FRESH equation solver for meshgrid evaluation
                                             # This avoids reusing cached results from the original dataframe
@@ -2113,7 +2374,7 @@ class ROARLookupWindow(QWidget):
                                                     try:
                                                         equation_solver_3d.add_equation(constraint_name, constraint_expr)
                                                     except Exception as e:
-                                                        print(f"[CONSTRAINT 3D] Error adding constraint '{constraint_name}': {e}")
+                                                        debug_print(f"[CONSTRAINT 3D] Error adding constraint '{constraint_name}': {e}")
 
                                             # Now evaluate Z using this grid with the fresh solver
                                             symbols_to_evaluate = [param3]
@@ -2132,7 +2393,7 @@ class ROARLookupWindow(QWidget):
                                                 # Use NaN masking to maintain surface structure with holes
                                                 constraint_mask_3d = None
                                                 if constraints:
-                                                    print(f"[CONSTRAINT 3D] Evaluating {len(constraints)} constraints on meshgrid")
+                                                    debug_print(f"[CONSTRAINT 3D] Evaluating {len(constraints)} constraints on meshgrid")
                                                     constraint_mask_3d = np.ones(len(z_data), dtype=bool)
 
                                                     for constraint_name in constraints.keys():
@@ -2147,7 +2408,7 @@ class ROARLookupWindow(QWidget):
 
                                                             points_passing = np.sum(constraint_mask_3d)
                                                             total_points = len(constraint_mask_3d)
-                                                            print(f"[CONSTRAINT 3D] {constraint_name}: {points_passing}/{total_points} points pass")
+                                                            debug_print(f"[CONSTRAINT 3D] {constraint_name}: {points_passing}/{total_points} points pass")
 
                                                     # Set invalid points to NaN instead of removing them
                                                     # This preserves the grid structure for surface plotting
@@ -2156,28 +2417,28 @@ class ROARLookupWindow(QWidget):
                                                     z_data = z_data.astype(float)  # Ensure float type for NaN
                                                     z_data[~constraint_mask_3d] = np.nan  # Set failed points to NaN
 
-                                                    print(f"[CONSTRAINT 3D] Set {points_before - points_passing} points to NaN, {points_passing} remain valid")
+                                                    debug_print(f"[CONSTRAINT 3D] Set {points_before - points_passing} points to NaN, {points_passing} remain valid")
 
                                                     if points_passing == 0:
-                                                        print(f"[CONSTRAINT 3D] No points meet all constraints - skipping 3D plot")
+                                                        debug_print(f"[CONSTRAINT 3D] No points meet all constraints - skipping 3D plot")
                                                         results_3d = None
                                                         continue
 
-                                                print(f"\n[DEBUG] Z evaluation results:")
-                                                print(f"  param3 ({param3}) shape: {z_data.shape}")
+                                                debug_print(f"\n[DEBUG] Z evaluation results:")
+                                                debug_print(f"  param3 ({param3}) shape: {z_data.shape}")
                                                 # Calculate range ignoring NaN values
                                                 valid_z = z_data[~np.isnan(z_data)]
                                                 if len(valid_z) > 0:
-                                                    print(f"  Z range: {np.min(valid_z)} to {np.max(valid_z)}")
-                                                    print(f"  Z unique values: {len(np.unique(valid_z))}")
+                                                    debug_print(f"  Z range: {np.min(valid_z)} to {np.max(valid_z)}")
+                                                    debug_print(f"  Z unique values: {len(np.unique(valid_z))}")
                                                 else:
-                                                    print(f"  Z range: all NaN")
+                                                    debug_print(f"  Z range: all NaN")
                                                 if len(np.unique(valid_z)) == 1:
-                                                    print(f"  ⚠ WARNING: Z has only ONE unique value (flat plane)!")
-                                                print(f"  First 5 Z values: {z_data[:5]}")
-                                                print(f"  Last 5 Z values: {z_data[-5:]}")
+                                                    debug_print(f"  ⚠ WARNING: Z has only ONE unique value (flat plane)!")
+                                                debug_print(f"  First 5 Z values: {z_data[:5]}")
+                                                debug_print(f"  Last 5 Z values: {z_data[-5:]}")
                                                 if constraint_mask_3d is not None:
-                                                    print(f"  NaN count: {np.sum(np.isnan(z_data))}")
+                                                    debug_print(f"  NaN count: {np.sum(np.isnan(z_data))}")
 
                                                 # Reshape Z to match the meshgrid
                                                 try:
@@ -2185,14 +2446,14 @@ class ROARLookupWindow(QWidget):
                                                     Z_grid = z_data.reshape(X_grid.shape)
                                                     results_3d = (X_grid, Y_grid, Z_grid, 'surface')
                                                     if constraint_mask_3d is not None:
-                                                        print(f"  ✓ Created surface plot with NaN holes: {X_grid.shape} grid ({np.sum(~np.isnan(z_data))} valid points)")
+                                                        debug_print(f"  ✓ Created surface plot with NaN holes: {X_grid.shape} grid ({np.sum(~np.isnan(z_data))} valid points)")
                                                     else:
-                                                        print(f"  ✓ Created surface plot: {X_grid.shape} grid")
-                                                    print(f"  Z grid corner values:")
-                                                    print(f"    Z[0,0]={Z_grid[0,0]}, Z[0,-1]={Z_grid[0,-1]}")
-                                                    print(f"    Z[-1,0]={Z_grid[-1,0]}, Z[-1,-1]={Z_grid[-1,-1]}")
+                                                        debug_print(f"  ✓ Created surface plot: {X_grid.shape} grid")
+                                                    debug_print(f"  Z grid corner values:")
+                                                    debug_print(f"    Z[0,0]={Z_grid[0,0]}, Z[0,-1]={Z_grid[0,-1]}")
+                                                    debug_print(f"    Z[-1,0]={Z_grid[-1,0]}, Z[-1,-1]={Z_grid[-1,-1]}")
                                                 except Exception as e:
-                                                    print(f"Reshape failed: {e}, falling back to scatter")
+                                                    debug_print(f"Reshape failed: {e}, falling back to scatter")
                                                     # Fall back to scatter (filter out NaN for scatter)
                                                     if constraint_mask_3d is not None:
                                                         valid_mask = ~np.isnan(z_data)
@@ -2205,7 +2466,7 @@ class ROARLookupWindow(QWidget):
                                             else:
                                                 results_3d = None
                                         except Exception as e:
-                                            print(f"Grid evaluation failed: {e}")
+                                            debug_print(f"Grid evaluation failed: {e}")
                                             import traceback
                                             traceback.print_exc()
                                             # Fall back to scatter plot with original data
@@ -2233,7 +2494,7 @@ class ROARLookupWindow(QWidget):
                                     results_3d = None
 
                             except Exception as e:
-                                print(f"3D data preparation error: {e}")
+                                debug_print(f"3D data preparation error: {e}")
                                 import traceback
                                 traceback.print_exc()
                                 results_3d = None
@@ -2337,7 +2598,7 @@ class ROARLookupWindow(QWidget):
                                         corner_index = models_selected.index(model) if model in models_selected else 0
                                         mpl_color = color_list[corner_index % len(color_list)]
 
-                                    print(f"[COLOR DEBUG] Corner: {corner}, Color: {mpl_color}")
+                                    debug_print(f"[COLOR DEBUG] Corner: {corner}, Color: {mpl_color}")
 
                                     # Plot based on plot type
                                     if plot_type == 'surface':
@@ -2491,20 +2752,20 @@ class ROARLookupWindow(QWidget):
                                     # Refresh the canvas
                                     self.mpl_canvas.draw()
 
-                                    # Print axis value ranges to console for reference
-                                    print(f"\n3D Plot Axis Ranges ({plot_type}):")
-                                    print(f"  X ({param1}): {format_eng(np.min(p1))} to {format_eng(np.max(p1))}")
-                                    print(f"  Y ({param2}): {format_eng(np.min(p2))} to {format_eng(np.max(p2))}")
-                                    print(f"  Z ({param3}): {format_eng(np.min(p3))} to {format_eng(np.max(p3))}")
+                                    # Print axis value ranges to console for reference (debug only)
+                                    debug_print(f"\n3D Plot Axis Ranges ({plot_type}):")
+                                    debug_print(f"  X ({param1}): {format_eng(np.min(p1))} to {format_eng(np.max(p1))}")
+                                    debug_print(f"  Y ({param2}): {format_eng(np.min(p2))} to {format_eng(np.max(p2))}")
+                                    debug_print(f"  Z ({param3}): {format_eng(np.min(p3))} to {format_eng(np.max(p3))}")
                                     if plot_type == 'surface':
-                                        print(f"  Grid shape: {p1.shape}")
+                                        debug_print(f"  Grid shape: {p1.shape}")
                                     else:
-                                        print(f"  Total points: {len(p1) if hasattr(p1, '__len__') else p1.size}")
-                                    print()
+                                        debug_print(f"  Total points: {len(p1) if hasattr(p1, '__len__') else p1.size}")
+                                    debug_print()
 
                                 except Exception as e:
                                     msg = f"3D plotting error: {e}"
-                                    print(msg)
+                                    debug_print(msg)
                                     import traceback
                                     traceback.print_exc()
                                     try:
@@ -2575,18 +2836,20 @@ class ROARLookupWindow(QWidget):
                 vertical = lm['vertical']
                 linear_pos = lm['linear_pos']
                 selected = lm['selected']
+                text_offsets = lm.get('text_offsets', {})
                 axis = 'bottom' if vertical else 'left'
                 log_mode = self.plot_widget.getPlotItem().getAxis(axis).logMode
                 view_pos = np.log10(linear_pos) if log_mode and linear_pos > 0 else linear_pos
                 line = pg.InfiniteLine(angle=90 if vertical else 0, movable=True, pen=pg.mkPen('gray', style=Qt.PenStyle.DashLine), hoverPen=pg.mkPen('gray', style=Qt.PenStyle.DashLine, width=4), pos=view_pos)
                 self.plot_widget.plotItem.addItem(line)
-                marker = {'line': line, 'vertical': vertical, 'texts': [], 'selected': selected, 'linear_pos': linear_pos}
-                self.line_markers.append(marker)
-                line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker))
-                line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
-                self.update_marker_labels(marker)
+                marker = {'line': line, 'vertical': vertical, 'texts': [], 'selected': selected, 'linear_pos': linear_pos, 'text_offsets': text_offsets}
+                self.plot_widget.line_markers.append(marker)
+                # Use closure to capture marker, ignore any signal arguments with *args
+                line.sigPositionChanged.connect(lambda *args, m=marker: self.plot_widget.update_marker_labels(m))
+                line.mouseReleaseEvent = lambda event, m=marker: self.plot_widget.select_marker(m)
+                self.plot_widget.update_marker_labels(marker)
                 if selected:
-                    self.select_marker(marker)
+                    self.plot_widget.select_marker(marker)
         finally:
             self._is_updating = False
         return 0
