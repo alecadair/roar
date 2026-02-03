@@ -86,11 +86,18 @@ class EngSpinBox(QDoubleSpinBox):
 
 
 class ROARPlotWidget(pg.PlotWidget):
+    # Percent calculation modes
+    PERCENT_CHANGE = "percent_change"  # Traditional: (max - min) / min * 100
+    SYMMETRIC_PERCENT = "symmetric_percent"  # Symmetric: 200 * (max - min) / (max + min)
+
     def __init__(self, *args, top_level_app=None, parent_lookup_window=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.top_level_app = top_level_app
         self.parent_lookup_window = parent_lookup_window
         self._mouse_inside = False
+
+        # Percent calculation mode (default to percent change)
+        self.percent_mode = self.PERCENT_CHANGE
 
         # Add timer for debouncing marker label updates during dragging
         self._marker_update_timer = None
@@ -124,6 +131,64 @@ class ROARPlotWidget(pg.PlotWidget):
             self.plotItem.scene().itemChanged.connect(self.on_item_changed)
         except Exception:
             pass
+
+        # Setup percent calculation menu
+        self._setup_percent_menu()
+
+    def _setup_percent_menu(self):
+        """Add percent calculation mode options to the plot's context menu"""
+        try:
+            from PyQt6.QtWidgets import QMenu, QActionGroup
+            from PyQt6.QtGui import QAction
+
+            # Create our percent calculation menu
+            self._percent_menu = QMenu("Percent Calculation")
+
+            # Create action group for exclusive selection
+            action_group = QActionGroup(self._percent_menu)
+            action_group.setExclusive(True)
+
+            # Traditional Percent Change option (default, listed first)
+            traditional_action = QAction("Percent Change", self._percent_menu, checkable=True)
+            traditional_action.setChecked(self.percent_mode == self.PERCENT_CHANGE)
+            traditional_action.triggered.connect(lambda: self._set_percent_mode(self.PERCENT_CHANGE))
+            action_group.addAction(traditional_action)
+            self._percent_menu.addAction(traditional_action)
+
+            # Symmetric Percent Change option
+            symmetric_action = QAction("Symmetric Percent Change", self._percent_menu, checkable=True)
+            symmetric_action.setChecked(self.percent_mode == self.SYMMETRIC_PERCENT)
+            symmetric_action.triggered.connect(lambda: self._set_percent_mode(self.SYMMETRIC_PERCENT))
+            action_group.addAction(symmetric_action)
+            self._percent_menu.addAction(symmetric_action)
+
+            # Store references to update checked state
+            self._percent_menu_actions = {
+                self.SYMMETRIC_PERCENT: symmetric_action,
+                self.PERCENT_CHANGE: traditional_action
+            }
+
+            # Add our menu to the ViewBox's context menu
+            vb = self.plotItem.vb
+            if vb.menu is not None:
+                vb.menu.addSeparator()
+                vb.menu.addMenu(self._percent_menu)
+            else:
+                # If menu doesn't exist yet, store for later addition
+                self._pending_percent_menu = True
+        except Exception as e:
+            debug_print(f"[DEBUG] Could not setup percent menu: {e}")
+
+    def _set_percent_mode(self, mode):
+        """Set the percent calculation mode and update marker labels"""
+        self.percent_mode = mode
+        # Update checked state in menu
+        if hasattr(self, '_percent_menu_actions'):
+            for m, action in self._percent_menu_actions.items():
+                action.setChecked(m == mode)
+        # Update all marker labels to reflect new calculation
+        for marker in self.line_markers:
+            self.update_marker_labels(marker, sync=False)
 
     def on_state_changed(self, _):
         if self.parent_lookup_window:
@@ -650,41 +715,87 @@ class ROARPlotWidget(pg.PlotWidget):
                 text.setFlags(text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
                 marker['texts'].append(text)
 
+        # Helper function to calculate percent based on mode
+        def calc_percent(min_val, max_val, mode):
+            if mode == self.PERCENT_CHANGE:
+                # Traditional percent change: (max - min) / min * 100
+                if min_val != 0:
+                    return 100 * (max_val - min_val) / abs(min_val)
+                return 0
+            else:
+                # Symmetric percent change: 200 * (max - min) / (max + min)
+                if (max_val + min_val) != 0:
+                    return 200 * (max_val - min_val) / (max_val + min_val)
+                return 0
+
+        # Helper to convert pixels to data coordinates offset
+        def pixels_to_data_offset(pixels_x, pixels_y):
+            """Convert pixel offset to data coordinate offset"""
+            vb = self.plotItem.vb
+            # Get the view range
+            view_range = vb.viewRange()
+            # Get the view rect in pixels
+            view_rect = vb.screenGeometry()
+            if view_rect.width() > 0 and view_rect.height() > 0:
+                # Calculate data units per pixel
+                data_per_pixel_x = (view_range[0][1] - view_range[0][0]) / view_rect.width()
+                data_per_pixel_y = (view_range[1][1] - view_range[1][0]) / view_rect.height()
+                return pixels_x * data_per_pixel_x, pixels_y * data_per_pixel_y
+            return 0, 0
+
         # Add summary text for single marker
         if vertical and y_values:
             min_y = min(y_values)
             max_y = max(y_values)
-            if (max_y + min_y) != 0:
-                percent = 200 * (max_y - min_y) / (max_y + min_y)
-                summary_text = pg.TextItem(f"ΔY: {percent:.1f}%", anchor=(0.5, 0.5))
-                y_center = (self.plotItem.viewRange()[1][0] + self.plotItem.viewRange()[1][1]) / 2
-                base_x, base_y = pos, y_center
-                summary_text.setPos(base_x, base_y)
-                summary_text.setProperty('base_pos', (base_x, base_y))
-                # Apply stored offset if exists
-                if '__summary__' in marker['text_offsets']:
-                    offset = marker['text_offsets']['__summary__']
-                    summary_text.setPos(base_x + offset[0], base_y + offset[1])
-                self.plotItem.addItem(summary_text)
-                summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
-                marker['summary_text'] = summary_text
+            percent = calc_percent(min_y, max_y, self.percent_mode)
+            label = f"ΔY: {percent:.1f}%"
+            summary_text = pg.TextItem(label, anchor=(0.5, 1.0))  # anchor at bottom so text appears above the point
+
+            # Find the highest y position among the visible texts (in plot coordinates)
+            max_text_y = pos  # Default to marker position
+            for text in visible_texts:
+                text_y = text.pos().y()
+                if text_y > max_text_y:
+                    max_text_y = text_y
+
+            # Position about 50 pixels above the highest text
+            _, y_offset = pixels_to_data_offset(0, 50)
+            base_x, base_y = pos, max_text_y + abs(y_offset)  # Add offset (positive because y increases upward in data coords)
+            summary_text.setPos(base_x, base_y)
+            summary_text.setProperty('base_pos', (base_x, base_y))
+            # Apply stored offset if exists
+            if '__summary__' in marker['text_offsets']:
+                offset = marker['text_offsets']['__summary__']
+                summary_text.setPos(base_x + offset[0], base_y + offset[1])
+            self.plotItem.addItem(summary_text)
+            summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+            marker['summary_text'] = summary_text
         elif not vertical and x_values:
             min_x = min(x_values)
             max_x = max(x_values)
-            if (max_x + min_x) != 0:
-                percent = 100 * (max_x - min_x) / ((max_x + min_x)/2)
-                summary_text = pg.TextItem(f"ΔX: {percent:.1f}%", anchor=(0.5, 0.5))
-                x_center = (self.plotItem.viewRange()[0][0] + self.plotItem.viewRange()[0][1]) / 2
-                base_x, base_y = x_center, pos
-                summary_text.setPos(base_x, base_y)
-                summary_text.setProperty('base_pos', (base_x, base_y))
-                # Apply stored offset if exists
-                if '__summary__' in marker['text_offsets']:
-                    offset = marker['text_offsets']['__summary__']
-                    summary_text.setPos(base_x + offset[0], base_y + offset[1])
-                self.plotItem.addItem(summary_text)
-                summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
-                marker['summary_text'] = summary_text
+            percent = calc_percent(min_x, max_x, self.percent_mode)
+            label = f"ΔX: {percent:.1f}%"
+            summary_text = pg.TextItem(label, anchor=(0.0, 0.5))  # anchor at left so text appears to the right
+
+            # Find the rightmost x position among the visible texts (in plot coordinates)
+            max_text_x = pos  # Default to marker position
+            for text in visible_texts:
+                text_x = text.pos().x()
+                if text_x > max_text_x:
+                    max_text_x = text_x
+
+            # Position about 50 pixels to the right of the rightmost text
+            x_offset, _ = pixels_to_data_offset(50, 0)
+            base_x, base_y = max_text_x + abs(x_offset), pos
+            summary_text.setPos(base_x, base_y)
+            summary_text.setProperty('base_pos', (base_x, base_y))
+            # Apply stored offset if exists
+            if '__summary__' in marker['text_offsets']:
+                offset = marker['text_offsets']['__summary__']
+                summary_text.setPos(base_x + offset[0], base_y + offset[1])
+            self.plotItem.addItem(summary_text)
+            summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+            marker['summary_text'] = summary_text
 
         # Synchronize marker position with attached plots (only if sync=True)
         if sync:
@@ -1536,6 +1647,10 @@ class ROARLookupWindow(QWidget):
             else:
                 new_pos = np.log10(linear_pos) if y_log and linear_pos > 0 else linear_pos
             marker['line'].setPos(new_pos)
+            # Clear summary text offset when scale changes - offsets from old coordinate system
+            # don't translate properly to new coordinate system
+            if 'text_offsets' in marker and '__summary__' in marker['text_offsets']:
+                del marker['text_offsets']['__summary__']
             # Update the text labels for the line marker
             self.plot_widget.update_marker_labels(marker, sync=False)
         for marker_info in self.plot_widget.markers:
