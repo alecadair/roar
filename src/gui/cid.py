@@ -15,6 +15,11 @@ plt.rcParams['svg.fonttype'] = 'none'
 import pandas as pd
 import math
 
+# Debug printing - controlled by environment variable ROAR_DEBUG
+def debug_print(*args, **kwargs):
+    if os.environ.get('ROAR_DEBUG', '').lower() in ('1', 'true', 'yes'):
+        print(*args, **kwargs)
+
 class CID:
 
     def __init__(self):
@@ -603,19 +608,19 @@ class CIDCorner():
 
     def get_bucket_for_param(self, fet_type, l, ids_target):
         closest_l = self.get_bucket_for_length(fet_type=fet_type, target_l=l)
-        print("TODO")
+        debug_print("[CID] get_bucket_for_param not implemented")
 
 
     def lookup2(self):
-        print("TODO")
+        debug_print("[CID] lookup2 not implemented")
 
 
     def lookup3(self, param1, param2, fet_type, l, norm_type="",):
-        print("TODO")
+        debug_print("[CID] lookup3 not implemented")
 
 
     def bucket_lookup_val(self, param, val):
-        print("TODO")
+        debug_print("[CID] bucket_lookup_val not implemented")
 
 
     def lookup(self, param1, param2, param1_val):
@@ -840,7 +845,7 @@ class CIDCorner():
                 lines.append(params1)
                 lines.append(params2)
             else:
-                print("TODO")
+                debug_print("[CID] 3D plotting not implemented in this function")
         if(color_index == color_list_length - 1):
             color_index = 0
         else:

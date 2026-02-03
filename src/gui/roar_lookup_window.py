@@ -1532,6 +1532,11 @@ class ROARLookupWindow(QWidget):
     def update_combobox_items(self):
         is_device_params = self.radio_device_params.isChecked()
 
+        # Save current selections before clearing
+        current_x = self.combo_x.currentText()
+        current_y = self.combo_y.currentText()
+        current_z = self.combo_z.currentText()
+
         # Update visibility of Z-axis and 3D controls
         self.label_z.setVisible(not is_device_params)
         self.combo_z.setVisible(not is_device_params)
@@ -1550,9 +1555,20 @@ class ROARLookupWindow(QWidget):
             self.combo_x.addItems(items)
             self.combo_y.addItems(items)
             self.combo_z.addItems(items)
-            self.combo_x.setCurrentText("kgm")
-            self.combo_y.setCurrentText("kcgs")
-            self.combo_z.setCurrentText("iden")
+
+            # Restore previous selections if they exist, otherwise use defaults
+            if current_x in items:
+                self.combo_x.setCurrentText(current_x)
+            else:
+                self.combo_x.setCurrentText("kgm")
+            if current_y in items:
+                self.combo_y.setCurrentText(current_y)
+            else:
+                self.combo_y.setCurrentText("kcgs")
+            if current_z in items:
+                self.combo_z.setCurrentText(current_z)
+            else:
+                self.combo_z.setCurrentText("iden")
         else:
             items = list(self.expression_symbols) if self.expression_symbols else []
             self.combo_x.clear()
@@ -1562,9 +1578,18 @@ class ROARLookupWindow(QWidget):
             self.combo_y.addItems(items)
             self.combo_z.addItems(items)
 
-            if items:
+            # Restore previous selections if they exist, otherwise use defaults
+            if current_x in items:
+                self.combo_x.setCurrentText(current_x)
+            elif items:
                 self.combo_x.setCurrentIndex(0)
+            if current_y in items:
+                self.combo_y.setCurrentText(current_y)
+            elif items:
                 self.combo_y.setCurrentIndex(min(1, len(items) - 1))
+            if current_z in items:
+                self.combo_z.setCurrentText(current_z)
+            elif items:
                 self.combo_z.setCurrentIndex(min(2, len(items) - 1))
 
         try:
@@ -1668,10 +1693,20 @@ class ROARLookupWindow(QWidget):
         self.checkbox_logy.setChecked(y_log)
 
     def update_log_scale(self):
-        self.plot_widget.getPlotItem().setLogMode(x=self.checkbox_logx.isChecked(), y=self.checkbox_logy.isChecked())
-        # Reposition markers after log scale change
         x_log = self.checkbox_logx.isChecked()
         y_log = self.checkbox_logy.isChecked()
+
+        # Set log mode
+        self.plot_widget.getPlotItem().setLogMode(x=x_log, y=y_log)
+
+        # Force autorange to recalculate axis ranges with the new log mode
+        # This fixes the issue where Y-axis exponents become extremely small
+        try:
+            self.plot_widget.plotItem.autoRange()
+        except Exception:
+            pass
+
+        # Reposition markers after log scale change
         for marker in self.plot_widget.line_markers:
             linear_pos = marker['linear_pos']
             if marker['vertical']:
@@ -2176,7 +2211,7 @@ class ROARLookupWindow(QWidget):
                 corner = model_tokens[4]
                 cid_corner = self.tech_browser.tech_dict[pdk][model_name][length]["corners"][corner]
                 if equation_eval != None:
-                    print("TODO")
+                    debug_print(f"[GRAPH] Equation eval mode for {model}")
                     continue
 
                 param1 = self.combo_x.currentText()
@@ -2970,8 +3005,32 @@ class ROARLookupWindow(QWidget):
                 new_plot = False
                 self.plot_widget.showGrid(x=True, y=True)
 
-            # Always autorange after plotting
-            self.plot_widget.plotItem.autoRange()
+            # Fix for Y-axis log scale showing wrong exponents in Design Equations mode
+            # When log mode is active, we need to force a proper recalculation of axis ranges
+            # by temporarily disabling log mode, setting autorange, then re-enabling
+            try:
+                x_log = self.checkbox_logx.isChecked()
+                y_log = self.checkbox_logy.isChecked()
+
+                if x_log or y_log:
+                    # Temporarily disable log mode to get proper range calculation
+                    self.plot_widget.getPlotItem().setLogMode(x=False, y=False)
+
+                    # Force autorange with log mode disabled
+                    self.plot_widget.plotItem.autoRange()
+
+                    # Re-enable log mode - this will now use the correct data ranges
+                    self.plot_widget.getPlotItem().setLogMode(x=x_log, y=y_log)
+
+                    # Force another autorange after log mode is set
+                    self.plot_widget.plotItem.autoRange()
+                else:
+                    # Normal autorange when not in log mode
+                    self.plot_widget.plotItem.autoRange()
+            except Exception as e:
+                debug_print(f"[LOG SCALE FIX] Error during axis range reset: {e}")
+                # Fallback to simple autorange
+                self.plot_widget.plotItem.autoRange()
 
             for marker_info in marker_positions:
                 x, y = marker_info['pos']
