@@ -110,8 +110,44 @@ sky130_luts = ROAR_CHARACTERIZATION + "/sky130/LUTs_SKY130"
 predictive_28 = ROAR_CHARACTERIZATION + "/predictive_28/LUTs_1V8_mac"
 ihp130_luts = ROAR_CHARACTERIZATION + "/ihp130/LUTs_IHP130"
 
-DEBUG = False
-DEBUG_DESIGN = True
+# =============================================================================
+# DEBUG MODE CONFIGURATION
+# =============================================================================
+# Set ROAR_DEBUG=1 environment variable or pass --debug command line flag to enable
+# Debug mode can also be enabled programmatically by setting ROAR_DEBUG_MODE = True
+# before importing other modules that use debug_print()
+
+# Check environment variable and command line for debug flag
+ROAR_DEBUG_MODE = os.environ.get("ROAR_DEBUG", "0").lower() in ("1", "true", "yes", "on")
+if "--debug" in sys.argv:
+    ROAR_DEBUG_MODE = True
+    sys.argv.remove("--debug")  # Remove so Qt doesn't see it
+
+def debug_print(*args, **kwargs):
+    """Print debug messages only when ROAR_DEBUG_MODE is enabled.
+
+    Usage: debug_print("[CATEGORY] message", ...)
+
+    Enable debug mode by:
+    - Setting environment variable: ROAR_DEBUG=1
+    - Running with --debug flag: python roar_gui.py --debug
+    - Setting ROAR_DEBUG_MODE = True in code
+    """
+    if ROAR_DEBUG_MODE:
+        print(*args, **kwargs)
+
+def set_debug_mode(enabled: bool):
+    """Programmatically enable or disable debug mode."""
+    global ROAR_DEBUG_MODE
+    ROAR_DEBUG_MODE = enabled
+
+def is_debug_mode() -> bool:
+    """Check if debug mode is currently enabled."""
+    return ROAR_DEBUG_MODE
+
+# Legacy flags - kept for backward compatibility but now tied to ROAR_DEBUG_MODE
+DEBUG = ROAR_DEBUG_MODE
+DEBUG_DESIGN = ROAR_DEBUG_MODE
 
 def format_eng(num):
     if num == 0:
