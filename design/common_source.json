@@ -20,12 +20,6 @@
         },
         {
             "Symbol": "bw",
-            "Expression": "wu/av_total",
-            "disabled": true,
-            "plot": false
-        },
-        {
-            "Symbol": "bw",
             "Expression": "1/(rload*cout)",
             "disabled": false,
             "plot": false

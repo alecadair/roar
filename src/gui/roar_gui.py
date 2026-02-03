@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 import numpy as np
 #import pyqtgraph.opengl as gl
@@ -319,6 +320,12 @@ class ROARTechBrowser(QWidget):
 
     def select_item(self, item, column):
         if self.lookup_window is not None:
+            # Check if app is in restore mode
+            if self.top_level_app is not None and getattr(self.top_level_app, '_is_restoring_state', False):
+                return
+            # Check if lookup window is in updating mode
+            if getattr(self.lookup_window, '_is_updating', False):
+                return
             self.lookup_window.update_graph_from_tech_browser()
 
     def handle_item_changed(self, item, column):
@@ -328,7 +335,14 @@ class ROARTechBrowser(QWidget):
         if self.startup == True:
             # self.startup = False
             return 0
-        self.lookup_window.update_graph_from_tech_browser()
+        # Check if app is in restore mode
+        if self.top_level_app is not None and getattr(self.top_level_app, '_is_restoring_state', False):
+            return 0
+        # Check if lookup window is in updating mode (e.g., during state restore)
+        if self.lookup_window is not None and getattr(self.lookup_window, '_is_updating', False):
+            return 0
+        if self.lookup_window is not None:
+            self.lookup_window.update_graph_from_tech_browser()
 
 
     def set_graphing_widget(self, graphing_widget):
@@ -648,6 +662,9 @@ class ROARApp(QMainWindow):
         # Initialize plot log state tracking
         self._plot_log_state = {}
 
+        # Flag to prevent updates during state restore
+        self._is_restoring_state = False
+
         # Window properties
         self.setWindowTitle("ROAR - Robust Optimal Analog Reuse")
         self.setGeometry(100, 100, 1200, 800)
@@ -877,18 +894,32 @@ class ROARApp(QMainWindow):
         new_action = QAction("New", self)
         new_action.triggered.connect(self.new_file)
 
-        open_action = QAction("Open", self)
-        open_action.triggered.connect(self.open_file)
+        # App state save/load
+        open_app_state_action = QAction("Open App State...", self)
+        open_app_state_action.setShortcut(QKeySequence("Ctrl+O"))
+        open_app_state_action.triggered.connect(self.open_app_state)
 
-        save_action = QAction("Save", self)
-        save_action.triggered.connect(self.save_file)
+        save_app_state_action = QAction("Save App State...", self)
+        save_app_state_action.setShortcut(QKeySequence("Ctrl+S"))
+        save_app_state_action.triggered.connect(self.save_app_state)
+
+        # Design-only save/load (existing functionality)
+        open_design_action = QAction("Open Design...", self)
+        open_design_action.triggered.connect(self.open_design_file)
+
+        save_design_action = QAction("Save Design...", self)
+        save_design_action.triggered.connect(self.save_design_file)
 
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
 
         file_menu.addAction(new_action)
-        file_menu.addAction(open_action)
-        file_menu.addAction(save_action)
+        file_menu.addSeparator()
+        file_menu.addAction(open_app_state_action)
+        file_menu.addAction(save_app_state_action)
+        file_menu.addSeparator()
+        file_menu.addAction(open_design_action)
+        file_menu.addAction(save_design_action)
         file_menu.addSeparator()
         file_menu.addAction(exit_action)
 
@@ -969,17 +1000,513 @@ class ROARApp(QMainWindow):
 
         QMessageBox.information(self, "New File", "New file creation is not implemented yet.")
 
-    def open_file(self):
-        """Opens a file dialog to open a file."""
-        filename, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*.*)")
-        if filename:
-            QMessageBox.information(self, "Open File", f"File opened: {filename}")
+    def open_design_file(self):
+        """Opens a design file (expression editor, constraints, instances only)."""
+        self.editor_window.load_all_data()
 
-    def save_file(self):
-        """Opens a file dialog to save a file."""
-        filename, _ = QFileDialog.getSaveFileName(self, "Save File", "", "All Files (*.*)")
-        if filename:
-            QMessageBox.information(self, "Save File", f"File saved: {filename}")
+    def save_design_file(self):
+        """Saves the design file (expression editor, constraints, instances only)."""
+        self.editor_window.save_all_data()
+
+    def save_app_state(self):
+        """Save the complete application state to a JSON file."""
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Save App State", "", "ROAR State Files (*.roar);;JSON Files (*.json);;All Files (*.*)"
+        )
+        if not filename:
+            return
+
+        try:
+            state = self.capture_app_state()
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=2)
+            QMessageBox.information(self, "Success", f"App state saved to:\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save app state:\n{str(e)}")
+
+    def open_app_state(self):
+        """Load the complete application state from a JSON file."""
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Open App State", "", "ROAR State Files (*.roar);;JSON Files (*.json);;All Files (*.*)"
+        )
+        if not filename:
+            return
+
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+            self.restore_app_state(state)
+            QMessageBox.information(self, "Success", f"App state loaded from:\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load app state:\n{str(e)}")
+
+    def capture_app_state(self):
+        """Capture the complete state of the application."""
+        import datetime
+
+        state = {
+            'version': '1.0',
+            'saved_at': datetime.datetime.now().isoformat(),
+            'app_name': 'ROAR',
+
+            # Window geometry
+            'window': {
+                'geometry': {
+                    'x': self.x(),
+                    'y': self.y(),
+                    'width': self.width(),
+                    'height': self.height(),
+                },
+                'maximized': self.isMaximized(),
+            },
+
+            # Theme
+            'theme': getattr(self, '_current_theme', 'light'),
+
+            # Design editor state
+            'design_editor': self._capture_design_editor_state(),
+
+            # Graph tabs state
+            'graph_tabs': self._capture_graph_tabs_state(),
+        }
+
+        return state
+
+    def _capture_design_editor_state(self):
+        """Capture the design editor state."""
+        try:
+            return {
+                'expression_editor': self.editor_window.expression_editor.get_table_data(),
+                'constraint_editor': self.editor_window.constraint_editor.get_table_data(),
+                'instance_table': self.editor_window.instance_table.get_table_data(),
+            }
+        except Exception as e:
+            debug_print(f"[SAVE STATE] Error capturing design editor state: {e}")
+            return {}
+
+    def _capture_graph_tabs_state(self):
+        """Capture the state of all graph tabs."""
+        tabs_state = {
+            'current_tab_index': self.graph_tabs.currentIndex(),
+            'tabs': [],
+        }
+
+        for i in range(self.graph_tabs.count()):
+            tab_name = self.graph_tabs.tabText(i)
+            # Skip the '+' tab
+            if tab_name == '+':
+                continue
+
+            widget = self.graph_tabs.widget(i)
+            if isinstance(widget, ROARGraphGrid):
+                tab_state = {
+                    'name': tab_name,
+                    'windows': self._capture_graph_grid_state(widget),
+                }
+                tabs_state['tabs'].append(tab_state)
+
+        return tabs_state
+
+    def _capture_graph_grid_state(self, graph_grid):
+        """Capture the state of a ROARGraphGrid (4 lookup windows)."""
+        windows_state = []
+
+        for i, window in enumerate(graph_grid.lookup_windows):
+            try:
+                window_state = self._capture_lookup_window_state(window)
+                window_state['index'] = i
+                windows_state.append(window_state)
+            except Exception as e:
+                debug_print(f"[SAVE STATE] Error capturing lookup window {i} state: {e}")
+
+        return windows_state
+
+    def _capture_lookup_window_state(self, window):
+        """Capture the state of a single ROARLookupWindow."""
+        state = {
+            # Mode selection
+            'is_device_params_mode': window.radio_device_params.isChecked(),
+
+            # Combo box selections
+            'combo_x_text': window.combo_x.currentText(),
+            'combo_y_text': window.combo_y.currentText(),
+            'combo_z_text': window.combo_z.currentText() if hasattr(window, 'combo_z') else '',
+
+            # Spin box values
+            'spin_x_value': window.spin_x.value(),
+            'spin_y_value': window.spin_y.value(),
+            'spin_z_value': window.spin_z.value() if hasattr(window, 'spin_z') else 0,
+
+            # Checkbox states
+            'checkbox_logx': window.checkbox_logx.isChecked(),
+            'checkbox_logy': window.checkbox_logy.isChecked(),
+            'checkbox_logz': window.checkbox_logz.isChecked() if hasattr(window, 'checkbox_logz') else False,
+            'checkbox_3d': window.checkbox_3d.isChecked() if hasattr(window, 'checkbox_3d') else False,
+            'checkbox_contour': window.checkbox_contour.isChecked() if hasattr(window, 'checkbox_contour') else False,
+            'checkbox_legend': window.checkbox_legend.isChecked() if hasattr(window, 'checkbox_legend') else False,
+            'checkbox_black_bg': window.checkbox_black_bg.isChecked() if hasattr(window, 'checkbox_black_bg') else False,
+
+            # Lock/attachment checkboxes - capture which windows are locked to this one
+            'locked_windows': self._capture_lock_state(window),
+
+            # Tech browser state - checked items and colors
+            'checked_paths': [],
+            'color_map': {},
+        }
+
+        # Capture tech browser state
+        try:
+            if hasattr(window, 'tech_browser'):
+                state['checked_paths'] = window.tech_browser.get_checked_item_paths()
+                # Convert color_map values to strings for JSON serialization
+                # Colors can be QColor objects or strings
+                color_map_serializable = {}
+                for path, color in window.tech_browser.color_map.items():
+                    if hasattr(color, 'name'):  # QColor object
+                        color_map_serializable[path] = color.name()
+                    else:
+                        color_map_serializable[path] = str(color)
+                state['color_map'] = color_map_serializable
+        except Exception as e:
+            debug_print(f"[SAVE STATE] Error capturing tech browser state: {e}")
+
+        # Capture markers
+        try:
+            state['markers'] = [
+                {
+                    'vertical': m['vertical'],
+                    'linear_pos': m['linear_pos'],
+                }
+                for m in window.plot_widget.line_markers
+            ]
+        except Exception:
+            state['markers'] = []
+
+        return state
+
+    def _capture_lock_state(self, window):
+        """Capture which windows this window is locked to."""
+        locked = []
+        try:
+            for i, cb in enumerate(window.setting_checkboxes):
+                if cb.isChecked():
+                    locked.append(i)
+        except Exception:
+            pass
+        return locked
+
+    def restore_app_state(self, state):
+        """Restore the complete application state from a state dictionary."""
+        try:
+            # Set global restoring flag to prevent any updates
+            self._is_restoring_state = True
+
+            # Show status message
+            self.statusBar().showMessage("Restoring app state...")
+            QApplication.processEvents()
+
+            # Restore theme first
+            theme = state.get('theme', 'light')
+            self.set_theme(theme)
+            # Update theme menu checkmarks
+            try:
+                menubar = self.menuBar()
+                for action in menubar.actions():
+                    menu = action.menu()
+                    if menu and action.text() == "Window":
+                        for sub_action in menu.actions():
+                            sub_menu = sub_action.menu()
+                            if sub_menu and sub_action.text() == "Theme":
+                                for theme_action in sub_menu.actions():
+                                    if theme_action.text().lower() == theme:
+                                        theme_action.setChecked(True)
+            except Exception:
+                pass
+
+            # Restore design editor state
+            self.statusBar().showMessage("Restoring design editor...")
+            QApplication.processEvents()
+            design_state = state.get('design_editor', {})
+            if design_state:
+                self._restore_design_editor_state(design_state)
+
+            # Restore graph tabs state
+            self.statusBar().showMessage("Restoring graph tabs...")
+            QApplication.processEvents()
+            tabs_state = state.get('graph_tabs', {})
+            if tabs_state:
+                self._restore_graph_tabs_state(tabs_state)
+
+            # Restore window geometry last
+            window_state = state.get('window', {})
+            if window_state:
+                geom = window_state.get('geometry', {})
+                if geom:
+                    self.setGeometry(
+                        geom.get('x', 100),
+                        geom.get('y', 100),
+                        geom.get('width', 1200),
+                        geom.get('height', 800)
+                    )
+                if window_state.get('maximized', False):
+                    self.showMaximized()
+
+            # Clear status message
+            self.statusBar().showMessage("App state restored.", 3000)
+
+            # Clear global restoring flag
+            self._is_restoring_state = False
+
+        except Exception as e:
+            debug_print(f"[RESTORE STATE] Error: {e}")
+            import traceback
+            traceback.print_exc()
+            self.statusBar().showMessage("Error restoring app state.", 5000)
+            self._is_restoring_state = False
+            raise
+
+    def _restore_design_editor_state(self, state):
+        """Restore the design editor state."""
+        try:
+            if 'expression_editor' in state:
+                self.editor_window.expression_editor.load_table_data(state['expression_editor'])
+            if 'constraint_editor' in state:
+                self.editor_window.constraint_editor.load_table_data(state['constraint_editor'])
+            if 'instance_table' in state:
+                self.editor_window.instance_table.load_table_data(state['instance_table'])
+            # Don't emit signal here - let _restore_graph_grid_state handle updates
+            # This prevents double-updating when restoring full app state
+        except Exception as e:
+            debug_print(f"[RESTORE STATE] Error restoring design editor: {e}")
+
+    def _restore_graph_tabs_state(self, state):
+        """Restore the state of all graph tabs."""
+        tabs = state.get('tabs', [])
+        if not tabs:
+            return
+
+        self.statusBar().showMessage("Closing existing tabs...")
+        QApplication.processEvents()
+
+        # Block signals on graph_tabs to prevent callbacks during tab removal
+        self.graph_tabs.blockSignals(True)
+
+        try:
+            # Close all existing tabs except the '+' tab
+            # Use a safer approach: collect indices to remove, then remove from end
+            tabs_to_remove = []
+            for i in range(self.graph_tabs.count()):
+                if self.graph_tabs.tabText(i) != '+':
+                    tabs_to_remove.append(i)
+
+            # Remove from end to start to avoid index shifting issues
+            for i in reversed(tabs_to_remove):
+                self.graph_tabs.removeTab(i)
+                QApplication.processEvents()
+        finally:
+            self.graph_tabs.blockSignals(False)
+
+        QApplication.processEvents()
+
+        # Create tabs for each saved state
+        for tab_index, tab_state in enumerate(tabs):
+            self.statusBar().showMessage(f"Creating tab {tab_index + 1} of {len(tabs)}...")
+            QApplication.processEvents()
+
+            tab_name = tab_state.get('name', f'Graph {tab_index + 1}')
+
+            if tab_index == 0 and self.graph_tabs.count() > 0:
+                # Check if first tab exists and is not '+'
+                first_tab_is_plus = self.graph_tabs.tabText(0) == '+'
+                if first_tab_is_plus:
+                    # Create new tab
+                    self.create_new_graph_tab()
+                    widget = self.graph_tabs.widget(0)  # New tab is at index 0
+                else:
+                    widget = self.graph_tabs.widget(0)
+
+                if isinstance(widget, ROARGraphGrid):
+                    self.graph_tabs.setTabText(0, tab_name)
+            else:
+                # Create new tab
+                self.create_new_graph_tab()
+                # The new tab is inserted before the '+' tab
+                new_tab_index = self.graph_tabs.count() - 2  # -2 to skip '+' tab
+                if new_tab_index >= 0:
+                    self.graph_tabs.setTabText(new_tab_index, tab_name)
+                    widget = self.graph_tabs.widget(new_tab_index)
+                else:
+                    widget = None
+
+            if isinstance(widget, ROARGraphGrid):
+                self.statusBar().showMessage(f"Restoring tab {tab_index + 1} windows...")
+                QApplication.processEvents()
+                self._restore_graph_grid_state(widget, tab_state.get('windows', []))
+
+        # Restore current tab index
+        current_idx = state.get('current_tab_index', 0)
+        if 0 <= current_idx < self.graph_tabs.count():
+            self.graph_tabs.setCurrentIndex(current_idx)
+
+        # Ensure '+' tab exists
+        self.ensure_plus_tab()
+
+    def _restore_graph_grid_state(self, graph_grid, windows_state):
+        """Restore the state of a ROARGraphGrid."""
+        # First pass: restore all window settings without triggering updates
+        for i, window_state in enumerate(windows_state):
+            idx = window_state.get('index', 0)
+            if 0 <= idx < len(graph_grid.lookup_windows):
+                window = graph_grid.lookup_windows[idx]
+                self.statusBar().showMessage(f"Restoring window {i + 1} of {len(windows_state)} settings...")
+                QApplication.processEvents()
+                self._restore_lookup_window_state(window, window_state)
+
+        # Second pass: trigger graph updates for each window
+        for i, window_state in enumerate(windows_state):
+            idx = window_state.get('index', 0)
+            if 0 <= idx < len(graph_grid.lookup_windows):
+                window = graph_grid.lookup_windows[idx]
+                self.statusBar().showMessage(f"Updating graph {i + 1} of {len(windows_state)}...")
+                QApplication.processEvents()
+                try:
+                    window.update_graph_from_tech_browser()
+                except Exception as e:
+                    debug_print(f"Error updating graph: {e}")
+                QApplication.processEvents()
+
+    def _restore_lookup_window_state(self, window, state):
+        """Restore the state of a single ROARLookupWindow."""
+        try:
+            # Temporarily disable updates
+            window._is_updating = True
+
+            # Block signals on all widgets to prevent cascading updates
+            widgets_to_block = [
+                window.radio_device_params,
+                window.radio_design_eq,
+                window.combo_x,
+                window.combo_y,
+                window.spin_x,
+                window.spin_y,
+                window.checkbox_logx,
+                window.checkbox_logy,
+            ]
+            # Add optional widgets if they exist
+            for attr in ['combo_z', 'spin_z', 'checkbox_logz', 'checkbox_3d',
+                         'checkbox_contour', 'checkbox_legend', 'checkbox_black_bg']:
+                if hasattr(window, attr):
+                    widgets_to_block.append(getattr(window, attr))
+
+            # Block all signals
+            for widget in widgets_to_block:
+                try:
+                    widget.blockSignals(True)
+                except Exception:
+                    pass
+
+            # Restore mode selection
+            if state.get('is_device_params_mode', True):
+                window.radio_device_params.setChecked(True)
+            else:
+                window.radio_design_eq.setChecked(True)
+
+            # Restore combo boxes
+            window.combo_x.setCurrentText(state.get('combo_x_text', ''))
+            window.combo_y.setCurrentText(state.get('combo_y_text', ''))
+            if hasattr(window, 'combo_z'):
+                window.combo_z.setCurrentText(state.get('combo_z_text', ''))
+
+            # Restore spin boxes
+            window.spin_x.setValue(state.get('spin_x_value', 0))
+            window.spin_y.setValue(state.get('spin_y_value', 0))
+            if hasattr(window, 'spin_z'):
+                window.spin_z.setValue(state.get('spin_z_value', 0))
+
+            # Restore checkboxes
+            window.checkbox_logx.setChecked(state.get('checkbox_logx', False))
+            window.checkbox_logy.setChecked(state.get('checkbox_logy', False))
+            if hasattr(window, 'checkbox_logz'):
+                window.checkbox_logz.setChecked(state.get('checkbox_logz', False))
+            if hasattr(window, 'checkbox_3d'):
+                window.checkbox_3d.setChecked(state.get('checkbox_3d', False))
+            if hasattr(window, 'checkbox_contour'):
+                window.checkbox_contour.setChecked(state.get('checkbox_contour', False))
+            if hasattr(window, 'checkbox_legend'):
+                window.checkbox_legend.setChecked(state.get('checkbox_legend', False))
+            if hasattr(window, 'checkbox_black_bg'):
+                window.checkbox_black_bg.setChecked(state.get('checkbox_black_bg', False))
+
+            # Restore tech browser checked items (this method already blocks signals internally)
+            if 'checked_paths' in state and hasattr(window, 'restore_tech_browser_checks'):
+                window.restore_tech_browser_checks(state['checked_paths'])
+
+            # Restore tech browser color map
+            if 'color_map' in state and hasattr(window, 'tech_browser'):
+                window.tech_browser.color_map = dict(state['color_map'])
+                # Update icons
+                for path, color in window.tech_browser.color_map.items():
+                    if path in window.tech_browser.path_to_item:
+                        item = window.tech_browser.path_to_item[path]
+                        if item.childCount() == 0:
+                            try:
+                                from PyQt6.QtGui import QPixmap, QIcon
+                                pixmap = QPixmap(16, 16)
+                                pixmap.fill(QColor(color))
+                                item.setIcon(0, QIcon(pixmap))
+                            except Exception:
+                                pass
+
+            # Unblock all signals
+            for widget in widgets_to_block:
+                try:
+                    widget.blockSignals(False)
+                except Exception:
+                    pass
+
+            # Restore lock states (after all windows are created)
+            # Block setting checkbox signals too
+            for cb in window.setting_checkboxes:
+                try:
+                    cb.blockSignals(True)
+                except Exception:
+                    pass
+
+            locked_windows = state.get('locked_windows', [])
+            for i in locked_windows:
+                if 0 <= i < len(window.setting_checkboxes):
+                    window.setting_checkboxes[i].setChecked(True)
+
+            for cb in window.setting_checkboxes:
+                try:
+                    cb.blockSignals(False)
+                except Exception:
+                    pass
+
+            # Re-enable updates
+            window._is_updating = False
+
+            # Restore markers (don't sync to avoid cascading)
+            markers = state.get('markers', [])
+            for marker_state in markers:
+                try:
+                    linear_pos = marker_state.get('linear_pos')
+                    if marker_state.get('vertical', True):
+                        window.plot_widget.add_vertical_marker(linear_pos=linear_pos, sync=False)
+                    else:
+                        window.plot_widget.add_horizontal_marker(linear_pos=linear_pos, sync=False)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            debug_print(f"[RESTORE STATE] Error restoring lookup window: {e}")
+            import traceback
+            traceback.print_exc()
+            # Ensure _is_updating is reset even on error
+            try:
+                window._is_updating = False
+            except Exception:
+                pass
 
     def run_solver(self):
         """Placeholder function for running solver."""
