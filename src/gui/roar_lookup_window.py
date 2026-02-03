@@ -132,7 +132,7 @@ class ROARPlotWidget(pg.PlotWidget):
         except Exception:
             pass
 
-        # Setup percent calculation menu
+        # Setup percent calculation menu actions (will be added to ViewBox menu)
         self._setup_percent_menu()
 
     def _setup_percent_menu(self):
@@ -145,39 +145,56 @@ class ROARPlotWidget(pg.PlotWidget):
             self._percent_menu = QMenu("Percent Calculation")
 
             # Create action group for exclusive selection
-            action_group = QActionGroup(self._percent_menu)
-            action_group.setExclusive(True)
+            self._percent_action_group = QActionGroup(self._percent_menu)
+            self._percent_action_group.setExclusive(True)
 
             # Traditional Percent Change option (default, listed first)
-            traditional_action = QAction("Percent Change", self._percent_menu, checkable=True)
-            traditional_action.setChecked(self.percent_mode == self.PERCENT_CHANGE)
-            traditional_action.triggered.connect(lambda: self._set_percent_mode(self.PERCENT_CHANGE))
-            action_group.addAction(traditional_action)
-            self._percent_menu.addAction(traditional_action)
+            self._traditional_action = QAction("Percent Change", self._percent_menu)
+            self._traditional_action.setCheckable(True)
+            self._traditional_action.setChecked(self.percent_mode == self.PERCENT_CHANGE)
+            self._traditional_action.triggered.connect(lambda: self._set_percent_mode(self.PERCENT_CHANGE))
+            self._percent_action_group.addAction(self._traditional_action)
+            self._percent_menu.addAction(self._traditional_action)
 
             # Symmetric Percent Change option
-            symmetric_action = QAction("Symmetric Percent Change", self._percent_menu, checkable=True)
-            symmetric_action.setChecked(self.percent_mode == self.SYMMETRIC_PERCENT)
-            symmetric_action.triggered.connect(lambda: self._set_percent_mode(self.SYMMETRIC_PERCENT))
-            action_group.addAction(symmetric_action)
-            self._percent_menu.addAction(symmetric_action)
+            self._symmetric_action = QAction("Symmetric Percent Change", self._percent_menu)
+            self._symmetric_action.setCheckable(True)
+            self._symmetric_action.setChecked(self.percent_mode == self.SYMMETRIC_PERCENT)
+            self._symmetric_action.triggered.connect(lambda: self._set_percent_mode(self.SYMMETRIC_PERCENT))
+            self._percent_action_group.addAction(self._symmetric_action)
+            self._percent_menu.addAction(self._symmetric_action)
 
             # Store references to update checked state
             self._percent_menu_actions = {
-                self.SYMMETRIC_PERCENT: symmetric_action,
-                self.PERCENT_CHANGE: traditional_action
+                self.SYMMETRIC_PERCENT: self._symmetric_action,
+                self.PERCENT_CHANGE: self._traditional_action
             }
 
-            # Add our menu to the ViewBox's context menu
+            # Try to add to the ViewBox menu directly
+            self._add_percent_menu_to_viewbox()
+
+        except Exception as e:
+            debug_print(f"[DEBUG] Could not setup percent menu: {e}")
+
+    def _add_percent_menu_to_viewbox(self):
+        """Add the percent menu to the ViewBox's context menu"""
+        try:
             vb = self.plotItem.vb
-            if vb.menu is not None:
+            # PyQtGraph ViewBox has a 'menu' attribute that is the context menu
+            if hasattr(vb, 'menu') and vb.menu is not None:
+                # Check if we already added our menu
+                for action in vb.menu.actions():
+                    if action.text() == "Percent Calculation":
+                        return  # Already added
                 vb.menu.addSeparator()
                 vb.menu.addMenu(self._percent_menu)
             else:
-                # If menu doesn't exist yet, store for later addition
-                self._pending_percent_menu = True
+                # Menu might be created lazily, try again later
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(500, self._add_percent_menu_to_viewbox)
         except Exception as e:
-            debug_print(f"[DEBUG] Could not setup percent menu: {e}")
+            debug_print(f"[DEBUG] Could not add percent menu to viewbox: {e}")
+
 
     def _set_percent_mode(self, mode):
         """Set the percent calculation mode and update marker labels"""
@@ -728,21 +745,6 @@ class ROARPlotWidget(pg.PlotWidget):
                     return 200 * (max_val - min_val) / (max_val + min_val)
                 return 0
 
-        # Helper to convert pixels to data coordinates offset
-        def pixels_to_data_offset(pixels_x, pixels_y):
-            """Convert pixel offset to data coordinate offset"""
-            vb = self.plotItem.vb
-            # Get the view range
-            view_range = vb.viewRange()
-            # Get the view rect in pixels
-            view_rect = vb.screenGeometry()
-            if view_rect.width() > 0 and view_rect.height() > 0:
-                # Calculate data units per pixel
-                data_per_pixel_x = (view_range[0][1] - view_range[0][0]) / view_rect.width()
-                data_per_pixel_y = (view_range[1][1] - view_range[1][0]) / view_rect.height()
-                return pixels_x * data_per_pixel_x, pixels_y * data_per_pixel_y
-            return 0, 0
-
         # Add summary text for single marker
         if vertical and y_values:
             min_y = min(y_values)
@@ -751,16 +753,31 @@ class ROARPlotWidget(pg.PlotWidget):
             label = f"ΔY: {percent:.1f}%"
             summary_text = pg.TextItem(label, anchor=(0.5, 1.0))  # anchor at bottom so text appears above the point
 
-            # Find the highest y position among the visible texts (in plot coordinates)
-            max_text_y = pos  # Default to marker position
-            for text in visible_texts:
-                text_y = text.pos().y()
-                if text_y > max_text_y:
-                    max_text_y = text_y
+            # Find the highest y position among all newly created texts (in plot coordinates)
+            max_text_y = None
+            for text in text_list:  # Use text_list directly, not visible_texts
+                try:
+                    text_y = text.pos().y()
+                    if max_text_y is None or text_y > max_text_y:
+                        max_text_y = text_y
+                except Exception:
+                    pass
 
-            # Position about 50 pixels above the highest text
-            _, y_offset = pixels_to_data_offset(0, 50)
-            base_x, base_y = pos, max_text_y + abs(y_offset)  # Add offset (positive because y increases upward in data coords)
+            # If no texts found, calculate from y_values
+            if max_text_y is None:
+                y_log = self.plotItem.getAxis('left').logMode
+                max_y_linear = max(y_values)
+                max_text_y = np.log10(max_y_linear) if y_log and max_y_linear > 0 else max_y_linear
+
+            # Calculate offset as 5% of the y-range visible in the texts, minimum of a small value
+            if len(text_list) > 1:
+                text_y_values = [t.pos().y() for t in text_list]
+                y_range = max(text_y_values) - min(text_y_values)
+                y_offset = max(y_range * 0.15, abs(max_text_y) * 0.02) if y_range > 0 else abs(max_text_y) * 0.05
+            else:
+                y_offset = abs(max_text_y) * 0.05 if max_text_y != 0 else 0.1
+
+            base_x, base_y = pos, max_text_y + y_offset
             summary_text.setPos(base_x, base_y)
             summary_text.setProperty('base_pos', (base_x, base_y))
             # Apply stored offset if exists
@@ -777,16 +794,31 @@ class ROARPlotWidget(pg.PlotWidget):
             label = f"ΔX: {percent:.1f}%"
             summary_text = pg.TextItem(label, anchor=(0.0, 0.5))  # anchor at left so text appears to the right
 
-            # Find the rightmost x position among the visible texts (in plot coordinates)
-            max_text_x = pos  # Default to marker position
-            for text in visible_texts:
-                text_x = text.pos().x()
-                if text_x > max_text_x:
-                    max_text_x = text_x
+            # Find the rightmost x position among all newly created texts (in plot coordinates)
+            max_text_x = None
+            for text in text_list:  # Use text_list directly
+                try:
+                    text_x = text.pos().x()
+                    if max_text_x is None or text_x > max_text_x:
+                        max_text_x = text_x
+                except Exception:
+                    pass
 
-            # Position about 50 pixels to the right of the rightmost text
-            x_offset, _ = pixels_to_data_offset(50, 0)
-            base_x, base_y = max_text_x + abs(x_offset), pos
+            # If no texts found, calculate from x_values
+            if max_text_x is None:
+                x_log = self.plotItem.getAxis('bottom').logMode
+                max_x_linear = max(x_values)
+                max_text_x = np.log10(max_x_linear) if x_log and max_x_linear > 0 else max_x_linear
+
+            # Calculate offset as 5% of the x-range visible in the texts
+            if len(text_list) > 1:
+                text_x_values = [t.pos().x() for t in text_list]
+                x_range = max(text_x_values) - min(text_x_values)
+                x_offset = max(x_range * 0.15, abs(max_text_x) * 0.02) if x_range > 0 else abs(max_text_x) * 0.05
+            else:
+                x_offset = abs(max_text_x) * 0.05 if max_text_x != 0 else 0.1
+
+            base_x, base_y = max_text_x + x_offset, pos
             summary_text.setPos(base_x, base_y)
             summary_text.setProperty('base_pos', (base_x, base_y))
             # Apply stored offset if exists
