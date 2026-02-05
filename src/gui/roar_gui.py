@@ -227,6 +227,16 @@ class ROARTechBrowser(QWidget):
         # self.tree.itemClicked.connect(self.select_item)
         self.startup = True
         self.tree.itemChanged.connect(self.handle_item_changed)
+        # Track pressed item to detect clicks on already-selected corners (so we can toggle selection)
+        self._pressed_path = None
+        self._pressed_was_selected = False
+        try:
+            self.tree.itemPressed.connect(self._on_item_pressed)
+            self.tree.itemClicked.connect(self._on_item_clicked)
+            self.tree.itemSelectionChanged.connect(self.update_all_selection_boldness)
+        except Exception:
+            # Some Qt builds may not expose these signals in identical ways; continue gracefully
+            pass
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.show_context_menu)
@@ -481,6 +491,82 @@ class ROARTechBrowser(QWidget):
         pix = QPixmap(16, 16)
         pix.fill(color)
         item.setIcon(0, QIcon(pix))
+
+    # --- Selection handling methods for bolding traces --------------------------
+    def _on_item_pressed(self, item, column):
+        """Track selection state before click for toggle-to-deselect."""
+        print(f"[SELECT DEBUG] _on_item_pressed: {item.text(0) if item else None}")
+        print(f"[SELECT DEBUG]   selectedItems count: {len(self.tree.selectedItems())}")
+        try:
+            self._last_pressed_item = item
+        except Exception:
+            self._last_pressed_item = None
+
+    def _on_item_clicked(self, item, column):
+        """Update boldness after click. Deselection handled via Ctrl+click (Qt default)."""
+        print(f"[SELECT DEBUG] _on_item_clicked: {item.text(0) if item else None}")
+        print(f"[SELECT DEBUG]   selectedItems count: {len(self.tree.selectedItems())}")
+        try:
+            # Just update boldness - let Qt handle selection/deselection via Ctrl+click
+            self.update_all_selection_boldness()
+        except Exception:
+            pass
+
+    def _get_all_leaf_children(self, item):
+        """Recursively get all leaf (corner) items under a parent item."""
+        leaves = []
+        for i in range(item.childCount()):
+            child = item.child(i)
+            if child.childCount() == 0:
+                # This is a leaf node (corner)
+                leaves.append(child)
+            else:
+                # Recurse into children
+                leaves.extend(self._get_all_leaf_children(child))
+        return leaves
+
+    def update_all_selection_boldness(self):
+        """Walk all checked corner items and make their traces bold when selected (or parent is selected), normal when not."""
+        try:
+            # First, collect all selected items and their leaf children
+            selected_items = self.tree.selectedItems()
+            print(f"[SELECT DEBUG] update_all_selection_boldness: {len(selected_items)} items selected")
+
+            # Build a set of all leaf items that should be bold
+            # (either directly selected or have a selected ancestor)
+            bold_paths = set()
+
+            for sel_item in selected_items:
+                if sel_item.childCount() == 0:
+                    # It's a leaf item (corner) - add it directly if checked
+                    path = self.build_full_path(sel_item)
+                    if sel_item.checkState(0) == Qt.CheckState.Checked:
+                        bold_paths.add(path)
+                else:
+                    # It's a parent - add all checked leaf children
+                    for leaf in self._get_all_leaf_children(sel_item):
+                        if leaf.checkState(0) == Qt.CheckState.Checked:
+                            path = self.build_full_path(leaf)
+                            bold_paths.add(path)
+
+            # Now iterate all checked corners and set boldness
+            for path, item in list(self.path_to_item.items()):
+                try:
+                    is_checked = (item.checkState(0) == Qt.CheckState.Checked)
+                    if not is_checked:
+                        continue
+
+                    bold = path in bold_paths
+                    if self.lookup_window and hasattr(self.lookup_window, 'set_corner_boldness'):
+                        try:
+                            self.lookup_window.set_corner_boldness(path, bold)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    # --------------------------------------------------------------------------------------
 
     def populate_from_tech_dict(self):
         """Rebuild the tree widget from the current self.tech_dict.

@@ -922,11 +922,11 @@ class CIDCorner():
             pen = color_list[color_index % len(color_list)]
             color_index += 1
             # Plot on pg.PlotWidget
+        # Use name parameter to identify curve for boldness matching, but don't add to legend
         curve = roar_plot_widget.plot(params1, params2, pen=pen, name=legend_str)
 
-        # Add to legend if legend_str is provided
-        if legend_str:
-            roar_plot_widget.legend.addItem(curve, legend_str)
+        # NOTE: Legend functionality removed - curves are named for identification only
+        # The name is used by set_corner_boldness to match curves to tech browser selections
 
         # Set labels
         xlabel = param1 + "  [" + unit1 + "]"

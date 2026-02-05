@@ -103,8 +103,7 @@ class ROARPlotWidget(pg.PlotWidget):
         self._marker_update_timer = None
         self._pending_marker_updates = []  # Use list instead of set since dicts aren't hashable
 
-        # Add legend and crosshair lines
-        self.plotItem.addLegend()
+        # Add crosshair lines (legend removed - not wanted)
         self.v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
         self.h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('k', style=Qt.PenStyle.DotLine))
         self.plotItem.addItem(self.v_line, ignoreBounds=True)
@@ -1657,6 +1656,69 @@ class ROARLookupWindow(QWidget):
         self.checkbox_logz.setEnabled(is_3d)
         self.checkbox_contour.setEnabled(is_3d)
 
+    def set_corner_boldness(self, path, bold: bool):
+        """Set pen width of the trace corresponding to `path` (full corner path).
+
+        This method is called from `ROARTechBrowser` when a corner is both checked
+        and selected; it will search the current `plot_widget` for curves whose
+        name/legend matches `path` and set a bolder pen.
+        """
+        try:
+            pw = getattr(self, 'plot_widget', None)
+            if pw is None:
+                return
+            plot_item = pw.getPlotItem()
+            if not hasattr(plot_item, 'curves'):
+                return
+
+            width = 3 if bold else 1
+
+            # Build the legend string format used when plotting: "PDK: {pdk}, L: {length}, corner: {corner}"
+            legend_str = None
+            try:
+                parts = [p.strip() for p in path.split('>') if p.strip()]
+                if len(parts) >= 5:
+                    # Path format: PDK > pdk_name > model > length > corner
+                    _, pdk, _model, length, corner = parts[:5]
+                    legend_str = f"PDK: {pdk}, L: {length}, corner: {corner}"
+                elif len(parts) >= 4:
+                    # Fallback if top-level 'PDK' is omitted
+                    pdk, _model, length, corner = parts[:4]
+                    legend_str = f"PDK: {pdk}, L: {length}, corner: {corner}"
+            except Exception:
+                legend_str = None
+
+            for curve in list(getattr(plot_item, 'curves', [])):
+                try:
+                    name = curve.opts.get('name') if hasattr(curve, 'opts') else None
+
+                    # Match by legend string (primary) or path (fallback)
+                    matched = False
+                    if legend_str and name == legend_str:
+                        matched = True
+                    elif name == path:
+                        matched = True
+                    elif legend_str and isinstance(name, str) and legend_str in name:
+                        matched = True
+                    elif isinstance(name, str) and path in name:
+                        matched = True
+
+                    if matched:
+                        # Get current pen color and create new pen with updated width
+                        pen = curve.opts.get('pen') if hasattr(curve, 'opts') else None
+                        try:
+                            if pen is not None and hasattr(pen, 'color'):
+                                col = pen.color()
+                                curve.setPen(pg.mkPen(col, width=width))
+                            else:
+                                curve.setPen(pg.mkPen(width=width))
+                        except Exception:
+                            curve.setPen(pg.mkPen(width=width))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def clear_markers(self):
         pw = getattr(self, "plot_widget", None)
         if not pw:
@@ -2232,10 +2294,12 @@ class ROARLookupWindow(QWidget):
                     if param2 in self.top_level_app.lookups_units_dict:
                         unit2 = self.top_level_app.lookups_units_dict[param2]
 
+                    # Create legend string that matches the format expected by set_corner_boldness
+                    legend_str = f"PDK: {pdk}, L: {length}, corner: {corner}"
                     cid_corner.plot_processes_params_roar_plot_widget(param1=param1, param2=param2, param3=None, norm_type="",
                                                                       show_plot=True, new_plot=new_plot,
                                                                       roar_plot_widget=self.plot_widget,
-                                                                      color=color, legend_str=None, enable_3d=False,
+                                                                      color=color, legend_str=legend_str, enable_3d=False,
                                                                       pen=graph_pen, unit1=unit1, unit2=unit2)
                 else:
                     unit1 = ""
@@ -3074,6 +3138,12 @@ class ROARLookupWindow(QWidget):
                     self.plot_widget.select_marker(marker)
         finally:
             self._is_updating = False
+            # Update trace boldness based on current tech browser selection state
+            try:
+                if hasattr(self.tech_browser, 'update_all_selection_boldness'):
+                    self.tech_browser.update_all_selection_boldness()
+            except Exception:
+                pass
         return 0
 
     def add_tech_luts(self, dirname, pdk_name):
