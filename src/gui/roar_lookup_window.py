@@ -120,6 +120,11 @@ class ROARPlotWidget(pg.PlotWidget):
         self._hovered_marker = None  # Track currently hovered scatter marker for highlighting
         self._hovered_text = None  # Track currently hovered line marker text for highlighting
         self._hovered_text_original_html = None  # Store original HTML to restore on unhover
+        # Track selected (locked) texts - one regular text per marker + one summary text
+        self._selected_text = None  # Currently selected regular marker text (stays highlighted)
+        self._selected_text_original_html = None  # Original HTML of selected text
+        self._selected_summary_text = None  # Currently selected summary/percent text (can be selected in addition)
+        self._selected_summary_original_html = None  # Original HTML of selected summary
 
         # Connect mouse events
         try:
@@ -229,13 +234,15 @@ class ROARPlotWidget(pg.PlotWidget):
             except Exception:
                 pass
             self._hovered_marker = None
-        # Reset any hovered text highlighting
+        # Reset any hovered text highlighting (but not if it's selected)
         if self._hovered_text is not None and self._hovered_text_original_html is not None:
-            try:
-                self._hovered_text.setHtml(self._hovered_text_original_html)
-                self._hovered_text.setZValue(0)
-            except Exception:
-                pass
+            # Don't reset if this text is selected
+            if self._hovered_text != self._selected_text and self._hovered_text != self._selected_summary_text:
+                try:
+                    self._hovered_text.setHtml(self._hovered_text_original_html)
+                    self._hovered_text.setZValue(0)
+                except Exception:
+                    pass
             self._hovered_text = None
             self._hovered_text_original_html = None
         super().leaveEvent(event)
@@ -278,6 +285,11 @@ class ROARPlotWidget(pg.PlotWidget):
     def on_mouse_clicked(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             scene_pos = event.scenePos()
+
+            # Check if clicking on a marker text to select/deselect it
+            if self._handle_text_click(scene_pos):
+                return  # Text click was handled, don't process other click actions
+
             if self.plotItem.sceneBoundingRect().contains(scene_pos):
                 mouse_point = self.plotItem.vb.mapSceneToView(scene_pos)
 
@@ -480,52 +492,66 @@ class ROARPlotWidget(pg.PlotWidget):
             self._hovered_marker = hovered_marker
 
     def _update_text_hover(self, scene_pos):
-        """Check if mouse is hovering over a line marker text and highlight it."""
+        """Check if mouse is hovering over a line marker text and highlight it.
+
+        If a regular text is selected (locked), other regular texts won't highlight.
+        Summary/percent texts can be highlighted and selected independently.
+        """
         hovered_text = None
+        is_summary_text = False
 
         # Check all line marker texts
         for marker in self.line_markers:
-            # Check regular texts
-            for text in marker.get('texts', []):
-                try:
-                    if text.sceneBoundingRect().contains(scene_pos):
-                        hovered_text = text
-                        break
-                except Exception:
-                    pass
-            if hovered_text:
-                break
-            # Check summary text
+            # Check regular texts (only if no regular text is currently selected)
+            if self._selected_text is None:
+                for text in marker.get('texts', []):
+                    try:
+                        if text.sceneBoundingRect().contains(scene_pos):
+                            hovered_text = text
+                            is_summary_text = False
+                            break
+                    except Exception:
+                        pass
+                if hovered_text:
+                    break
+
+            # Check summary text (can always be hovered, independent of regular text selection)
             summary = marker.get('summary_text')
-            if summary:
+            if summary and self._selected_summary_text is None:
                 try:
                     if summary.sceneBoundingRect().contains(scene_pos):
-                        hovered_text = summary
-                        break
+                        # Only set if we haven't found a regular text OR if regular text is selected
+                        if hovered_text is None:
+                            hovered_text = summary
+                            is_summary_text = True
+                            break
                 except Exception:
                     pass
 
-        # Also check difference items texts
-        if not hovered_text:
+        # Also check difference items texts (treated like summary texts)
+        if hovered_text is None and self._selected_summary_text is None:
             for diff_item in self.difference_items:
                 diff_text = diff_item.get('text')
                 if diff_text:
                     try:
                         if diff_text.sceneBoundingRect().contains(scene_pos):
                             hovered_text = diff_text
+                            is_summary_text = True
                             break
                     except Exception:
                         pass
 
         # If hovered text changed, update highlighting
         if hovered_text != self._hovered_text:
-            # Reset previous hovered text
+            # Reset previous hovered text (but not if it's selected)
             if self._hovered_text is not None and self._hovered_text_original_html is not None:
-                try:
-                    self._hovered_text.setHtml(self._hovered_text_original_html)
-                    self._hovered_text.setZValue(0)
-                except Exception:
-                    pass
+                # Don't reset if this text is selected
+                if self._hovered_text != self._selected_text and self._hovered_text != self._selected_summary_text:
+                    try:
+                        self._hovered_text.setHtml(self._hovered_text_original_html)
+                        self._hovered_text.setZValue(0)
+                    except Exception:
+                        pass
 
             # Highlight new hovered text
             if hovered_text is not None:
@@ -544,6 +570,216 @@ class ROARPlotWidget(pg.PlotWidget):
                 self._hovered_text_original_html = None
 
             self._hovered_text = hovered_text
+
+    def _handle_text_click(self, scene_pos):
+        """Handle clicking on marker texts to select/deselect them.
+
+        Returns True if a text click was handled, False otherwise.
+        """
+        clicked_text = None
+        is_summary = False
+
+        # Check all line marker texts
+        for marker in self.line_markers:
+            # Check regular texts
+            texts = marker.get('texts', [])
+            for text in texts:
+                try:
+                    rect = text.sceneBoundingRect()
+                    if rect.contains(scene_pos):
+                        clicked_text = text
+                        is_summary = False
+                        break
+                except Exception:
+                    pass
+            if clicked_text:
+                break
+
+            # Check summary text
+            summary = marker.get('summary_text')
+            if summary:
+                try:
+                    rect = summary.sceneBoundingRect()
+                    if rect.contains(scene_pos):
+                        clicked_text = summary
+                        is_summary = True
+                        break
+                except Exception:
+                    pass
+
+        # Also check difference items texts (treated like summary texts)
+        if clicked_text is None:
+            for diff_item in self.difference_items:
+                diff_text = diff_item.get('text')
+                if diff_text:
+                    try:
+                        if diff_text.sceneBoundingRect().contains(scene_pos):
+                            clicked_text = diff_text
+                            is_summary = True
+                            break
+                    except Exception:
+                        pass
+
+        if clicked_text is None:
+            return False  # No text was clicked
+
+        # Handle selection/deselection
+        if is_summary:
+            # Summary/percent text - can be selected independently
+            if self._selected_summary_text is clicked_text:
+                # Deselect - restore original HTML
+                try:
+                    if self._selected_summary_original_html:
+                        clicked_text.setHtml(self._selected_summary_original_html)
+                        clicked_text.setZValue(0)
+                except Exception:
+                    pass
+                self._selected_summary_text = None
+                self._selected_summary_original_html = None
+            else:
+                # Deselect any previously selected summary text
+                if self._selected_summary_text is not None:
+                    try:
+                        if self._selected_summary_original_html:
+                            self._selected_summary_text.setHtml(self._selected_summary_original_html)
+                            self._selected_summary_text.setZValue(0)
+                    except Exception:
+                        pass
+
+                # Select this summary text
+                self._selected_summary_text = clicked_text
+                # Store original HTML before highlighting (use current hover original if this is hovered)
+                if clicked_text == self._hovered_text and self._hovered_text_original_html:
+                    self._selected_summary_original_html = self._hovered_text_original_html
+                else:
+                    self._selected_summary_original_html = clicked_text.toHtml()
+
+                # Apply highlight
+                try:
+                    original_text = clicked_text.toPlainText()
+                    highlighted_html = f'<div style="background-color: rgba(255, 255, 0, 200); padding: 2px; border: 1px solid orange; border-radius: 2px;"><span style="color: black;">{original_text}</span></div>'
+                    clicked_text.setHtml(highlighted_html)
+                    clicked_text.setZValue(1000)
+                except Exception:
+                    pass
+        else:
+            # Regular text - only one can be selected at a time
+            if self._selected_text is clicked_text:
+                # Deselect - restore original HTML
+                try:
+                    if self._selected_text_original_html:
+                        clicked_text.setHtml(self._selected_text_original_html)
+                        clicked_text.setZValue(0)
+                except Exception:
+                    pass
+                self._selected_text = None
+                self._selected_text_original_html = None
+            else:
+                # Deselect any previously selected regular text
+                if self._selected_text is not None:
+                    try:
+                        if self._selected_text_original_html:
+                            self._selected_text.setHtml(self._selected_text_original_html)
+                            self._selected_text.setZValue(0)
+                    except Exception:
+                        pass
+
+                # Select this text
+                self._selected_text = clicked_text
+                # Store original HTML before highlighting (use current hover original if this is hovered)
+                if clicked_text == self._hovered_text and self._hovered_text_original_html:
+                    self._selected_text_original_html = self._hovered_text_original_html
+                else:
+                    self._selected_text_original_html = clicked_text.toHtml()
+
+                # Apply highlight
+                try:
+                    original_text = clicked_text.toPlainText()
+                    highlighted_html = f'<div style="background-color: rgba(255, 255, 0, 200); padding: 2px; border: 1px solid orange; border-radius: 2px;"><span style="color: black;">{original_text}</span></div>'
+                    clicked_text.setHtml(highlighted_html)
+                    clicked_text.setZValue(1000)
+                except Exception:
+                    pass
+
+        return True  # Text click was handled
+
+    def _handle_text_selection(self, clicked_text):
+        """Handle text selection when a text item is clicked directly.
+
+        This is called from the text item's mouseReleaseEvent.
+        """
+        # Determine if this is a summary text
+        is_summary = clicked_text.property('is_summary') or False
+
+        # Handle selection/deselection
+        if is_summary:
+            # Summary/percent text - can be selected independently
+            if self._selected_summary_text is clicked_text:
+                # Deselect - restore original HTML
+                try:
+                    if self._selected_summary_original_html:
+                        clicked_text.setHtml(self._selected_summary_original_html)
+                        clicked_text.setZValue(0)
+                except Exception:
+                    pass
+                self._selected_summary_text = None
+                self._selected_summary_original_html = None
+            else:
+                # Deselect any previously selected summary text
+                if self._selected_summary_text is not None:
+                    try:
+                        if self._selected_summary_original_html:
+                            self._selected_summary_text.setHtml(self._selected_summary_original_html)
+                            self._selected_summary_text.setZValue(0)
+                    except Exception:
+                        pass
+
+                # Select this summary text
+                self._selected_summary_text = clicked_text
+                self._selected_summary_original_html = clicked_text.toHtml()
+
+                # Apply highlight
+                try:
+                    original_text = clicked_text.toPlainText()
+                    highlighted_html = f'<div style="background-color: rgba(255, 255, 0, 200); padding: 2px; border: 1px solid orange; border-radius: 2px;"><span style="color: black;">{original_text}</span></div>'
+                    clicked_text.setHtml(highlighted_html)
+                    clicked_text.setZValue(1000)
+                except Exception:
+                    pass
+        else:
+            # Regular text - only one can be selected at a time
+            if self._selected_text is clicked_text:
+                # Deselect - restore original HTML
+                try:
+                    if self._selected_text_original_html:
+                        clicked_text.setHtml(self._selected_text_original_html)
+                        clicked_text.setZValue(0)
+                except Exception:
+                    pass
+                self._selected_text = None
+                self._selected_text_original_html = None
+            else:
+                # Deselect any previously selected regular text
+                if self._selected_text is not None:
+                    try:
+                        if self._selected_text_original_html:
+                            self._selected_text.setHtml(self._selected_text_original_html)
+                            self._selected_text.setZValue(0)
+                    except Exception:
+                        pass
+
+                # Select this text
+                self._selected_text = clicked_text
+                self._selected_text_original_html = clicked_text.toHtml()
+
+                # Apply highlight
+                try:
+                    original_text = clicked_text.toPlainText()
+                    highlighted_html = f'<div style="background-color: rgba(255, 255, 0, 200); padding: 2px; border: 1px solid orange; border-radius: 2px;"><span style="color: black;">{original_text}</span></div>'
+                    clicked_text.setHtml(highlighted_html)
+                    clicked_text.setZValue(1000)
+                except Exception:
+                    pass
 
     def add_vertical_marker(self, linear_pos=None, sync=True):
         if linear_pos is None:
@@ -656,6 +892,20 @@ class ROARPlotWidget(pg.PlotWidget):
             except Exception:
                 pass
 
+        # Save selected text state before removing texts
+        selected_curve_idx = None
+        selected_summary = False
+        for text in marker.get('texts', []):
+            if text == self._selected_text:
+                selected_curve_idx = text.property('curve_idx')
+                # Clear the reference since text will be removed
+                self._selected_text = None
+                break
+        if 'summary_text' in marker:
+            if marker['summary_text'] == self._selected_summary_text:
+                selected_summary = True
+                self._selected_summary_text = None
+
         # remove old texts
         for text in marker.get('texts', []):
             self.plotItem.removeItem(text)
@@ -729,6 +979,41 @@ class ROARPlotWidget(pg.PlotWidget):
                 visible_texts.append(text)
                 self.plotItem.addItem(text)
                 text.setFlags(text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+                # Add click handler for text selection - use mouseReleaseEvent to detect clicks
+                # Store reference to self and whether this is a summary text
+                text.setProperty('is_summary', False)
+                text.setProperty('plot_widget', self)
+                # Track mouse press position to detect drag vs click
+                original_mouse_press = text.mousePressEvent
+                original_mouse_release = text.mouseReleaseEvent
+                def make_press_handler(txt, orig_handler):
+                    def handler(event):
+                        # Store press position to detect drag
+                        txt.setProperty('press_pos', event.scenePos())
+                        if orig_handler:
+                            orig_handler(event)
+                    return handler
+                def make_click_handler(txt, orig_handler):
+                    def handler(event):
+                        # Check if this was a click (not a drag) by checking if position changed minimally
+                        press_pos = txt.property('press_pos')
+                        release_pos = event.scenePos()
+                        is_click = True
+                        if press_pos is not None:
+                            # If moved more than 5 pixels, it's a drag not a click
+                            dx = abs(release_pos.x() - press_pos.x())
+                            dy = abs(release_pos.y() - press_pos.y())
+                            if dx > 5 or dy > 5:
+                                is_click = False
+                        if is_click:
+                            pw = txt.property('plot_widget')
+                            if pw and hasattr(pw, '_handle_text_selection'):
+                                pw._handle_text_selection(txt)
+                        if orig_handler:
+                            orig_handler(event)
+                    return handler
+                text.mousePressEvent = make_press_handler(text, original_mouse_press)
+                text.mouseReleaseEvent = make_click_handler(text, original_mouse_release)
                 marker['texts'].append(text)
 
         # Helper function to calculate percent based on mode
@@ -785,6 +1070,36 @@ class ROARPlotWidget(pg.PlotWidget):
                 summary_text.setPos(base_x + offset[0], base_y + offset[1])
             self.plotItem.addItem(summary_text)
             summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+            # Add click handler for summary text selection
+            summary_text.setProperty('is_summary', True)
+            summary_text.setProperty('plot_widget', self)
+            original_mouse_press_v = summary_text.mousePressEvent
+            original_mouse_release_v = summary_text.mouseReleaseEvent
+            def make_summary_press_handler_v(txt, orig_handler):
+                def handler(event):
+                    txt.setProperty('press_pos', event.scenePos())
+                    if orig_handler:
+                        orig_handler(event)
+                return handler
+            def make_summary_click_handler_v(txt, orig_handler):
+                def handler(event):
+                    press_pos = txt.property('press_pos')
+                    release_pos = event.scenePos()
+                    is_click = True
+                    if press_pos is not None:
+                        dx = abs(release_pos.x() - press_pos.x())
+                        dy = abs(release_pos.y() - press_pos.y())
+                        if dx > 5 or dy > 5:
+                            is_click = False
+                    if is_click:
+                        pw = txt.property('plot_widget')
+                        if pw and hasattr(pw, '_handle_text_selection'):
+                            pw._handle_text_selection(txt)
+                    if orig_handler:
+                        orig_handler(event)
+                return handler
+            summary_text.mousePressEvent = make_summary_press_handler_v(summary_text, original_mouse_press_v)
+            summary_text.mouseReleaseEvent = make_summary_click_handler_v(summary_text, original_mouse_release_v)
             marker['summary_text'] = summary_text
         elif not vertical and x_values:
             min_x = min(x_values)
@@ -826,7 +1141,65 @@ class ROARPlotWidget(pg.PlotWidget):
                 summary_text.setPos(base_x + offset[0], base_y + offset[1])
             self.plotItem.addItem(summary_text)
             summary_text.setFlags(summary_text.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+            # Add click handler for summary text selection
+            summary_text.setProperty('is_summary', True)
+            summary_text.setProperty('plot_widget', self)
+            original_mouse_press_h = summary_text.mousePressEvent
+            original_mouse_release_h = summary_text.mouseReleaseEvent
+            def make_summary_press_handler_h(txt, orig_handler):
+                def handler(event):
+                    txt.setProperty('press_pos', event.scenePos())
+                    if orig_handler:
+                        orig_handler(event)
+                return handler
+            def make_summary_click_handler_h(txt, orig_handler):
+                def handler(event):
+                    press_pos = txt.property('press_pos')
+                    release_pos = event.scenePos()
+                    is_click = True
+                    if press_pos is not None:
+                        dx = abs(release_pos.x() - press_pos.x())
+                        dy = abs(release_pos.y() - press_pos.y())
+                        if dx > 5 or dy > 5:
+                            is_click = False
+                    if is_click:
+                        pw = txt.property('plot_widget')
+                        if pw and hasattr(pw, '_handle_text_selection'):
+                            pw._handle_text_selection(txt)
+                    if orig_handler:
+                        orig_handler(event)
+                return handler
+            summary_text.mousePressEvent = make_summary_press_handler_h(summary_text, original_mouse_press_h)
+            summary_text.mouseReleaseEvent = make_summary_click_handler_h(summary_text, original_mouse_release_h)
             marker['summary_text'] = summary_text
+
+        # Restore selected text state after creating new texts
+        if selected_curve_idx is not None:
+            # Find the text with the same curve_idx and re-select it
+            for text in marker.get('texts', []):
+                if text.property('curve_idx') == selected_curve_idx:
+                    self._selected_text = text
+                    self._selected_text_original_html = text.toHtml()
+                    # Apply highlight
+                    try:
+                        original_text = text.toPlainText()
+                        highlighted_html = f'<div style="background-color: rgba(255, 255, 0, 200); padding: 2px; border: 1px solid orange; border-radius: 2px;"><span style="color: black;">{original_text}</span></div>'
+                        text.setHtml(highlighted_html)
+                        text.setZValue(1000)
+                    except Exception:
+                        pass
+                    break
+        if selected_summary and 'summary_text' in marker:
+            self._selected_summary_text = marker['summary_text']
+            self._selected_summary_original_html = marker['summary_text'].toHtml()
+            # Apply highlight
+            try:
+                original_text = marker['summary_text'].toPlainText()
+                highlighted_html = f'<div style="background-color: rgba(255, 255, 0, 200); padding: 2px; border: 1px solid orange; border-radius: 2px;"><span style="color: black;">{original_text}</span></div>'
+                marker['summary_text'].setHtml(highlighted_html)
+                marker['summary_text'].setZValue(1000)
+            except Exception:
+                pass
 
         # Synchronize marker position with attached plots (only if sync=True)
         if sync:
@@ -953,6 +1326,24 @@ class ROARPlotWidget(pg.PlotWidget):
         if event.key() == Qt.Key.Key_Delete:
             to_remove = [m for m in self.line_markers if m.get('selected', False)]
 
+            # Clear selected text state if the selected text belongs to a deleted marker
+            for m in to_remove:
+                for text in m.get('texts', []):
+                    if text == self._selected_text:
+                        self._selected_text = None
+                        self._selected_text_original_html = None
+                    if text == self._hovered_text:
+                        self._hovered_text = None
+                        self._hovered_text_original_html = None
+                summary = m.get('summary_text')
+                if summary:
+                    if summary == self._selected_summary_text:
+                        self._selected_summary_text = None
+                        self._selected_summary_original_html = None
+                    if summary == self._hovered_text:
+                        self._hovered_text = None
+                        self._hovered_text_original_html = None
+
             # Remove the markers
             for m in to_remove:
                 self.plotItem.removeItem(m['line'])
@@ -970,6 +1361,15 @@ class ROARPlotWidget(pg.PlotWidget):
                     marker1 = diff_item.get('marker1')
                     marker2 = diff_item.get('marker2')
                     if marker1 in to_remove or marker2 in to_remove:
+                        # Clear selected state if this diff text was selected
+                        diff_text = diff_item.get('text')
+                        if diff_text:
+                            if diff_text == self._selected_summary_text:
+                                self._selected_summary_text = None
+                                self._selected_summary_original_html = None
+                            if diff_text == self._hovered_text:
+                                self._hovered_text = None
+                                self._hovered_text_original_html = None
                         # Remove the difference line and text from the plot
                         self.plotItem.removeItem(diff_item['line'])
                         self.plotItem.removeItem(diff_item['text'])
@@ -3053,7 +3453,9 @@ class ROARLookupWindow(QWidget):
                                 self.plot_widget.show()
                             except Exception:
                                 pass
-                            curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=None)
+                            # Create legend string for curve identification (used for boldening when selected)
+                            legend_str = f"PDK: {pdk}, L: {length}, corner: {corner}"
+                            curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=legend_str)
                             xlabel = param1 + "  [" + unit1 + "]"
                             ylabel = param2 + "  [" + unit2 + "]"
                             self.plot_widget.setLabel('bottom', xlabel)

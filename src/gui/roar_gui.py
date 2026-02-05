@@ -495,8 +495,6 @@ class ROARTechBrowser(QWidget):
     # --- Selection handling methods for bolding traces --------------------------
     def _on_item_pressed(self, item, column):
         """Track selection state before click for toggle-to-deselect."""
-        print(f"[SELECT DEBUG] _on_item_pressed: {item.text(0) if item else None}")
-        print(f"[SELECT DEBUG]   selectedItems count: {len(self.tree.selectedItems())}")
         try:
             self._last_pressed_item = item
         except Exception:
@@ -504,8 +502,6 @@ class ROARTechBrowser(QWidget):
 
     def _on_item_clicked(self, item, column):
         """Update boldness after click. Deselection handled via Ctrl+click (Qt default)."""
-        print(f"[SELECT DEBUG] _on_item_clicked: {item.text(0) if item else None}")
-        print(f"[SELECT DEBUG]   selectedItems count: {len(self.tree.selectedItems())}")
         try:
             # Just update boldness - let Qt handle selection/deselection via Ctrl+click
             self.update_all_selection_boldness()
@@ -530,7 +526,6 @@ class ROARTechBrowser(QWidget):
         try:
             # First, collect all selected items and their leaf children
             selected_items = self.tree.selectedItems()
-            print(f"[SELECT DEBUG] update_all_selection_boldness: {len(selected_items)} items selected")
 
             # Build a set of all leaf items that should be bold
             # (either directly selected or have a selected ancestor)
