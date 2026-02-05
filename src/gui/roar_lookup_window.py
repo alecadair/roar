@@ -1728,12 +1728,15 @@ class ROARLookupWindow(QWidget):
             marker_info['text'].setPos(plot_x, plot_y)
         self.update_graph_from_tech_browser()
 
-        # Synchronize log scale with attached windows
-        if self.graph_grid:
-            for attached_window in self.get_attached_windows():
-                # Update log checkboxes in attached windows
-                attached_window.checkbox_logx.setChecked(x_log)
-                attached_window.checkbox_logy.setChecked(y_log)
+        # NOTE: Do NOT synchronize log scale with attached windows.
+        # When windows are 'locked' together we still want only the originating
+        # window to change its axis scale (log/linear). Propagating the
+        # checkbox state to attached windows caused both windows to flip scale
+        # together, which is undesirable. Markers and other synced behaviors
+        # remain controlled elsewhere (marker sync uses separate logic).
+        # If an opt-in sync of axis scale is desired in future, add a
+        # per-window setting (e.g. self.sync_scale) and check it here.
+        pass
 
     def on_copy_button_clicked(self):
         """Handle copy/paste button click"""
