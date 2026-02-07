@@ -1132,7 +1132,19 @@ class ROAREditorWindow(QWidget):
         self.original_parent = None
         self.original_index = -1
 
+        # Debounce timer for expression changes to prevent lag
+        self._expressions_changed_timer = QTimer()
+        self._expressions_changed_timer.setSingleShot(True)
+        self._expressions_changed_timer.setInterval(300)  # 300ms debounce
+        self._expressions_changed_timer.timeout.connect(self._emit_expressions_changed)
+
     def on_expressions_changed(self):
+        """Debounced handler for expression changes - starts/restarts timer."""
+        # Restart the timer on each change - only emit after user stops editing for 300ms
+        self._expressions_changed_timer.start()
+
+    def _emit_expressions_changed(self):
+        """Actually emit the expressions_changed signal after debounce delay."""
         self.expressions_changed.emit(self.get_expression_symbols())
 
     def get_expression_symbols(self):

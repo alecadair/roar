@@ -14,7 +14,8 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSplitter, QHBoxLayout,
     QLineEdit, QLabel, QTextEdit, QCheckBox, QColorDialog, QTreeWidget, QTreeWidgetItem,
     QScrollBar, QFileDialog, QInputDialog, QComboBox, QSpinBox, QGridLayout, QSizePolicy,
-    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton, QTabBar, QAbstractItemView)
+    QMessageBox, QMenuBar, QMenu, QFileDialog, QStatusBar, QRadioButton, QTabBar, QAbstractItemView,
+    QProgressDialog, QDialog)
 from PyQt6.QtCore import Qt, QSize, QObject, QEvent
 from PyQt6.QtGui import QIcon, QPixmap, QPalette, QAction, QColor, QPen, QKeySequence, QCursor
 # QShortcut historically lives in QtWidgets but some PyQt6 builds expose it in QtGui.
@@ -738,6 +739,194 @@ class ROARHeader(QWidget):
         msg_box.exec()
 
 
+class CalculatorDialog(QDialog):
+    """Dialog showing available math functions for the expression/constraint editor."""
+
+    # Define all available functions with their descriptions and examples
+    FUNCTIONS = [
+        # Trigonometric (radians)
+        ("sin(x)", "Sine function (radians)", "sin(3.14159/2) → 1.0"),
+        ("cos(x)", "Cosine function (radians)", "cos(0) → 1.0"),
+        ("tan(x)", "Tangent function (radians)", "tan(3.14159/4) → 1.0"),
+        ("asin(x)", "Arcsine (inverse sine), returns radians", "asin(1) → 1.5708 (π/2)"),
+        ("acos(x)", "Arccosine (inverse cosine), returns radians", "acos(0) → 1.5708 (π/2)"),
+        ("atan(x)", "Arctangent (inverse tangent), returns radians", "atan(1) → 0.7854 (π/4)"),
+
+        # Trigonometric (degrees)
+        ("sind(x)", "Sine function (degrees)", "sind(90) → 1.0"),
+        ("cosd(x)", "Cosine function (degrees)", "cosd(0) → 1.0"),
+        ("tand(x)", "Tangent function (degrees)", "tand(45) → 1.0"),
+        ("asind(x)", "Arcsine, returns degrees", "asind(1) → 90"),
+        ("acosd(x)", "Arccosine, returns degrees", "acosd(0) → 90"),
+        ("atand(x)", "Arctangent, returns degrees", "atand(1) → 45"),
+
+        # Exponential and Logarithmic
+        ("exp(x)", "Exponential function (e^x)", "exp(1) → 2.718"),
+        ("log(x)", "Natural logarithm (base e)", "log(2.718) → 1.0"),
+        ("ln(x)", "Natural logarithm (same as log)", "ln(E) → 1.0"),
+        ("log10(x)", "Base-10 logarithm", "log10(100) → 2.0"),
+
+        # Power and Root
+        ("sqrt(x)", "Square root", "sqrt(16) → 4.0"),
+        ("x**n", "Power (x to the n)", "2**3 → 8"),
+        ("abs(x)", "Absolute value", "abs(-5) → 5"),
+
+        # Statistical
+        ("min(a, b, ...)", "Minimum of values", "min(3, 1, 4) → 1"),
+        ("max(a, b, ...)", "Maximum of values", "max(3, 1, 4) → 4"),
+        ("sum(x)", "Sum of array values", "sum([1, 2, 3]) → 6"),
+        ("mean(x)", "Mean (average) of array", "mean([1, 2, 3]) → 2.0"),
+        ("std(x)", "Standard deviation of array", "std([1, 2, 3]) → 0.816"),
+
+        # Constants
+        ("pi", "Pi constant (3.14159...)", "pi → 3.14159"),
+        ("E", "Euler's number (2.71828...)", "E → 2.71828"),
+
+        # Device Lookup Syntax
+        ("param:device", "Lookup device parameter", "kgm:M1 → gm/id for device M1"),
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Calculator - Math Functions Reference")
+        self.setMinimumSize(600, 500)
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
+
+        # Splitter for list and details
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # Function list
+        self.function_list = QTreeWidget()
+        self.function_list.setHeaderLabels(["Function", "Description"])
+        self.function_list.setColumnWidth(0, 150)
+        self.function_list.setAlternatingRowColors(True)
+        self.function_list.itemClicked.connect(self.on_function_selected)
+        self.function_list.itemDoubleClicked.connect(self.copy_function)
+
+        # Populate the list with categories
+        categories = {
+            "Trigonometric (Radians)": [],
+            "Trigonometric (Degrees)": [],
+            "Exponential & Logarithmic": [],
+            "Power & Root": [],
+            "Statistical": [],
+            "Constants": [],
+            "Device Lookup": [],
+        }
+
+        for func, desc, example in self.FUNCTIONS:
+            if "radian" in desc.lower() or func in ["sin(x)", "cos(x)", "tan(x)", "asin(x)", "acos(x)", "atan(x)"]:
+                categories["Trigonometric (Radians)"].append((func, desc, example))
+            elif "degree" in desc.lower() or func.endswith("d(x)"):
+                categories["Trigonometric (Degrees)"].append((func, desc, example))
+            elif any(x in func.lower() for x in ["exp", "log", "ln"]):
+                categories["Exponential & Logarithmic"].append((func, desc, example))
+            elif any(x in func.lower() for x in ["sqrt", "**", "abs"]):
+                categories["Power & Root"].append((func, desc, example))
+            elif any(x in func.lower() for x in ["min", "max", "sum", "mean", "std"]):
+                categories["Statistical"].append((func, desc, example))
+            elif func in ["pi", "E"]:
+                categories["Constants"].append((func, desc, example))
+            elif ":" in func:
+                categories["Device Lookup"].append((func, desc, example))
+
+        for category, funcs in categories.items():
+            if funcs:
+                cat_item = QTreeWidgetItem([category, ""])
+                cat_item.setExpanded(True)
+                font = cat_item.font(0)
+                font.setBold(True)
+                cat_item.setFont(0, font)
+                self.function_list.addTopLevelItem(cat_item)
+
+                for func, desc, example in funcs:
+                    func_item = QTreeWidgetItem([func, desc])
+                    func_item.setData(0, Qt.ItemDataRole.UserRole, {"func": func, "desc": desc, "example": example})
+                    cat_item.addChild(func_item)
+
+        splitter.addWidget(self.function_list)
+
+        # Details panel
+        details_widget = QWidget()
+        details_layout = QVBoxLayout(details_widget)
+
+        self.func_name_label = QLabel("Select a function")
+        self.func_name_label.setStyleSheet("font-size: 16px; font-weight: bold; padding: 5px;")
+        details_layout.addWidget(self.func_name_label)
+
+        self.desc_label = QLabel("")
+        self.desc_label.setWordWrap(True)
+        self.desc_label.setStyleSheet("padding: 10px; background-color: #e8f4f8; border-radius: 5px;")
+        details_layout.addWidget(self.desc_label)
+
+        example_header = QLabel("Example:")
+        example_header.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        details_layout.addWidget(example_header)
+
+        self.example_label = QLabel("")
+        self.example_label.setStyleSheet("padding: 10px; background-color: #f5f5f5; border-radius: 5px; font-family: monospace;")
+        self.example_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        details_layout.addWidget(self.example_label)
+
+        details_layout.addStretch()
+
+        # Copy button
+        self.copy_button = QPushButton("📋 Copy Function to Clipboard")
+        self.copy_button.clicked.connect(self.copy_function)
+        self.copy_button.setEnabled(False)
+        self.copy_button.setStyleSheet("padding: 10px; font-size: 14px;")
+        details_layout.addWidget(self.copy_button)
+
+        splitter.addWidget(details_widget)
+        splitter.setSizes([300, 300])
+
+        layout.addWidget(splitter)
+
+        # Close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.close)
+        layout.addWidget(close_button)
+
+        self.selected_func = None
+
+    def on_function_selected(self, item, column):
+        """Handle function selection."""
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if data:
+            self.selected_func = data["func"]
+            self.func_name_label.setText(data["func"])
+            self.desc_label.setText(data["desc"])
+            self.example_label.setText(data["example"])
+            self.copy_button.setEnabled(True)
+        else:
+            # Category header clicked
+            self.copy_button.setEnabled(False)
+
+    def copy_function(self, item=None):
+        """Copy the selected function to clipboard."""
+        if self.selected_func:
+            # Extract just the function name (without parameters for easier pasting)
+            func_to_copy = self.selected_func
+            if "(" in func_to_copy:
+                func_to_copy = func_to_copy.split("(")[0] + "("
+            elif ":" in func_to_copy:
+                func_to_copy = ":"  # Just the lookup operator
+
+            clipboard = QApplication.clipboard()
+            clipboard.setText(func_to_copy)
+
+            # Show feedback
+            self.copy_button.setText("✓ Copied!")
+            # Reset button text after 1.5 seconds
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(1500, lambda: self.copy_button.setText("📋 Copy Function to Clipboard"))
+
+
 class ROARApp(QMainWindow):
     def __init__(self, tech_dict=None):
         try:
@@ -1076,8 +1265,14 @@ class ROARApp(QMainWindow):
         solver_prefs_action.triggered.connect(self.open_solver_preferences)
         solver_prefs_action.setEnabled(False)  # Disabled - feature coming soon
 
+        calculator_action = QAction("Calculator", self)
+        calculator_action.triggered.connect(self.show_calculator)
+        calculator_action.setToolTip("Show available math functions for expressions")
+
         solver_menu.addAction(run_solver_action)
         solver_menu.addAction(stop_solver_action)
+        solver_menu.addSeparator()
+        solver_menu.addAction(calculator_action)
         solver_menu.addSeparator()
         solver_menu.addAction(solver_prefs_action)
 
@@ -1339,15 +1534,31 @@ class ROARApp(QMainWindow):
 
     def restore_app_state(self, state):
         """Restore the complete application state from a state dictionary."""
+        # Create progress dialog - use NonModal so it doesn't block
+        progress = QProgressDialog("Loading state...", None, 0, 100, self)
+        progress.setWindowTitle("Loading State")
+        progress.setWindowModality(Qt.WindowModality.NonModal)
+        progress.setMinimumDuration(0)  # Show immediately
+        progress.setAutoClose(False)  # We'll close it manually
+        progress.setAutoReset(False)
+        progress.setCancelButton(None)  # No cancel button
+        progress.setMinimumWidth(300)
+        progress.setValue(0)
+        progress.show()
+        progress.raise_()  # Bring to front
+        progress.repaint()  # Force immediate repaint
+        QApplication.processEvents()
+
         try:
             # Set global restoring flag to prevent any updates
             self._is_restoring_state = True
 
-            # Show status message
-            self.statusBar().showMessage("Restoring app state...")
+            # Step 1: Restore theme (5%)
+            progress.setLabelText("Restoring theme...")
+            progress.setValue(5)
+            progress.repaint()
             QApplication.processEvents()
 
-            # Restore theme first
             theme = state.get('theme', 'light')
             self.set_theme(theme)
             # Update theme menu checkmarks
@@ -1365,21 +1576,32 @@ class ROARApp(QMainWindow):
             except Exception:
                 pass
 
-            # Restore design editor state
-            self.statusBar().showMessage("Restoring design editor...")
+            # Step 2: Restore design editor (15%)
+            progress.setLabelText("Restoring design editor...")
+            progress.setValue(15)
+            progress.repaint()
             QApplication.processEvents()
+
             design_state = state.get('design_editor', {})
             if design_state:
                 self._restore_design_editor_state(design_state)
 
-            # Restore graph tabs state
-            self.statusBar().showMessage("Restoring graph tabs...")
+            # Step 3: Restore graph tabs (20-90%)
+            progress.setLabelText("Restoring graph tabs...")
+            progress.setValue(20)
+            progress.repaint()
             QApplication.processEvents()
+
             tabs_state = state.get('graph_tabs', {})
             if tabs_state:
-                self._restore_graph_tabs_state(tabs_state)
+                self._restore_graph_tabs_state(tabs_state, progress)
 
-            # Restore window geometry last
+            # Step 4: Restore window geometry (95%)
+            progress.setLabelText("Restoring window layout...")
+            progress.setValue(95)
+            progress.repaint()
+            QApplication.processEvents()
+
             window_state = state.get('window', {})
             if window_state:
                 geom = window_state.get('geometry', {})
@@ -1393,6 +1615,15 @@ class ROARApp(QMainWindow):
                 if window_state.get('maximized', False):
                     self.showMaximized()
 
+            # Complete (100%)
+            progress.setLabelText("Complete!")
+            progress.setValue(100)
+            progress.repaint()
+            QApplication.processEvents()
+
+            # Close the progress dialog
+            progress.close()
+
             # Clear status message
             self.statusBar().showMessage("App state restored.", 3000)
 
@@ -1400,6 +1631,7 @@ class ROARApp(QMainWindow):
             self._is_restoring_state = False
 
         except Exception as e:
+            progress.close()
             debug_print(f"[RESTORE STATE] Error: {e}")
             import traceback
             traceback.print_exc()
@@ -1421,13 +1653,14 @@ class ROARApp(QMainWindow):
         except Exception as e:
             debug_print(f"[RESTORE STATE] Error restoring design editor: {e}")
 
-    def _restore_graph_tabs_state(self, state):
+    def _restore_graph_tabs_state(self, state, progress=None):
         """Restore the state of all graph tabs."""
         tabs = state.get('tabs', [])
         if not tabs:
             return
 
-        self.statusBar().showMessage("Closing existing tabs...")
+        if progress:
+            progress.setLabelText("Closing existing tabs...")
         QApplication.processEvents()
 
         # Block signals on graph_tabs to prevent callbacks during tab removal
@@ -1450,9 +1683,19 @@ class ROARApp(QMainWindow):
 
         QApplication.processEvents()
 
+        # Calculate progress range for tabs (20% to 90% = 70% range)
+        progress_start = 20
+        progress_range = 70
+        total_tabs = len(tabs)
+
         # Create tabs for each saved state
         for tab_index, tab_state in enumerate(tabs):
-            self.statusBar().showMessage(f"Creating tab {tab_index + 1} of {len(tabs)}...")
+            # Calculate progress for this tab
+            if progress and total_tabs > 0:
+                tab_progress = progress_start + int((tab_index / total_tabs) * progress_range)
+                progress.setLabelText(f"Restoring tab {tab_index + 1} of {total_tabs}...")
+                progress.setValue(tab_progress)
+                progress.repaint()
             QApplication.processEvents()
 
             tab_name = tab_state.get('name', f'Graph {tab_index + 1}')
@@ -1481,9 +1724,8 @@ class ROARApp(QMainWindow):
                     widget = None
 
             if isinstance(widget, ROARGraphGrid):
-                self.statusBar().showMessage(f"Restoring tab {tab_index + 1} windows...")
-                QApplication.processEvents()
-                self._restore_graph_grid_state(widget, tab_state.get('windows', []))
+                windows_state = tab_state.get('windows', [])
+                self._restore_graph_grid_state(widget, windows_state, progress, tab_index, total_tabs, progress_start, progress_range)
 
         # Restore current tab index
         current_idx = state.get('current_tab_index', 0)
@@ -1493,26 +1735,44 @@ class ROARApp(QMainWindow):
         # Ensure '+' tab exists
         self.ensure_plus_tab()
 
-    def _restore_graph_grid_state(self, graph_grid, windows_state):
+    def _restore_graph_grid_state(self, graph_grid, windows_state, progress=None, tab_index=0, total_tabs=1, progress_start=20, progress_range=70):
         """Restore the state of a ROARGraphGrid."""
-        # First pass: restore all window settings without triggering updates
+        num_windows = len(windows_state)
+
+        # Single pass: restore settings then immediately update graph for each window
         for i, window_state in enumerate(windows_state):
             idx = window_state.get('index', 0)
             if 0 <= idx < len(graph_grid.lookup_windows):
                 window = graph_grid.lookup_windows[idx]
-                self.statusBar().showMessage(f"Restoring window {i + 1} of {len(windows_state)} settings...")
+
+                # Update progress - show which window we're restoring
+                if progress and total_tabs > 0 and num_windows > 0:
+                    # Calculate sub-progress: each window gets equal portion within this tab's range
+                    tab_portion = progress_range / total_tabs
+                    win_portion = tab_portion / num_windows
+                    win_progress = progress_start + int(tab_index * tab_portion + i * win_portion)
+                    progress.setLabelText(f"Tab {tab_index + 1}/{total_tabs}: Restoring window {i + 1}/{num_windows}...")
+                    progress.setValue(win_progress)
+                    progress.repaint()
                 QApplication.processEvents()
+
+                # Restore window settings
                 self._restore_lookup_window_state(window, window_state)
 
-        # Second pass: trigger graph updates for each window
-        for i, window_state in enumerate(windows_state):
-            idx = window_state.get('index', 0)
-            if 0 <= idx < len(graph_grid.lookup_windows):
-                window = graph_grid.lookup_windows[idx]
-                self.statusBar().showMessage(f"Updating graph {i + 1} of {len(windows_state)}...")
+                # Update progress - show we're updating the graph
+                if progress and total_tabs > 0 and num_windows > 0:
+                    tab_portion = progress_range / total_tabs
+                    win_portion = tab_portion / num_windows
+                    win_progress = progress_start + int(tab_index * tab_portion + (i + 0.5) * win_portion)
+                    progress.setLabelText(f"Tab {tab_index + 1}/{total_tabs}: Plotting window {i + 1}/{num_windows}...")
+                    progress.setValue(win_progress)
+                    progress.repaint()
                 QApplication.processEvents()
+
+                # Update the graph immediately after restoring settings
+                # Use skip_post_processing=True to speed up restore
                 try:
-                    window.update_graph_from_tech_browser()
+                    window.update_graph_from_tech_browser(skip_post_processing=True)
                 except Exception as e:
                     debug_print(f"Error updating graph: {e}")
                 QApplication.processEvents()
@@ -1536,7 +1796,7 @@ class ROARApp(QMainWindow):
             ]
             # Add optional widgets if they exist
             for attr in ['combo_z', 'spin_z', 'checkbox_logz', 'checkbox_3d',
-                         'checkbox_contour', 'checkbox_legend', 'checkbox_black_bg']:
+                         'checkbox_contour', 'checkbox_black_bg']:
                 if hasattr(window, attr):
                     widgets_to_block.append(getattr(window, attr))
 
@@ -1547,11 +1807,16 @@ class ROARApp(QMainWindow):
                 except Exception:
                     pass
 
-            # Restore mode selection
+            # Restore mode selection and explicitly set the mode variable
             if state.get('is_device_params_mode', True):
                 window.radio_device_params.setChecked(True)
+                window.is_device_params_mode = True
             else:
                 window.radio_design_eq.setChecked(True)
+                window.is_device_params_mode = False
+
+            # Update combo box items to match the mode (before restoring selections)
+            window.update_combobox_items()
 
             # Restore combo boxes
             window.combo_x.setCurrentText(state.get('combo_x_text', ''))
@@ -1574,8 +1839,6 @@ class ROARApp(QMainWindow):
                 window.checkbox_3d.setChecked(state.get('checkbox_3d', False))
             if hasattr(window, 'checkbox_contour'):
                 window.checkbox_contour.setChecked(state.get('checkbox_contour', False))
-            if hasattr(window, 'checkbox_legend'):
-                window.checkbox_legend.setChecked(state.get('checkbox_legend', False))
             if hasattr(window, 'checkbox_black_bg'):
                 window.checkbox_black_bg.setChecked(state.get('checkbox_black_bg', False))
 
@@ -1657,6 +1920,11 @@ class ROARApp(QMainWindow):
     def stop_solver(self):
         """Placeholder function for stopping solver."""
         QMessageBox.warning(self, "Stop Solver", "Solver stopped.")
+
+    def show_calculator(self):
+        """Show the Calculator dialog with available math functions."""
+        dialog = CalculatorDialog(self)
+        dialog.exec()
 
     def open_solver_preferences(self):
         """Opens solver preferences."""

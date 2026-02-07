@@ -1614,7 +1614,12 @@ class ROARLookupWindow(QWidget):
         self.radio_device_params.setChecked(True)
         # Track current mode on the instance (True = Device Params, False = Design Eqs)
         self.is_device_params_mode = self.radio_device_params.isChecked()
-        self.checkbox_legend = QCheckBox("Legend")
+
+        # Refresh button to re-calculate and update graph from design editor
+        self.refresh_button = QPushButton("🔄")
+        self.refresh_button.setToolTip("Refresh graph - re-calculate from design editor equations")
+        self.refresh_button.setFixedWidth(28)
+        self.refresh_button.clicked.connect(self.on_refresh_clicked)
 
         # store the radio layout on the instance so other methods can reference it
         self.radio_layout = QHBoxLayout()
@@ -1625,7 +1630,7 @@ class ROARLookupWindow(QWidget):
         self.radio_layout.addWidget(self.radio_design_eq)
         self.radio_layout.addStretch()
         self.controls_layout.addLayout(self.radio_layout, 0, 0, 1, 3)
-        self.controls_layout.addWidget(self.checkbox_legend, 0, 3)
+        self.controls_layout.addWidget(self.refresh_button, 0, 3)
 
         # Connect toggled signal(s) to keep mode variable in sync and update UI
         self.radio_device_params.toggled.connect(self.on_mode_changed)
@@ -1936,60 +1941,70 @@ class ROARLookupWindow(QWidget):
         current_y = self.combo_y.currentText()
         current_z = self.combo_z.currentText()
 
-        # Update visibility of Z-axis and 3D controls
-        self.label_z.setVisible(not is_device_params)
-        self.combo_z.setVisible(not is_device_params)
-        self.spin_z.setVisible(not is_device_params)
-        self.checkbox_logz.setVisible(not is_device_params)
-        self.checkbox_3d.setVisible(not is_device_params)
-        self.checkbox_contour.setVisible(not is_device_params)
+        # Block signals to prevent cascading updates during clear/addItems
+        self.combo_x.blockSignals(True)
+        self.combo_y.blockSignals(True)
+        self.combo_z.blockSignals(True)
 
-        self.checkbox_legend.setVisible(True)
+        try:
+            # Update visibility of Z-axis and 3D controls
+            self.label_z.setVisible(not is_device_params)
+            self.combo_z.setVisible(not is_device_params)
+            self.spin_z.setVisible(not is_device_params)
+            self.checkbox_logz.setVisible(not is_device_params)
+            self.checkbox_3d.setVisible(not is_device_params)
+            self.checkbox_contour.setVisible(not is_device_params)
 
-        if is_device_params:
-            items = list(self.top_level_app.lookups) if self.top_level_app else []
-            self.combo_x.clear()
-            self.combo_y.clear()
-            self.combo_z.clear()
-            self.combo_x.addItems(items)
-            self.combo_y.addItems(items)
-            self.combo_z.addItems(items)
 
-            # Restore previous selections if they exist, otherwise use defaults
-            if current_x in items:
-                self.combo_x.setCurrentText(current_x)
+            if is_device_params:
+                items = list(self.top_level_app.lookups) if self.top_level_app else []
+                self.combo_x.clear()
+                self.combo_y.clear()
+                self.combo_z.clear()
+                self.combo_x.addItems(items)
+                self.combo_y.addItems(items)
+                self.combo_z.addItems(items)
+
+                # Restore previous selections if they exist, otherwise use defaults
+                if current_x in items:
+                    self.combo_x.setCurrentText(current_x)
+                else:
+                    self.combo_x.setCurrentText("kgm")
+                if current_y in items:
+                    self.combo_y.setCurrentText(current_y)
+                else:
+                    self.combo_y.setCurrentText("kcgs")
+                if current_z in items:
+                    self.combo_z.setCurrentText(current_z)
+                else:
+                    self.combo_z.setCurrentText("iden")
             else:
-                self.combo_x.setCurrentText("kgm")
-            if current_y in items:
-                self.combo_y.setCurrentText(current_y)
-            else:
-                self.combo_y.setCurrentText("kcgs")
-            if current_z in items:
-                self.combo_z.setCurrentText(current_z)
-            else:
-                self.combo_z.setCurrentText("iden")
-        else:
-            items = list(self.expression_symbols) if self.expression_symbols else []
-            self.combo_x.clear()
-            self.combo_y.clear()
-            self.combo_z.clear()
-            self.combo_x.addItems(items)
-            self.combo_y.addItems(items)
-            self.combo_z.addItems(items)
+                items = list(self.expression_symbols) if self.expression_symbols else []
+                self.combo_x.clear()
+                self.combo_y.clear()
+                self.combo_z.clear()
+                self.combo_x.addItems(items)
+                self.combo_y.addItems(items)
+                self.combo_z.addItems(items)
 
-            # Restore previous selections if they exist, otherwise use defaults
-            if current_x in items:
-                self.combo_x.setCurrentText(current_x)
-            elif items:
-                self.combo_x.setCurrentIndex(0)
-            if current_y in items:
-                self.combo_y.setCurrentText(current_y)
-            elif items:
-                self.combo_y.setCurrentIndex(min(1, len(items) - 1))
-            if current_z in items:
-                self.combo_z.setCurrentText(current_z)
-            elif items:
-                self.combo_z.setCurrentIndex(min(2, len(items) - 1))
+                # Restore previous selections if they exist, otherwise use defaults
+                if current_x in items:
+                    self.combo_x.setCurrentText(current_x)
+                elif items:
+                    self.combo_x.setCurrentIndex(0)
+                if current_y in items:
+                    self.combo_y.setCurrentText(current_y)
+                elif items:
+                    self.combo_y.setCurrentIndex(min(1, len(items) - 1))
+                if current_z in items:
+                    self.combo_z.setCurrentText(current_z)
+                elif items:
+                    self.combo_z.setCurrentIndex(min(2, len(items) - 1))
+        finally:
+            # Always unblock signals
+            self.combo_x.blockSignals(False)
+            self.combo_y.blockSignals(False)
+            self.combo_z.blockSignals(False)
 
         try:
             self.controls_layout.removeWidget(self.checkbox_3d)
@@ -2043,6 +2058,20 @@ class ROARLookupWindow(QWidget):
         if self.mpl_canvas is not None and self.mpl_canvas.isVisible():
             # Redraw the 3D plot with new background color
             self.update_graph_from_tech_browser()
+
+    def on_refresh_clicked(self):
+        """Refresh the graph by re-fetching expressions from design editor and re-plotting."""
+        # Update expression symbols from design editor if available
+        if self.top_level_app and hasattr(self.top_level_app, 'editor_window'):
+            try:
+                symbols = self.top_level_app.editor_window.get_expression_symbols()
+                self.expression_symbols = symbols
+                self.update_combobox_items()
+            except Exception:
+                pass
+
+        # Re-update the graph
+        self.update_graph_from_tech_browser()
 
     def update_expression_symbols(self, symbols):
         self.expression_symbols = symbols
@@ -2271,7 +2300,6 @@ class ROARLookupWindow(QWidget):
             'checkbox_logz': self.checkbox_logz.isChecked(),
             'checkbox_3d': self.checkbox_3d.isChecked(),
             'checkbox_contour': self.checkbox_contour.isChecked(),
-            'checkbox_legend': self.checkbox_legend.isChecked(),
             'checkbox_black_bg': self.checkbox_black_bg.isChecked(),
 
             # NOTE: setting_checkboxes are NOT included - these represent window attachments/locks
@@ -2301,11 +2329,16 @@ class ROARLookupWindow(QWidget):
             # Temporarily disable updates to prevent repeated graph updates
             self._is_updating = True
 
-            # Restore radio button
+            # Restore radio button and explicitly set the mode variable
             if state.get('is_device_params_mode', True):
                 self.radio_device_params.setChecked(True)
+                self.is_device_params_mode = True
             else:
                 self.radio_design_eq.setChecked(True)
+                self.is_device_params_mode = False
+
+            # Update combo boxes to match the mode
+            self.update_combobox_items()
 
             # Restore combo boxes
             self.combo_x.setCurrentText(state.get('combo_x_text', ''))
@@ -2323,7 +2356,6 @@ class ROARLookupWindow(QWidget):
             self.checkbox_logz.setChecked(state.get('checkbox_logz', False))
             self.checkbox_3d.setChecked(state.get('checkbox_3d', False))
             self.checkbox_contour.setChecked(state.get('checkbox_contour', False))
-            self.checkbox_legend.setChecked(state.get('checkbox_legend', False))
             self.checkbox_black_bg.setChecked(state.get('checkbox_black_bg', False))
 
             # NOTE: setting_checkboxes are NOT restored - these represent window attachments/locks
@@ -2596,7 +2628,7 @@ class ROARLookupWindow(QWidget):
             corner_dfs.append(corner_df)
         return corner_dfs
 
-    def update_graph_from_tech_browser(self, equation_eval=None):
+    def update_graph_from_tech_browser(self, equation_eval=None, skip_post_processing=False):
         if self._is_updating:
             return
         self._is_updating = True
@@ -3541,11 +3573,13 @@ class ROARLookupWindow(QWidget):
         finally:
             self._is_updating = False
             # Update trace boldness based on current tech browser selection state
-            try:
-                if hasattr(self.tech_browser, 'update_all_selection_boldness'):
-                    self.tech_browser.update_all_selection_boldness()
-            except Exception:
-                pass
+            # Skip during batch operations like restore to improve performance
+            if not skip_post_processing:
+                try:
+                    if hasattr(self.tech_browser, 'update_all_selection_boldness'):
+                        self.tech_browser.update_all_selection_boldness()
+                except Exception:
+                    pass
         return 0
 
     def add_tech_luts(self, dirname, pdk_name):
