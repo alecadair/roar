@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QMessageBox, QSplitter, QGroupBox,
-    QDialog, QRadioButton, QCheckBox, QLabel
+    QDialog, QRadioButton, QCheckBox, QLabel, QProgressDialog
 )
 from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon, QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
@@ -1097,6 +1097,10 @@ class ROAREditorWindow(QWidget):
         layout.addWidget(splitter)
 
         button_layout = QHBoxLayout()
+        self.refresh_button = QPushButton("🔄")
+        self.refresh_button.setToolTip("Refresh all Design Eqs graphs - re-evaluate equations and constraints")
+        self.refresh_button.setFixedSize(28, 24)  # Match height of other buttons
+        self.refresh_button.clicked.connect(self.on_refresh_clicked)
         self.save_button = QPushButton("Save")
         self.open_editor_button = QPushButton("Open Editor")
         self.corner_mapping_button = QPushButton("Corner Mapping")
@@ -1115,6 +1119,7 @@ class ROAREditorWindow(QWidget):
         button_layout.addWidget(self.open_editor_button)
         button_layout.addWidget(self.load_button)
         button_layout.addWidget(self.save_button)
+        button_layout.addWidget(self.refresh_button)
 
         layout.addLayout(button_layout)
 
@@ -1280,6 +1285,150 @@ class ROAREditorWindow(QWidget):
                     }
 
         return device_corners
+
+    def on_refresh_clicked(self):
+        """Refresh all Design Eqs graphs by re-evaluating equations and constraints.
+
+        This is the single trigger point for refreshing design equation graphs.
+        It updates expression symbols and triggers graph updates for all lookup
+        windows that are in Design Eqs mode.
+        """
+        if not self.top_level_app:
+            return
+
+        # Create progress dialog
+        progress = QProgressDialog("Refreshing Design Equations...", "Cancel", 0, 100, self)
+        progress.setWindowTitle("Refresh Progress")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)  # Show immediately
+        progress.setValue(0)
+        progress.setMinimumWidth(350)
+        QApplication.processEvents()
+
+        try:
+            # Step 1: Get expression symbols (10%)
+            progress.setLabelText("Reading expressions...")
+            progress.setValue(5)
+            QApplication.processEvents()
+            if progress.wasCanceled():
+                return
+
+            symbols = self.get_expression_symbols()
+            progress.setValue(10)
+            QApplication.processEvents()
+
+            # Step 2: Find all lookup windows (20%)
+            progress.setLabelText("Finding graph windows...")
+            QApplication.processEvents()
+            if progress.wasCanceled():
+                return
+
+            lookup_windows = []
+
+            # Check graph_grid structure (multiple pane layouts)
+            if hasattr(self.top_level_app, 'graph_grid'):
+                grid = self.top_level_app.graph_grid
+                for attr_name in dir(grid):
+                    if 'lookup_window' in attr_name.lower():
+                        try:
+                            lw = getattr(grid, attr_name, None)
+                            if lw is not None and hasattr(lw, 'is_device_params_mode'):
+                                lookup_windows.append(lw)
+                        except Exception:
+                            pass
+
+            # Check graph_tabs structure (tabbed layouts)
+            if hasattr(self.top_level_app, 'graph_tabs'):
+                try:
+                    tabs = self.top_level_app.graph_tabs
+                    for i in range(tabs.count()):
+                        widget = tabs.widget(i)
+                        if widget is not None:
+                            if hasattr(widget, 'is_device_params_mode'):
+                                lookup_windows.append(widget)
+                            for attr_name in dir(widget):
+                                if 'lookup_window' in attr_name.lower():
+                                    try:
+                                        lw = getattr(widget, attr_name, None)
+                                        if lw is not None and hasattr(lw, 'is_device_params_mode'):
+                                            if lw not in lookup_windows:
+                                                lookup_windows.append(lw)
+                                    except Exception:
+                                        pass
+                except Exception:
+                    pass
+
+            # Check for single lookup_window attribute
+            if hasattr(self.top_level_app, 'lookup_window'):
+                try:
+                    lw = self.top_level_app.lookup_window
+                    if lw is not None and hasattr(lw, 'is_device_params_mode'):
+                        if lw not in lookup_windows:
+                            lookup_windows.append(lw)
+                except Exception:
+                    pass
+
+            progress.setValue(20)
+            QApplication.processEvents()
+
+            # Step 3: Filter to Design Eqs mode windows
+            design_eq_windows = [lw for lw in lookup_windows
+                                 if hasattr(lw, 'is_device_params_mode') and not lw.is_device_params_mode]
+
+            if not design_eq_windows:
+                progress.setLabelText("No Design Eqs windows to refresh.")
+                progress.setValue(100)
+                QApplication.processEvents()
+                return
+
+            # Step 4: Update each window (20% to 100%)
+            num_windows = len(design_eq_windows)
+            progress_per_window = 80 // max(num_windows, 1)
+
+            for idx, lw in enumerate(design_eq_windows):
+                if progress.wasCanceled():
+                    return
+
+                window_name = f"Window {idx + 1}/{num_windows}"
+
+                # Update expression symbols
+                progress.setLabelText(f"{window_name}: Updating expression symbols...")
+                progress.setValue(20 + idx * progress_per_window)
+                QApplication.processEvents()
+
+                try:
+                    if hasattr(lw, 'expression_symbols'):
+                        lw.expression_symbols = symbols
+                    if hasattr(lw, 'update_combobox_items'):
+                        lw.update_combobox_items()
+                except Exception:
+                    pass
+
+                if progress.wasCanceled():
+                    return
+
+                # Evaluate equations and update graph
+                progress.setLabelText(f"{window_name}: Evaluating equations and plotting...")
+                progress.setValue(20 + idx * progress_per_window + progress_per_window // 2)
+                QApplication.processEvents()
+
+                try:
+                    if hasattr(lw, 'update_graph_from_tech_browser'):
+                        lw.update_graph_from_tech_browser()
+                except Exception:
+                    pass
+
+            # Complete
+            progress.setLabelText("Refresh complete!")
+            progress.setValue(100)
+            QApplication.processEvents()
+
+        except Exception as e:
+            progress.close()
+            QMessageBox.warning(self, "Refresh Error", f"An error occurred during refresh:\n{str(e)}")
+            return
+
+        progress.close()
 
     def show_corner_mapping_dialog(self):
         """Show the corner mapping dialog for 3D plotting configuration."""

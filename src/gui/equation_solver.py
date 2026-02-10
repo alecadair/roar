@@ -351,7 +351,16 @@ class ROAREquationSolver:
                     # Iterate over corner dataframes (handle both dict and list)
                     corner_dfs_iter = corner_dfs.values() if isinstance(corner_dfs, dict) else corner_dfs
                     for corner_df in corner_dfs_iter:
-                        result_column = result[:, corner_count]
+                        # Handle scalar results (constants) vs array results
+                        if isinstance(result, (int, float)) or (isinstance(result, np.ndarray) and result.ndim == 0):
+                            # Scalar result - use the same value for all corners
+                            result_column = result
+                        elif isinstance(result, np.ndarray) and result.ndim == 1:
+                            # 1D array - use the entire array for each corner
+                            result_column = result
+                        else:
+                            # 2D array - extract the column for this corner
+                            result_column = result[:, corner_count]
                         corner_df[equation] = result_column
                         corner_count += 1
                     #for device in self.top_level_app.roar_design.devices:

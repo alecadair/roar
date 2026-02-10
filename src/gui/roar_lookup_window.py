@@ -1615,12 +1615,6 @@ class ROARLookupWindow(QWidget):
         # Track current mode on the instance (True = Device Params, False = Design Eqs)
         self.is_device_params_mode = self.radio_device_params.isChecked()
 
-        # Refresh button to re-calculate and update graph from design editor
-        self.refresh_button = QPushButton("🔄")
-        self.refresh_button.setToolTip("Refresh graph - re-calculate from design editor equations")
-        self.refresh_button.setFixedWidth(28)
-        self.refresh_button.clicked.connect(self.on_refresh_clicked)
-
         # store the radio layout on the instance so other methods can reference it
         self.radio_layout = QHBoxLayout()
         # Tighten radio layout margins so it doesn't add extra vertical padding
@@ -1629,8 +1623,7 @@ class ROARLookupWindow(QWidget):
         self.radio_layout.addWidget(self.radio_device_params)
         self.radio_layout.addWidget(self.radio_design_eq)
         self.radio_layout.addStretch()
-        self.controls_layout.addLayout(self.radio_layout, 0, 0, 1, 3)
-        self.controls_layout.addWidget(self.refresh_button, 0, 3)
+        self.controls_layout.addLayout(self.radio_layout, 0, 0, 1, 4)
 
         # Connect toggled signal(s) to keep mode variable in sync and update UI
         self.radio_device_params.toggled.connect(self.on_mode_changed)
@@ -2059,19 +2052,6 @@ class ROARLookupWindow(QWidget):
             # Redraw the 3D plot with new background color
             self.update_graph_from_tech_browser()
 
-    def on_refresh_clicked(self):
-        """Refresh the graph by re-fetching expressions from design editor and re-plotting."""
-        # Update expression symbols from design editor if available
-        if self.top_level_app and hasattr(self.top_level_app, 'editor_window'):
-            try:
-                symbols = self.top_level_app.editor_window.get_expression_symbols()
-                self.expression_symbols = symbols
-                self.update_combobox_items()
-            except Exception:
-                pass
-
-        # Re-update the graph
-        self.update_graph_from_tech_browser()
 
     def update_expression_symbols(self, symbols):
         self.expression_symbols = symbols
