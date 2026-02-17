@@ -1,8 +1,5 @@
-ttkwidgets
-ttkthemes
 matplotlib
 pandas
-sv_ttk
 sympy
 PyQt6==6.8
 pyqtgraph>=0.13
