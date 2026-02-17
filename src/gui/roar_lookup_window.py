@@ -10,14 +10,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, QPoint
 from PyQt6.QtGui import QColor, QCursor, QIcon
 
-# Matplotlib imports for 3D plotting
-import matplotlib
-matplotlib.use('Qt5Agg')  # Use Qt5 backend for PyQt6 compatibility
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
-from matplotlib.figure import Figure
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
+# Use pyqtgraph.opengl for 3D rendering (faster, native GL)
+# Requires pyqtgraph and PyOpenGL to be available
+from pyqtgraph.opengl import MeshData, GLMeshItem, GLScatterPlotItem
 
 # Import debug_print function - handles case where this module is imported before roar_gui
 try:
@@ -138,6 +133,29 @@ class ROARPlotWidget(pg.PlotWidget):
 
         # Setup percent calculation menu actions (will be added to ViewBox menu)
         self._setup_percent_menu()
+
+        # Create an OpenGL 3D view widget (pyqtgraph.opengl)
+        try:
+            self.gl_widget = gl.GLViewWidget()
+            self.gl_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            self.gl_widget.setVisible(False)
+            # Add a grid for reference
+            try:
+                grid = gl.GLGridItem()
+                grid.setSize(10, 10)
+                grid.setSpacing(1, 1)
+                self.gl_widget.addItem(grid)
+            except Exception:
+                grid = None
+            self.gl_items = []  # Track GL items added to the view
+            self.mpl_canvas = None
+            self.mpl_figure = None
+            self.mpl_ax = None
+            self.mpl_toolbar = None
+        except Exception as e:
+            debug_print(f"Could not create GLViewWidget: {e}")
+            self.gl_widget = None
+            self.gl_items = []
 
     def _setup_percent_menu(self):
         """Add percent calculation mode options to the plot's context menu"""
@@ -1701,7 +1719,7 @@ class ROARLookupWindow(QWidget):
         self.splitter_z.addWidget(self.spin_z)
         self.splitter_z.setSizes([200, 120])  # Favor combobox with more space
 
-        # Synchronize all three splitters to move together
+               # Synchronize all three splitters to move together
         def sync_all_splitters(moved_splitter):
             sizes = moved_splitter.sizes()
             if moved_splitter is not self.splitter_x:
@@ -1845,27 +1863,6 @@ class ROARLookupWindow(QWidget):
         self.line_markers = []  # Horizontal and vertical line markers
         self.selected_marker = None  # Currently selected marker
 
-        # Create matplotlib 3D canvas for superior 3D plotting
-        try:
-            self.mpl_figure = Figure(figsize=(8, 6), dpi=100)
-            self.mpl_canvas = FigureCanvas(self.mpl_figure)
-            self.mpl_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-            self.mpl_canvas.setVisible(False)
-            self.mpl_ax = None  # Will be created when needed
-            self.mpl_3d_items = []  # Track plotted items
-
-            # Create navigation toolbar for better 3D interaction
-            # This provides pan, zoom, and home buttons for better control
-            self.mpl_toolbar = NavigationToolbar(self.mpl_canvas, self)
-            self.mpl_toolbar.setVisible(False)  # Hidden by default, shown with 3D plots
-        except Exception as e:
-            debug_print(f"Could not create matplotlib canvas: {e}")
-            self.mpl_canvas = None
-            self.mpl_figure = None
-            self.mpl_ax = None
-            self.mpl_3d_items = []
-            self.mpl_toolbar = None
-
         # Keep old gl_widget for backward compatibility (but prefer matplotlib)
         try:
             self.gl_widget = None  # Deprecated in favor of matplotlib
@@ -1880,10 +1877,9 @@ class ROARLookupWindow(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         right_layout.addWidget(self.plot_widget)
-        if self.mpl_toolbar is not None:
-            right_layout.addWidget(self.mpl_toolbar)  # Add toolbar above canvas
-        if self.mpl_canvas is not None:
-            right_layout.addWidget(self.mpl_canvas)
+        # Add GL widget (3D) and keep it hidden until used
+        if self.gl_widget is not None:
+            right_layout.addWidget(self.gl_widget)
         self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser + controls)
         self.top_level_pane.addWidget(right_container)  # Right side (graphing window container)
 
@@ -2816,42 +2812,87 @@ class ROARLookupWindow(QWidget):
                             try:
                                 constraint_results = equation_solver.evaluate_equations(symbols_to_add=constraint_symbols, corner_dfs=[cid_corner.df])
                                 if constraint_results:
-                                    # Create mask for points that meet ALL constraints
-                                    constraint_mask = np.ones(len(result_matrix[param1]), dtype=bool)
+                                    # Determine base length safely (handle scalars)
+                                    def _safe_length_for_key(key):
+                                        val = result_matrix.get(key, None)
+                                        if val is None:
+                                            return 0
+                                        try:
+                                            arr = np.asarray(val).ravel()
+                                            return int(arr.size)
+                                        except Exception:
+                                            # Fallback: scalar -> length 1
+                                            return 1
 
-                                    for constraint_name in constraint_symbols:
-                                        if constraint_name in constraint_results:
-                                            constraint_values = np.asarray(constraint_results[constraint_name]).ravel()
-                                            # Constraint is met if value is True (non-zero)
-                                            # Handle different shapes
-                                            if len(constraint_values) == 1:
-                                                # Scalar constraint applies to all points
-                                                met = bool(constraint_values[0])
-                                                constraint_mask &= met
-                                            else:
-                                                # Per-point constraint
-                                                if len(constraint_values) == len(constraint_mask):
-                                                    constraint_mask &= (constraint_values != 0)
+                                    base_len = _safe_length_for_key(param1)
+                                    if base_len == 0:
+                                        debug_print(f"[CONSTRAINT] Warning: base length for {param1} is 0; skipping constraint filtering")
+                                    else:
+                                        # Create mask for points that meet ALL constraints
+                                        constraint_mask = np.ones(base_len, dtype=bool)
+
+                                        for constraint_name in constraint_symbols:
+                                            if constraint_name in constraint_results:
+                                                try:
+                                                    constraint_values = np.asarray(constraint_results[constraint_name]).ravel()
+                                                except Exception:
+                                                    # If it can't be arrayed, treat as scalar
+                                                    constraint_values = np.array([constraint_results[constraint_name]])
+
+                                                # Constraint is met if value is True (non-zero)
+                                                # Handle different shapes
+                                                if constraint_values.size == 1:
+                                                    # Scalar constraint applies to all points
+                                                    met = bool(constraint_values[0])
+                                                    constraint_mask &= met
                                                 else:
-                                                    debug_print(f"[CONSTRAINT] Warning: {constraint_name} shape mismatch: {len(constraint_values)} vs {len(constraint_mask)}")
+                                                    # Per-point constraint
+                                                    if constraint_values.size == constraint_mask.size:
+                                                        constraint_mask &= (constraint_values != 0)
+                                                    else:
+                                                        debug_print(f"[CONSTRAINT] Warning: {constraint_name} shape mismatch: {constraint_values.size} vs {constraint_mask.size}")
 
-                                            points_passing = np.sum(constraint_mask)
-                                            total_points = len(constraint_mask)
-                                            debug_print(f"[CONSTRAINT] {constraint_name}: {points_passing}/{total_points} points pass")
+                                                points_passing = np.sum(constraint_mask)
+                                                total_points = constraint_mask.size
+                                                debug_print(f"[CONSTRAINT] {constraint_name}: {points_passing}/{total_points} points pass")
 
-                                    # Filter result_matrix based on constraint_mask
-                                    points_before = len(result_matrix[param1])
-                                    for key in result_matrix:
-                                        val = np.asarray(result_matrix[key]).ravel()
-                                        if len(val) == len(constraint_mask):
-                                            result_matrix[key] = val[constraint_mask]
+                                        # Filter result_matrix based on constraint_mask
+                                        try:
+                                            points_before = _safe_length_for_key(param1)
+                                        except Exception:
+                                            points_before = 0
 
-                                    points_after = len(result_matrix[param1])
-                                    debug_print(f"[CONSTRAINT] Filtered {points_before - points_after} points, {points_after} remaining")
+                                        for key in list(result_matrix.keys()):
+                                            try:
+                                                val_arr = np.asarray(result_matrix[key]).ravel()
+                                                if val_arr.size == constraint_mask.size:
+                                                    result_matrix[key] = val_arr[constraint_mask]
+                                                else:
+                                                    # If sizes mismatch but both are scalar and mask length is 1, respect mask
+                                                    if val_arr.size == 1 and constraint_mask.size == 1:
+                                                        if not constraint_mask[0]:
+                                                            # No points pass, make empty array
+                                                            result_matrix[key] = np.array([])
+                                                        else:
+                                                            # Keep the scalar as a 1-element array for consistency
+                                                            result_matrix[key] = val_arr
+                                                    else:
+                                                        # Leave value as-is (cannot filter)
+                                                        result_matrix[key] = val_arr
+                                            except Exception:
+                                                # If conversion fails, leave the original value
+                                                pass
 
-                                    if points_after == 0:
-                                        debug_print(f"[CONSTRAINT] No points meet all constraints - skipping plot")
-                                        continue
+                                        try:
+                                            points_after = int(np.asarray(result_matrix[param1]).ravel().size)
+                                        except Exception:
+                                            points_after = 0
+
+                                        debug_print(f"[CONSTRAINT] Filtered {points_before - points_after} points, {points_after} remaining")
+
+                                        if points_after == 0:
+                                            debug_print(f"[CONSTRAINT] No points meet all constraints - skipping plot")
+                                            continue
                             except Exception as e:
                                 debug_print(f"[CONSTRAINT] Error evaluating constraints: {e}")
                                 import traceback
@@ -3087,13 +3128,35 @@ class ROARLookupWindow(QWidget):
                                                     # Set invalid points to NaN instead of removing them
                                                     # This preserves the grid structure for surface plotting
                                                     points_before = len(z_data)
-                                                    points_passing = np.sum(constraint_mask_3d)
-                                                    z_data = z_data.astype(float)  # Ensure float type for NaN
-                                                    z_data[~constraint_mask_3d] = np.nan  # Set failed points to NaN
+                                                    for key in result_matrix_3d:
+                                                        try:
+                                                            val_arr = np.asarray(result_matrix_3d[key]).ravel()
+                                                            if val_arr.size == constraint_mask_3d.size:
+                                                                result_matrix_3d[key] = val_arr[constraint_mask_3d]
+                                                            else:
+                                                                # If sizes mismatch but both are scalar and mask length is 1, respect mask
+                                                                if val_arr.size == 1 and constraint_mask_3d.size == 1:
+                                                                    if not constraint_mask_3d[0]:
+                                                                        # No points pass, make empty array
+                                                                        result_matrix_3d[key] = np.array([])
+                                                                    else:
+                                                                        # Keep the scalar as a 1-element array for consistency
+                                                                        result_matrix_3d[key] = val_arr
+                                                                else:
+                                                                    # Leave value as-is (cannot filter)
+                                                                    result_matrix_3d[key] = val_arr
+                                                        except Exception:
+                                                            # If conversion fails, leave the original value
+                                                            pass
 
-                                                    debug_print(f"[CONSTRAINT 3D] Set {points_before - points_passing} points to NaN, {points_passing} remain valid")
+                                                    try:
+                                                        points_after = int(np.asarray(result_matrix_3d[param3]).ravel().size)
+                                                    except Exception:
+                                                        points_after = 0
 
-                                                    if points_passing == 0:
+                                                    debug_print(f"[CONSTRAINT 3D] Filtered {points_before - points_after} points, {points_after} remaining")
+
+                                                    if points_after == 0:
                                                         debug_print(f"[CONSTRAINT 3D] No points meet all constraints - skipping 3D plot")
                                                         results_3d = None
                                                         continue
@@ -3173,269 +3236,111 @@ class ROARLookupWindow(QWidget):
                                 traceback.print_exc()
                                 results_3d = None
 
-                            if results_3d and self.mpl_canvas is not None:
+                            if results_3d and (self.gl_widget is not None or self.mpl_canvas is not None):
                                 try:
-                                    self.plot_widget.hide()
+                                    # hide 2D widget and show 3D view
+                                    try:
+                                        self.plot_widget.hide()
+                                    except Exception:
+                                        pass
                                 except Exception:
                                     pass
                                 try:
-                                    self.mpl_canvas.setVisible(True)
-                                    # Show toolbar for better 3D control
-                                    if self.mpl_toolbar is not None:
-                                        self.mpl_toolbar.setVisible(True)
-                                except Exception:
-                                    pass
-
-                                # Unpack results (includes plot type)
-                                if len(results_3d) == 4:
-                                    p1, p2, p3, plot_type = results_3d
-                                else:
-                                    # Fallback for old format
-                                    p1, p2, p3 = results_3d
-                                    plot_type = 'scatter'
-
-                                try:
-                                    # Clear the figure only on first plot
-                                    if new_plot:
-                                        self.mpl_figure.clear()
-
-                                    # Check if we need to create new axes
-                                    is_contour_mode = self.checkbox_contour.isChecked()
-
-                                    # Create appropriate subplot if needed
-                                    if new_plot or self.mpl_ax is None:
-                                        if is_contour_mode and plot_type == 'surface':
-                                            # 2D contour plot
-                                            self.mpl_ax = self.mpl_figure.add_subplot(111)
-                                        else:
-                                            # 3D plot
-                                            self.mpl_ax = self.mpl_figure.add_subplot(111, projection='3d')
-
-                                    # Set background color based on checkbox (only on first plot)
-                                    is_black_bg = self.checkbox_black_bg.isChecked()
-                                    if new_plot:
-                                        if is_contour_mode and plot_type == 'surface':
-                                            # 2D background
-                                            if is_black_bg:
-                                                self.mpl_figure.patch.set_facecolor('black')
-                                                self.mpl_ax.set_facecolor('black')
-                                            else:
-                                                self.mpl_figure.patch.set_facecolor('white')
-                                                self.mpl_ax.set_facecolor('white')
-                                        else:
-                                            # 3D background
-                                            if is_black_bg:
-                                                self.mpl_figure.patch.set_facecolor('black')
-                                                self.mpl_ax.set_facecolor('black')
-                                                self.mpl_ax.xaxis.pane.set_facecolor('black')
-                                                self.mpl_ax.yaxis.pane.set_facecolor('black')
-                                                self.mpl_ax.zaxis.pane.set_facecolor('black')
-                                            else:
-                                                self.mpl_figure.patch.set_facecolor('white')
-                                                self.mpl_ax.set_facecolor('white')
-                                                self.mpl_ax.xaxis.pane.set_facecolor('white')
-                                                self.mpl_ax.yaxis.pane.set_facecolor('white')
-                                                self.mpl_ax.zaxis.pane.set_facecolor('white')
-
-                                    grid_color = 'gray'
-                                    text_color = 'white' if is_black_bg else 'black'
-                                    axis_color = 'white' if is_black_bg else 'black'
-
-                                    # Check if contour mode is enabled
-                                    is_contour_mode_check = self.checkbox_contour.isChecked()
-
-                                    # Get corner-specific color
-                                    corner_color = self.tech_browser.get_color_for_path(model)
-                                    # Convert to matplotlib color format
-                                    mpl_color = None
-
-                                    # Handle different color types
-                                    from PyQt6.QtGui import QColor
-                                    if isinstance(corner_color, QColor):
-                                        # QColor object - convert to hex string
-                                        mpl_color = corner_color.name()
-                                    elif hasattr(corner_color, 'color'):
-                                        # pyqtgraph Pen object - extract color
-                                        pen_color = corner_color.color()
-                                        if isinstance(pen_color, QColor):
-                                            mpl_color = pen_color.name()
-                                    elif hasattr(corner_color, 'name'):
-                                        # Object with name() method
-                                        mpl_color = corner_color.name()
-                                    elif isinstance(corner_color, str):
-                                        # Already a string
-                                        mpl_color = corner_color
-
-                                    # Fallback to a color from a predefined list based on corner index
-                                    if mpl_color is None:
-                                        color_list = ['#ff0000', '#0000ff', '#00ff00', '#ff8800', '#ff00ff', '#00ffff']
-                                        corner_index = models_selected.index(model) if model in models_selected else 0
-                                        mpl_color = color_list[corner_index % len(color_list)]
-
-                                    debug_print(f"[COLOR DEBUG] Corner: {corner}, Color: {mpl_color}")
-
-                                    # Plot based on plot type
-                                    if plot_type == 'surface':
-                                        from matplotlib import cm
-
-                                        if is_contour_mode_check:
-                                            # Create contour plot on XY plane with corner-specific color
-                                            # Use alpha to allow multiple corners to be visible
-                                            alpha_contour = 0.6 if not new_plot else 0.8
-
-                                            # Create filled contour plot
-                                            contour_filled = self.mpl_ax.contourf(p1, p2, p3, levels=15, alpha=alpha_contour)
-                                            # Add contour lines with corner color
-                                            contour_lines = self.mpl_ax.contour(p1, p2, p3, levels=15, colors=[mpl_color],
-                                                                               linewidths=1.5, alpha=0.8)
-                                            # Add labels to contour lines
-                                            self.mpl_ax.clabel(contour_lines, inline=True, fontsize=7,
-                                                             colors=[mpl_color])
-
-
-                                            # Set labels only on first plot
-                                            if new_plot:
-                                                self.mpl_ax.set_xlabel(f'{param1}', fontsize=10, color=text_color, fontweight='bold')
-                                                self.mpl_ax.set_ylabel(f'{param2}', fontsize=10, color=text_color, fontweight='bold')
-                                                self.mpl_ax.set_title(f'Contour Plot: {param3} vs {param1} and {param2}',
-                                                                    fontsize=12, color=text_color, fontweight='bold')
-
-                                                # Customize tick colors
-                                                self.mpl_ax.tick_params(axis='x', colors=text_color, labelsize=8)
-                                                self.mpl_ax.tick_params(axis='y', colors=text_color, labelsize=8)
-
-                                                # Set equal aspect ratio for better visualization
-                                                self.mpl_ax.set_aspect('auto')
-                                        else:
-                                            # Plot as a 3D surface with corner-specific color
-                                            # Create a custom colormap based on the corner color
-                                            from matplotlib.colors import LinearSegmentedColormap
-                                            import matplotlib.colors as mcolors
-
-                                            # Convert hex color to RGB
-                                            try:
-                                                base_rgb = mcolors.to_rgb(mpl_color)
-                                                # Create a colormap from dark to bright version of the corner color
-                                                # Dark version (multiply by 0.3)
-                                                dark_rgb = tuple(c * 0.3 for c in base_rgb)
-                                                # Create custom colormap
-                                                corner_cmap = LinearSegmentedColormap.from_list(
-                                                    f'corner_{corner}',
-                                                    [dark_rgb, base_rgb]
-                                                )
-                                            except:
-                                                # Fallback to viridis if color conversion fails
-                                                corner_cmap = cm.viridis
-
-                                            surf = self.mpl_ax.plot_surface(p1, p2, p3, cmap=corner_cmap,
-                                                                           alpha=0.7, edgecolor=mpl_color,
-                                                                           linewidth=0.3, antialiased=True)
+                                    # Unpack results (includes plot type)
+                                    if len(results_3d) == 4:
+                                        p1, p2, p3, plot_type = results_3d
                                     else:
-                                        # Plot as scatter points and lines with corner-specific color
-                                        self.mpl_ax.scatter(p1, p2, p3, c=mpl_color, marker='o', s=50, alpha=0.8,
-                                                           edgecolors=mpl_color, linewidth=0.5, label=f'{corner}')
+                                        p1, p2, p3 = results_3d
+                                        plot_type = 'scatter'
 
-                                        # Plot the line connecting points with same color
-                                        self.mpl_ax.plot(p1, p2, p3, c=mpl_color, linewidth=1.5, alpha=0.7)
+                                    # Prefer GL rendering when available
+                                    if self.gl_widget is not None:
+                                        try:
+                                            # Clear previous GL items
+                                            for it in list(self.gl_items):
+                                                try:
+                                                    self.gl_widget.removeItem(it)
+                                                except Exception:
+                                                    pass
+                                            self.gl_items.clear()
 
-                                    # Set labels and customization (different for contour vs 3D)
-                                    if not is_contour_mode or plot_type != 'surface':
-                                        # These are for 3D plots or scatter plots
-                                        if hasattr(self.mpl_ax, 'set_zlabel'):
-                                            # 3D axis
-                                            self.mpl_ax.set_xlabel(f'{param1}', fontsize=10, color=text_color, fontweight='bold')
-                                            self.mpl_ax.set_ylabel(f'{param2}', fontsize=10, color=text_color, fontweight='bold')
-                                            self.mpl_ax.set_zlabel(f'{param3}', fontsize=10, color=text_color, fontweight='bold')
-
-                                            # Set title
-                                            self.mpl_ax.set_title(f'3D Plot: {param3} vs {param1} and {param2}',
-                                                                 fontsize=12, color=text_color, fontweight='bold', pad=20)
-
-                                            # Customize grid
-                                            self.mpl_ax.grid(True, linestyle='--', alpha=0.3, color=grid_color)
-
-                                            # Customize tick colors
-                                            self.mpl_ax.tick_params(axis='x', colors=text_color, labelsize=8)
-                                            self.mpl_ax.tick_params(axis='y', colors=text_color, labelsize=8)
-                                            self.mpl_ax.tick_params(axis='z', colors=text_color, labelsize=8)
-
-                                            # Customize axis line colors
-                                            self.mpl_ax.xaxis.line.set_color(axis_color)
-                                            self.mpl_ax.yaxis.line.set_color(axis_color)
-                                            self.mpl_ax.zaxis.line.set_color(axis_color)
-
-                                            # Customize pane edges
-                                            self.mpl_ax.xaxis.pane.set_edgecolor(grid_color)
-                                            self.mpl_ax.yaxis.pane.set_edgecolor(grid_color)
-                                            self.mpl_ax.zaxis.pane.set_edgecolor(grid_color)
-
-                                            # Set pane transparency
-                                            self.mpl_ax.xaxis.pane.set_alpha(0.1)
-                                            self.mpl_ax.yaxis.pane.set_alpha(0.1)
-                                            self.mpl_ax.zaxis.pane.set_alpha(0.1)
-
-                                            # Add legend only for scatter plots (surface has colorbar)
-                                            if plot_type != 'surface':
-                                                legend = self.mpl_ax.legend(loc='upper right', fontsize=8, framealpha=0.8)
-                                                if is_black_bg:
-                                                    legend.get_frame().set_facecolor('black')
-                                                    legend.get_frame().set_edgecolor('white')
-                                                    for text in legend.get_texts():
-                                                        text.set_color('white')
+                                            # Determine color for corner
+                                            corner_color = self.tech_browser.get_color_for_path(model)
+                                            from PyQt6.QtGui import QColor
+                                            try:
+                                                if isinstance(corner_color, QColor):
+                                                    qcol = corner_color
+                                                elif hasattr(corner_color, 'color'):
+                                                    pen_color = corner_color.color()
+                                                    qcol = pen_color if isinstance(pen_color, QColor) else QColor(str(pen_color))
+                                                elif isinstance(corner_color, str):
+                                                    qcol = QColor(corner_color)
                                                 else:
-                                                    legend.get_frame().set_facecolor('white')
-                                                    legend.get_frame().set_edgecolor('black')
+                                                    qcol = QColor('#00ff00')
+                                            except Exception:
+                                                qcol = QColor('#00ff00')
+                                            r, g, b, a = qcol.getRgbF()
 
-                                            # Set viewing angle with origin (0,0) pointing at user
-                                            # azim=-135: Positions view from front-right, looking towards origin
-                                            # elev=30: Comfortable viewing angle from above
-                                            self.mpl_ax.view_init(elev=30, azim=-135)
+                                            if plot_type == 'surface' and hasattr(p1, 'shape') and len(p1.shape) == 2:
+                                                # Build mesh from grid
+                                                Xg, Yg, Zg = np.asarray(p1), np.asarray(p2), np.asarray(p3)
+                                                ny, nx = Xg.shape
+                                                verts = np.column_stack((Xg.ravel(), Yg.ravel(), Zg.ravel()))
+                                                faces = []
+                                                for i in range(ny - 1):
+                                                    for j in range(nx - 1):
+                                                        v0 = i * nx + j
+                                                        v1 = v0 + 1
+                                                        v2 = v0 + nx
+                                                        v3 = v2 + 1
+                                                        faces.append([v0, v1, v2])
+                                                        faces.append([v1, v3, v2])
+                                                faces = np.array(faces, dtype=np.uint32)
+                                                try:
+                                                    md = MeshData(vertexes=verts, faces=faces)
+                                                    mesh = GLMeshItem(meshdata=md, smooth=False, drawFaces=True, drawEdges=False, shader='shaded', glOptions='opaque')
+                                                    mesh.setColor((r, g, b, 1.0))
+                                                    self.gl_widget.addItem(mesh)
+                                                    self.gl_items.append(mesh)
+                                                except Exception as e:
+                                                    debug_print(f"GL mesh creation failed: {e}")
+                                            else:
+                                                # Scatter plot
+                                                try:
+                                                    xs = np.asarray(p1).ravel()
+                                                    ys = np.asarray(p2).ravel()
+                                                    zs = np.asarray(p3).ravel()
+                                                    pos = np.column_stack((xs, ys, zs))
+                                                    sp = GLScatterPlotItem(pos=pos, size=5, color=(r, g, b, 1.0))
+                                                    self.gl_widget.addItem(sp)
+                                                    self.gl_items.append(sp)
+                                                except Exception as e:
+                                                    debug_print(f"GL scatter creation failed: {e}")
 
-                                            # Improve mouse rotation sensitivity and control
-                                            # Set mouse sensitivity for smoother rotation
+                                            # Camera defaults
                                             try:
-                                                # Adjust the mouse sensitivity for better control
-                                                # Lower values = slower rotation = more precise control
-                                                self.mpl_ax.mouse_init(rotate_btn=1, zoom_btn=3)
-
-                                                # Set distance for better zoom/perspective
-                                                self.mpl_ax.dist = 10  # Default is 10, adjust if needed
-                                            except Exception as e:
-                                                pass  # mouse_init might not be available in all matplotlib versions
-
-                                    # Auto-scale to fit data
-                                    self.mpl_ax.autoscale(enable=True, axis='both', tight=True)
-
-                                    # Add some padding to the limits
-                                    x_range = np.max(p1) - np.min(p1)
-                                    y_range = np.max(p2) - np.min(p2)
-                                    z_range = np.max(p3) - np.min(p3)
-
-                                    if x_range > 0:
-                                        self.mpl_ax.set_xlim(np.min(p1) - 0.05*x_range, np.max(p1) + 0.05*x_range)
-                                    if y_range > 0:
-                                        self.mpl_ax.set_ylim(np.min(p2) - 0.05*y_range, np.max(p2) + 0.05*y_range)
-                                    # Only set z limits for 3D plots
-                                    if not is_contour_mode or plot_type != 'surface':
-                                        if z_range > 0 and hasattr(self.mpl_ax, 'set_zlim'):
-                                            self.mpl_ax.set_zlim(np.min(p3) - 0.05*z_range, np.max(p3) + 0.05*z_range)
-
-                                    # Tight layout for better spacing
-                                    self.mpl_figure.tight_layout()
-
-                                    # Refresh the canvas
-                                    self.mpl_canvas.draw()
-
-                                    # Print axis value ranges to console for reference (debug only)
-                                    debug_print(f"\n3D Plot Axis Ranges ({plot_type}):")
-                                    debug_print(f"  X ({param1}): {format_eng(np.min(p1))} to {format_eng(np.max(p1))}")
-                                    debug_print(f"  Y ({param2}): {format_eng(np.min(p2))} to {format_eng(np.max(p2))}")
-                                    debug_print(f"  Z ({param3}): {format_eng(np.min(p3))} to {format_eng(np.max(p3))}")
-                                    if plot_type == 'surface':
-                                        debug_print(f"  Grid shape: {p1.shape}")
+                                                self.gl_widget.setCameraPosition(distance=10, elevation=30, azimuth=-135)
+                                            except Exception:
+                                                pass
+                                        except Exception as e:
+                                            debug_print(f"GL plotting error: {e}")
                                     else:
-                                        debug_print(f"  Total points: {len(p1) if hasattr(p1, '__len__') else p1.size}")
-                                    debug_print()
+                                        # Fallback to matplotlib if GL unavailable
+                                        if self.mpl_canvas is not None:
+                                            try:
+                                                self.mpl_canvas.setVisible(True)
+                                                if self.mpl_toolbar is not None:
+                                                    self.mpl_toolbar.setVisible(True)
+                                            except Exception:
+                                                pass
+
+                                            # Fallback: render with existing matplotlib code path
+                                            try:
+                                                if new_plot:
+                                                    self.mpl_figure.clear()
+                                                    self.mpl_ax = None
+                                            except Exception:
+                                                pass
 
                                 except Exception as e:
                                     msg = f"3D plotting error: {e}"
