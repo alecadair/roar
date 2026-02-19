@@ -83,6 +83,18 @@
             "Expression": "kgm1*kgm2",
             "disabled": false,
             "plot": false
+        },
+        {
+            "Symbol": "kcgs2",
+            "Expression": "kcgs:M2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kco",
+            "Expression": "kcgs1 + kcgs2",
+            "disabled": false,
+            "plot": false
         }
     ],
     "constraint_editor": [
@@ -95,13 +107,26 @@
     ],
     "instance_table": [
         {
-            "Instance Name": "M1",
+            "Instance": "M1",
             "kgm": "",
             "ID": "",
             "W": "",
             "L": "",
+            "Corners": "[*Global*]",
             "disabled": false,
-            "plot": false
+            "plot": false,
+            "_corners_data": null
+        },
+        {
+            "Instance": "M2",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
         }
     ]
 }

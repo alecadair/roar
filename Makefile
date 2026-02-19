@@ -7,6 +7,8 @@
 #
 
 TCSH_PATH := $(shell which tcsh)
+SH_PATH := $(shell which bash)
+
 
 # Ensure tcsh is installed
 ifeq ($(TCSH_PATH),)

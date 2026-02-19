@@ -1,0 +1,119 @@
+Step 1 — Build with PyInstaller (Correct Way)
+
+From your venv:
+
+pyinstaller \
+  --onedir \
+  --clean \
+  --name roar \
+  --collect-all PyQt6 \
+  --collect-all matplotlib \
+  --collect-all pyqtgraph \
+  --collect-all OpenGL \
+  --collect-all pyqtdarktheme \
+  ../src/gui/roar_gui.py
+
+
+You now have:
+
+dist/roar/
+
+
+Test it:
+
+./dist/roar/roar
+
+
+If it runs correctly, continue.
+
+Step 2 — Install AppImageTool
+
+Download AppImageTool:
+
+wget https://github.com/AppImage/AppImageKit/releases/latest/download/appimagetool-x86_64.AppImage
+chmod +x appimagetool-x86_64.AppImage
+
+Step 3 — Create AppDir Structure
+
+AppImage requires a specific directory structure.
+
+Create:
+
+roar.AppDir/
+
+
+Inside it:
+
+roar.AppDir/
+  AppRun
+  roar.desktop
+  roar.png
+  usr/
+    bin/
+
+
+Copy your PyInstaller output:
+
+cp -r dist/roar/* roar.AppDir/usr/bin/
+
+Step 4 — Create AppRun
+
+Create file:
+
+roar.AppDir/AppRun
+
+
+Contents:
+
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "${0}")")"
+exec "${HERE}/usr/bin/roar" "$@"
+
+
+Make executable:
+
+chmod +x roar.AppDir/AppRun
+
+Step 5 — Create Desktop File
+
+Create:
+
+roar.AppDir/roar.desktop
+
+
+Contents:
+
+[Desktop Entry]
+Name=Roar
+Exec=roar
+Icon=roar
+Type=Application
+Categories=Utility;
+
+Step 6 — Add Icon
+
+Place a PNG icon:
+
+roar.AppDir/roar.png
+
+Step 7 — Build AppImage
+
+Run:
+
+./appimagetool-x86_64.AppImage roar.AppDir
+
+
+You get:
+
+Roar-x86_64.AppImage
+
+
+That file is your portable Linux executable.
+
+Users can:
+
+chmod +x Roar-x86_64.AppImage
+./Roar-x86_64.AppImage
+
+
+No install needed.

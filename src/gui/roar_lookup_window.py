@@ -1863,11 +1863,14 @@ class ROARLookupWindow(QWidget):
         self.line_markers = []  # Horizontal and vertical line markers
         self.selected_marker = None  # Currently selected marker
 
-        # Keep old gl_widget for backward compatibility (but prefer matplotlib)
+        # Create pyqtgraph OpenGL widget for 3D mesh plotting
         try:
-            self.gl_widget = None  # Deprecated in favor of matplotlib
+            self.gl_widget = gl.GLViewWidget()
+            self.gl_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            self.gl_widget.setVisible(False)
             self.gl_items = []
-        except Exception:
+        except Exception as e:
+            debug_print(f"Could not create GLViewWidget: {e}")
             self.gl_widget = None
             self.gl_items = []
 
@@ -2033,10 +2036,8 @@ class ROARLookupWindow(QWidget):
 
         # When switching to Device Params mode, hide any 3D plots
         if self.is_device_params_mode:
-            if self.mpl_canvas is not None:
-                self.mpl_canvas.setVisible(False)
-            if self.mpl_toolbar is not None:
-                self.mpl_toolbar.setVisible(False)
+            if self.gl_widget is not None:
+                self.gl_widget.setVisible(False)
             self.plot_widget.show()
 
         self.update_combobox_items()
@@ -2044,9 +2045,11 @@ class ROARLookupWindow(QWidget):
 
     def on_background_color_changed(self):
         """Update the 3D plot background when the Black BG checkbox changes"""
-        if self.mpl_canvas is not None and self.mpl_canvas.isVisible():
-            # Redraw the 3D plot with new background color
-            self.update_graph_from_tech_browser()
+        if self.gl_widget is not None and self.gl_widget.isVisible():
+            # 3D plots always use black background
+            self.gl_widget.setBackgroundColor(0, 0, 0)
+        # Redraw the plot with new background color
+        self.update_graph_from_tech_browser()
 
 
     def update_expression_symbols(self, symbols):
@@ -2562,12 +2565,10 @@ class ROARLookupWindow(QWidget):
     def toggle_three_d_mode(self):
         self.is_3d_mode = self.three_d_checkbox.isChecked()
 
-        # If turning OFF 3D mode, hide the 3D canvas and show the 2D plot widget
+        # If turning OFF 3D mode, hide the GL widget and show the 2D plot widget
         if not self.is_3d_mode:
-            if self.mpl_canvas is not None:
-                self.mpl_canvas.setVisible(False)
-            if self.mpl_toolbar is not None:
-                self.mpl_toolbar.setVisible(False)
+            if self.gl_widget is not None:
+                self.gl_widget.setVisible(False)
             self.plot_widget.show()
 
         self.plot_scientific_data()
@@ -2676,6 +2677,9 @@ class ROARLookupWindow(QWidget):
             self.current_style_index = 0
             new_plot = True
 
+            # Collect 3D results from all corners for joint rendering
+            all_3d_results = []  # list of (results_3d, color, model_path, param1, param2, param3)
+
             for model in models_selected:
                 model_tokens = model.split(">")
                 pdk = model_tokens[1]
@@ -2726,45 +2730,13 @@ class ROARLookupWindow(QWidget):
                         except Exception as e:
                             debug_print(f"[DESIGN EQS] Could not get device corners: {e}")
 
-                    # Collect all corner dataframes needed for this evaluation
-                    # We need corners from: 1) current tech browser selection, 2) device-specific selections
+                    # Use only the global corner from the tech browser for all devices.
+                    # Device-specific instance table corner selections are ignored for now.
                     corner_dfs_dict = {}
-
-                    # Create full path key for current corner (used for devices with global selection)
                     current_corner_path = f"{pdk}>{model_name}>{length}>{corner}"
                     corner_dfs_dict[current_corner_path] = cid_corner.df
 
-                    # Add any device-specific corners
-                    if device_corners:
-                        for device_name, device_info in device_corners.items():
-                            # device_info is now a dict with 'corners', 'corner_paths', 'pdk', 'model', 'length' keys
-                            if not isinstance(device_info, dict):
-                                continue
-
-                            corner_paths = device_info.get('corner_paths')
-                            if corner_paths:  # Has device-specific corners with full paths
-                                for corner_path in corner_paths:
-                                    if corner_path and corner_path not in corner_dfs_dict:
-                                        # Parse the full path: PDK>model>length>corner
-                                        parts = corner_path.split('>')
-                                        if len(parts) >= 5:
-                                            dev_pdk = parts[1]
-                                            dev_model = parts[2]
-                                            dev_length = parts[3]
-                                            dev_corner_name = parts[4]
-
-                                            try:
-                                                # Look up corner using full path info
-                                                dev_cid_corner = self.tech_browser.tech_dict.get(dev_pdk, {}).get(dev_model, {}).get(dev_length, {}).get("corners", {}).get(dev_corner_name)
-                                                if dev_cid_corner:
-                                                    corner_dfs_dict[corner_path] = dev_cid_corner.df
-                                                    debug_print(f"[DESIGN EQS] Added corner '{corner_path}' for device {device_name}")
-                                                else:
-                                                    debug_print(f"[DESIGN EQS] Warning: Corner not found at path '{corner_path}' for device {device_name}")
-                                            except Exception as e:
-                                                debug_print(f"[DESIGN EQS] Error loading corner '{corner_path}': {e}")
-
-                    debug_print(f"[DESIGN EQS] Using corners: {list(corner_dfs_dict.keys())}")
+                    debug_print(f"[DESIGN EQS] Using global corner: {list(corner_dfs_dict.keys())}")
 
                     equation_solver = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
                     equation_solver.corners = [cid_corner.df]
@@ -2957,276 +2929,221 @@ class ROARLookupWindow(QWidget):
                             param3 = self.combo_z.currentText()
                             results_3d = None
                             try:
-                                # For 3D surface plotting, we need to evaluate Z at all combinations of X and Y
-                                # First, get X and Y data from the corner (use corner_dfs_dict for device-specific corners)
-                                result_matrix_xy = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=corner_dfs_dict)
+                                # ── 3D Surface: symbolic meshgrid evaluation ──
+                                # 1) Evaluate ALL expressions so every intermediate
+                                #    result is available as a 1-D vector.
+                                all_expression_syms = list(expressions.keys())
+                                result_matrix_all = equation_solver.evaluate_equations(
+                                    symbols_to_add=all_expression_syms,
+                                    corner_dfs=corner_dfs_dict
+                                )
 
-                                if result_matrix_xy is not None and param1 in result_matrix_xy and param2 in result_matrix_xy:
-                                    # Get X and Y data
-                                    x_data = np.asarray(result_matrix_xy[param1]).ravel()
-                                    y_data = np.asarray(result_matrix_xy[param2]).ravel()
+                                if (result_matrix_all is not None
+                                        and param1 in result_matrix_all
+                                        and param2 in result_matrix_all
+                                        and param3 in result_matrix_all):
 
-                                    # Get unique values for creating meshgrid
+                                    # Get 1-D X / Y vectors
+                                    x_data = np.asarray(result_matrix_all[param1]).ravel()
+                                    y_data = np.asarray(result_matrix_all[param2]).ravel()
+
                                     unique_x = np.unique(x_data)
                                     unique_y = np.unique(y_data)
 
-                                    # Limit grid resolution for performance (3D plots can be laggy with too many points)
-                                    # Recommended: 20-40 points per axis for smooth interaction
-                                    max_grid_resolution = 40  # Adjust this for performance vs quality tradeoff
-
-                                    # Downsample if needed
+                                    # Limit grid resolution for performance
+                                    max_grid_resolution = 40
                                     if len(unique_x) > max_grid_resolution:
-                                        # Use linspace to get evenly distributed points
                                         unique_x = np.linspace(unique_x[0], unique_x[-1], max_grid_resolution)
-                                        debug_print(f"[PERFORMANCE] Downsampled X from {len(np.unique(x_data))} to {max_grid_resolution} points")
-
                                     if len(unique_y) > max_grid_resolution:
                                         unique_y = np.linspace(unique_y[0], unique_y[-1], max_grid_resolution)
-                                        debug_print(f"[PERFORMANCE] Downsampled Y from {len(np.unique(y_data))} to {max_grid_resolution} points")
 
-                                    # Decide between surface and scatter plot
-                                    # For surface: need enough unique values and Z must be a function of X and Y
-                                    min_grid_size = 3  # Need at least 3x3 grid for meaningful surface
-
+                                    min_grid_size = 3
                                     if len(unique_x) >= min_grid_size and len(unique_y) >= min_grid_size:
-                                        # Create meshgrid for surface plot
                                         X_grid, Y_grid = np.meshgrid(unique_x, unique_y)
 
-                                        # Now we need to evaluate Z for ALL points in the meshgrid
-                                        # We'll create a temporary dataframe with all combinations
-                                        try:
-                                            import pandas as pd
-                                            # Flatten the grid to get all (X,Y) pairs
-                                            x_flat = X_grid.ravel()
-                                            y_flat = Y_grid.ravel()
+                                        # ── Helper: recursively resolve a symbol into a
+                                        #    fully-expanded sympy expression whose only
+                                        #    free symbols are either already-evaluated
+                                        #    results or numeric constants. ──
+                                        from sympy import Symbol as SympySymbol, sympify as sp_sympify
+                                        from sympy.utilities.lambdify import lambdify
 
-                                            # Create a temporary DataFrame with these values
-                                            # IMPORTANT: If param1/param2 are equations (e.g., kgm1 = kgm:M1),
-                                            # we need to figure out the underlying column names
-                                            temp_df = pd.DataFrame()
+                                        def _resolve_expr(sym_name, eqs, _seen=None):
+                                            """Return a sympy expression for *sym_name*
+                                            with all intermediate equation symbols
+                                            recursively substituted. Lookup equations
+                                            (strings containing ':') are left as bare
+                                            Symbol(sym_name) because they are terminal
+                                            – their values come from result_matrix_all.
+                                            """
+                                            if _seen is None:
+                                                _seen = set()
+                                            if sym_name in _seen:
+                                                return SympySymbol(sym_name)
+                                            _seen.add(sym_name)
+                                            eq_val = eqs.get(sym_name)
+                                            if eq_val is None:
+                                                # Not an equation – treat as terminal symbol
+                                                return SympySymbol(sym_name)
+                                            if isinstance(eq_val, str):
+                                                # Lookup string like "kgm:M1" → terminal
+                                                return SympySymbol(sym_name)
+                                            # eq_val is a sympy expression. Substitute
+                                            # each of *its* free symbols recursively.
+                                            expr = eq_val
+                                            for fs in list(expr.free_symbols):
+                                                fs_name = str(fs)
+                                                sub_expr = _resolve_expr(fs_name, eqs, _seen)
+                                                if sub_expr != fs:
+                                                    expr = expr.subs(fs, sub_expr)
+                                            return expr
 
-                                            # Helper function to get the actual column name
-                                            def get_base_column_name(param_name, param_values):
-                                                """
-                                                If param_name is an equation like 'kgm1 = kgm:M1',
-                                                extract the base column name 'kgm'.
-                                                Otherwise, just use param_name as-is.
-                                                """
-                                                if param_name in equation_solver.equations:
-                                                    eq = equation_solver.equations[param_name]
-                                                    eq_str = str(eq)
-                                                    # Check if it's a lookup (contains ':')
-                                                    if ':' in eq_str:
-                                                        # Extract the lookup variable (before ':')
-                                                        base_name = eq_str.split(':')[0].strip()
-                                                        debug_print(f"[DEBUG] {param_name} is equation '{eq_str}' -> using base column '{base_name}'")
-                                                        return base_name
-                                                # Not an equation or not a lookup, use as-is
-                                                return param_name
+                                        def _get_device(sym_name, eqs):
+                                            """Return the device name for a terminal
+                                            lookup symbol, or None if it is not a
+                                            lookup.  e.g. 'kcgs1' whose equation is
+                                            'kcgs:M1' → 'M1'.
+                                            """
+                                            eq_val = eqs.get(sym_name)
+                                            if isinstance(eq_val, str) and ':' in eq_val:
+                                                parts = eq_val.split(':')
+                                                if len(parts) == 2:
+                                                    return parts[1].strip()
+                                            return None
 
-                                            # Get actual column names
-                                            col1 = get_base_column_name(param1, x_flat)
-                                            col2 = get_base_column_name(param2, y_flat)
+                                        # Determine which device the X and Y axes
+                                        # belong to so that other lookups from the
+                                        # same device can be interpolated along the
+                                        # correct grid axis.
+                                        x_device = _get_device(param1, equation_solver.equations)
+                                        y_device = _get_device(param2, equation_solver.equations)
+                                        debug_print(f"[3D GRID] X device: {x_device}, Y device: {y_device}")
 
-                                            # Create temp_df with the correct column names
-                                            temp_df[col1] = x_flat
-                                            temp_df[col2] = y_flat
+                                        def _eval_on_grid(sym_name, eqs, result_map,
+                                                          x_name, y_name, Xg, Yg,
+                                                          x_dev, y_dev,
+                                                          x_1d, y_1d):
+                                            """Evaluate *sym_name* on the meshgrid.
 
-                                            # Also add param1 and param2 as columns if they're different
-                                            # This handles cases where the equation solver expects both
-                                            if col1 != param1:
-                                                temp_df[param1] = x_flat
-                                            if col2 != param2:
-                                                temp_df[param2] = y_flat
+                                            For terminal lookup symbols that share a
+                                            device with the X or Y axis, their 1-D
+                                            LUT values are interpolated along the
+                                            matching grid axis instead of being
+                                            collapsed to a scalar mean.
 
-                                            debug_print(f"\n[DEBUG] Creating meshgrid for surface plot")
-                                            debug_print(f"  param1 ({param1}): {len(unique_x)} unique values")
-                                            debug_print(f"  param2 ({param2}): {len(unique_y)} unique values")
-                                            debug_print(f"  Grid size: {X_grid.shape}")
-                                            debug_print(f"  Total points: {len(x_flat)}")
-                                            debug_print(f"  param1 range: {np.min(x_flat)} to {np.max(x_flat)}")
-                                            debug_print(f"  param2 range: {np.min(y_flat)} to {np.max(y_flat)}")
+                                            Returns a 2-D numpy array shaped like Xg.
+                                            """
+                                            resolved = _resolve_expr(sym_name, eqs)
+                                            free = list(resolved.free_symbols)
+                                            debug_print(f"[3D GRID] Resolved '{sym_name}' -> {resolved}")
+                                            debug_print(f"[3D GRID]   free symbols: {[str(s) for s in free]}")
 
-                                            # Copy ALL other columns from original corner
-                                            # This ensures any variables referenced by param3 equation are available
-                                            # IMPORTANT: Don't overwrite the meshgrid columns OR their base lookup columns!
-                                            columns_to_preserve = set([param1, param2, col1, col2])
+                                            if not free:
+                                                val = float(resolved)
+                                                return np.full(Xg.shape, val)
 
-                                            # Also preserve base columns for ALL equation params to avoid constant overwrite
-                                            # For example, if param3 = kgm1 * kgm3, we need 'kgm' to not be constant
-                                            for eq_name in [param1, param2, param3 if 'param3' in locals() else None]:
-                                                if eq_name and eq_name in equation_solver.equations:
-                                                    eq = equation_solver.equations[eq_name]
-                                                    eq_str = str(eq)
-                                                    if ':' in eq_str:
-                                                        base_name = eq_str.split(':')[0].strip()
-                                                        columns_to_preserve.add(base_name)
+                                            args = []
+                                            for fs in free:
+                                                name = str(fs)
+                                                if name == x_name:
+                                                    args.append(Xg)
+                                                elif name == y_name:
+                                                    args.append(Yg)
+                                                elif name in result_map:
+                                                    # Check if this symbol's lookup
+                                                    # shares a device with X or Y.
+                                                    sym_dev = _get_device(name, eqs)
+                                                    val = result_map[name]
+                                                    val_1d = np.asarray(val, dtype=np.float64).ravel()
 
-                                            for col in cid_corner.df.columns:
-                                                if col not in columns_to_preserve:
-                                                    # Use the first value as representative for other variables
-                                                    temp_df[col] = cid_corner.df[col].iloc[0]
-
-                                            debug_print(f"  Preserved columns from overwrite: {columns_to_preserve}")
-
-                                            debug_print(f"  temp_df columns: {list(temp_df.columns)}")
-                                            debug_print(f"  temp_df shape: {temp_df.shape}")
-                                            debug_print(f"  {param1} in temp_df: {param1 in temp_df.columns}")
-                                            debug_print(f"  {param2} in temp_df: {param2 in temp_df.columns}")
-                                            debug_print(f"  {param1} unique values in temp_df: {len(temp_df[param1].unique())}")
-                                            debug_print(f"  {param2} unique values in temp_df: {len(temp_df[param2].unique())}")
-
-                                            # Create a FRESH equation solver for meshgrid evaluation
-                                            # This avoids reusing cached results from the original dataframe
-                                            equation_solver_3d = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
-                                            for expression_sym in expressions:
-                                                expression = expressions[expression_sym]
-                                                equation_solver_3d.add_equation(expression_sym, expression)
-
-                                            # Add constraints to the 3D solver
-                                            if constraints:
-                                                for constraint_name, constraint_expr in constraints.items():
-                                                    try:
-                                                        equation_solver_3d.add_equation(constraint_name, constraint_expr)
-                                                    except Exception as e:
-                                                        debug_print(f"[CONSTRAINT 3D] Error adding constraint '{constraint_name}': {e}")
-
-                                            # Now evaluate Z using this grid with the fresh solver
-                                            symbols_to_evaluate = [param3]
-                                            if constraints:
-                                                symbols_to_evaluate.extend(list(constraints.keys()))
-
-                                            result_matrix_3d = equation_solver_3d.evaluate_equations(
-                                                symbols_to_add=symbols_to_evaluate,
-                                                corner_dfs=[temp_df]
-                                            )
-
-                                            if result_matrix_3d is not None and param3 in result_matrix_3d:
-                                                z_data = np.asarray(result_matrix_3d[param3]).ravel()
-
-                                                # Apply constraint filtering for 3D
-                                                # Use NaN masking to maintain surface structure with holes
-                                                constraint_mask_3d = None
-                                                if constraints:
-                                                    debug_print(f"[CONSTRAINT 3D] Evaluating {len(constraints)} constraints on meshgrid")
-                                                    constraint_mask_3d = np.ones(len(z_data), dtype=bool)
-
-                                                    for constraint_name in constraints.keys():
-                                                        if constraint_name in result_matrix_3d:
-                                                            constraint_values = np.asarray(result_matrix_3d[constraint_name]).ravel()
-                                                            if len(constraint_values) == 1:
-                                                                met = bool(constraint_values[0])
-                                                                constraint_mask_3d &= met
-                                                            else:
-                                                                if len(constraint_values) == len(constraint_mask_3d):
-                                                                    constraint_mask_3d &= (constraint_values != 0)
-
-                                                            points_passing = np.sum(constraint_mask_3d)
-                                                            total_points = len(constraint_mask_3d)
-                                                            debug_print(f"[CONSTRAINT 3D] {constraint_name}: {points_passing}/{total_points} points pass")
-
-                                                    # Set invalid points to NaN instead of removing them
-                                                    # This preserves the grid structure for surface plotting
-                                                    points_before = len(z_data)
-                                                    for key in result_matrix_3d:
-                                                        try:
-                                                            val_arr = np.asarray(result_matrix_3d[key]).ravel()
-                                                            if val_arr.size == constraint_mask_3d.size:
-                                                                result_matrix_3d[key] = val_arr[constraint_mask_3d]
-                                                            else:
-                                                                # If sizes mismatch but both are scalar and mask length is 1, respect mask
-                                                                if val_arr.size == 1 and constraint_mask_3d.size == 1:
-                                                                    if not constraint_mask_3d[0]:
-                                                                        # No points pass, make empty array
-                                                                        result_matrix_3d[key] = np.array([])
-                                                                    else:
-                                                                        # Keep the scalar as a 1-element array for consistency
-                                                                        result_matrix_3d[key] = val_arr
-                                                                else:
-                                                                    # Leave value as-is (cannot filter)
-                                                                    result_matrix_3d[key] = val_arr
-                                                        except Exception:
-                                                            # If conversion fails, leave the original value
-                                                            pass
-
-                                                    try:
-                                                        points_after = int(np.asarray(result_matrix_3d[param3]).ravel().size)
-                                                    except Exception:
-                                                        points_after = 0
-
-                                                    debug_print(f"[CONSTRAINT 3D] Filtered {points_before - points_after} points, {points_after} remaining")
-
-                                                    if points_after == 0:
-                                                        debug_print(f"[CONSTRAINT 3D] No points meet all constraints - skipping 3D plot")
-                                                        results_3d = None
-                                                        continue
-
-                                                debug_print(f"\n[DEBUG] Z evaluation results:")
-                                                debug_print(f"  param3 ({param3}) shape: {z_data.shape}")
-                                                # Calculate range ignoring NaN values
-                                                valid_z = z_data[~np.isnan(z_data)]
-                                                if len(valid_z) > 0:
-                                                    debug_print(f"  Z range: {np.min(valid_z)} to {np.max(valid_z)}")
-                                                    debug_print(f"  Z unique values: {len(np.unique(valid_z))}")
+                                                    if sym_dev and sym_dev == x_dev and val_1d.size == x_1d.size:
+                                                        # Co-indexed with X axis – interpolate along X
+                                                        sort_idx = np.argsort(x_1d)
+                                                        interp_vals = np.interp(
+                                                            Xg.ravel(),
+                                                            x_1d[sort_idx],
+                                                            val_1d[sort_idx]
+                                                        ).reshape(Xg.shape)
+                                                        args.append(interp_vals)
+                                                        debug_print(f"[3D GRID]   '{name}' interpolated along X (device {sym_dev})")
+                                                    elif sym_dev and sym_dev == y_dev and val_1d.size == y_1d.size:
+                                                        # Co-indexed with Y axis – interpolate along Y
+                                                        sort_idx = np.argsort(y_1d)
+                                                        interp_vals = np.interp(
+                                                            Yg.ravel(),
+                                                            y_1d[sort_idx],
+                                                            val_1d[sort_idx]
+                                                        ).reshape(Yg.shape)
+                                                        args.append(interp_vals)
+                                                        debug_print(f"[3D GRID]   '{name}' interpolated along Y (device {sym_dev})")
+                                                    else:
+                                                        # No device match – use scalar mean
+                                                        if isinstance(val, np.ndarray):
+                                                            args.append(float(np.nanmean(val)))
+                                                        else:
+                                                            args.append(float(val))
+                                                        debug_print(f"[3D GRID]   '{name}' used as scalar mean")
                                                 else:
-                                                    debug_print(f"  Z range: all NaN")
-                                                if len(np.unique(valid_z)) == 1:
-                                                    debug_print(f"  ⚠ WARNING: Z has only ONE unique value (flat plane)!")
-                                                debug_print(f"  First 5 Z values: {z_data[:5]}")
-                                                debug_print(f"  Last 5 Z values: {z_data[-5:]}")
-                                                if constraint_mask_3d is not None:
-                                                    debug_print(f"  NaN count: {np.sum(np.isnan(z_data))}")
+                                                    debug_print(f"[3D GRID]   WARNING: unknown symbol '{name}', using 0")
+                                                    args.append(0.0)
 
-                                                # Reshape Z to match the meshgrid
-                                                try:
-                                                    # Always try surface plot first (NaN values create holes)
-                                                    Z_grid = z_data.reshape(X_grid.shape)
-                                                    results_3d = (X_grid, Y_grid, Z_grid, 'surface')
-                                                    if constraint_mask_3d is not None:
-                                                        debug_print(f"  ✓ Created surface plot with NaN holes: {X_grid.shape} grid ({np.sum(~np.isnan(z_data))} valid points)")
-                                                    else:
-                                                        debug_print(f"  ✓ Created surface plot: {X_grid.shape} grid")
-                                                    debug_print(f"  Z grid corner values:")
-                                                    debug_print(f"    Z[0,0]={Z_grid[0,0]}, Z[0,-1]={Z_grid[0,-1]}")
-                                                    debug_print(f"    Z[-1,0]={Z_grid[-1,0]}, Z[-1,-1]={Z_grid[-1,-1]}")
-                                                except Exception as e:
-                                                    debug_print(f"Reshape failed: {e}, falling back to scatter")
-                                                    # Fall back to scatter (filter out NaN for scatter)
-                                                    if constraint_mask_3d is not None:
-                                                        valid_mask = ~np.isnan(z_data)
-                                                        x_valid = x_flat[valid_mask]
-                                                        y_valid = y_flat[valid_mask]
-                                                        z_valid = z_data[valid_mask]
-                                                        results_3d = (x_valid, y_valid, z_valid, 'scatter')
-                                                    else:
-                                                        results_3d = (x_data, y_data, z_data, 'scatter')
-                                            else:
-                                                results_3d = None
-                                        except Exception as e:
-                                            debug_print(f"Grid evaluation failed: {e}")
-                                            import traceback
-                                            traceback.print_exc()
-                                            # Fall back to scatter plot with original data
-                                            result_matrix_3d = equation_solver.evaluate_equations(
-                                                symbols_to_add=[param1, param2, param3],
-                                                corner_dfs=corner_dfs_dict
-                                            )
-                                            if result_matrix_3d is not None and param3 in result_matrix_3d:
-                                                z_data = np.asarray(result_matrix_3d[param3]).ravel()
-                                                results_3d = (x_data, y_data, z_data, 'scatter')
-                                            else:
-                                                results_3d = None
-                                    else:
-                                        # Not enough unique values for surface, use scatter/line plot
-                                        result_matrix_3d = equation_solver.evaluate_equations(
-                                            symbols_to_add=[param1, param2, param3],
-                                            corner_dfs=corner_dfs_dict
+                                            numpy_mods = ['numpy', {
+                                                'sin': np.sin, 'cos': np.cos,
+                                                'tan': np.tan, 'sqrt': np.sqrt,
+                                                'exp': np.exp, 'log': np.log,
+                                                'ln': np.log, 'abs': np.abs,
+                                                'pi': np.pi, 'e': np.e,
+                                            }]
+                                            fn = lambdify(free, resolved, modules=numpy_mods)
+                                            Z = fn(*args)
+                                            if np.isscalar(Z):
+                                                Z = np.full(Xg.shape, float(Z))
+                                            return np.asarray(Z, dtype=np.float64)
+
+                                        # ── Evaluate Z on the meshgrid ──
+                                        Z_grid = _eval_on_grid(
+                                            param3, equation_solver.equations,
+                                            result_matrix_all,
+                                            param1, param2, X_grid, Y_grid,
+                                            x_device, y_device,
+                                            x_data, y_data
                                         )
-                                        if result_matrix_3d is not None and param3 in result_matrix_3d:
-                                            z_data = np.asarray(result_matrix_3d[param3]).ravel()
-                                            results_3d = (x_data, y_data, z_data, 'scatter')
+
+                                        debug_print(f"[3D GRID] Z_grid shape: {Z_grid.shape}, "
+                                                    f"range: [{np.nanmin(Z_grid):.4g}, {np.nanmax(Z_grid):.4g}]")
+
+                                        # ── Constraint filtering (NaN masking) ──
+                                        if constraints:
+                                            for constraint_name, constraint_expr in constraints.items():
+                                                try:
+                                                    equation_solver.add_equation(constraint_name, constraint_expr)
+                                                    C_grid = _eval_on_grid(
+                                                        constraint_name,
+                                                        equation_solver.equations,
+                                                        result_matrix_all,
+                                                        param1, param2, X_grid, Y_grid,
+                                                        x_device, y_device,
+                                                        x_data, y_data
+                                                    )
+                                                    fail_mask = (C_grid == 0) | np.isnan(C_grid)
+                                                    Z_grid = np.where(fail_mask, np.nan, Z_grid)
+                                                    n_fail = int(np.sum(fail_mask))
+                                                    debug_print(f"[CONSTRAINT 3D] {constraint_name}: "
+                                                                f"{Z_grid.size - n_fail}/{Z_grid.size} pass")
+                                                except Exception as e:
+                                                    debug_print(f"[CONSTRAINT 3D] Error evaluating '{constraint_name}': {e}")
+
+                                            if np.all(np.isnan(Z_grid)):
+                                                debug_print("[CONSTRAINT 3D] No points meet all constraints")
+                                                results_3d = None
+                                            else:
+                                                results_3d = (X_grid, Y_grid, Z_grid, 'surface')
                                         else:
-                                            results_3d = None
+                                            results_3d = (X_grid, Y_grid, Z_grid, 'surface')
+                                    else:
+                                        # Not enough unique values → scatter fallback
+                                        z_data = np.asarray(result_matrix_all[param3]).ravel()
+                                        results_3d = (x_data, y_data, z_data, 'scatter')
                                 else:
                                     results_3d = None
 
@@ -3236,134 +3153,19 @@ class ROARLookupWindow(QWidget):
                                 traceback.print_exc()
                                 results_3d = None
 
-                            if results_3d and (self.gl_widget is not None or self.mpl_canvas is not None):
-                                try:
-                                    # hide 2D widget and show 3D view
-                                    try:
-                                        self.plot_widget.hide()
-                                    except Exception:
-                                        pass
-                                except Exception:
-                                    pass
-                                try:
-                                    # Unpack results (includes plot type)
-                                    if len(results_3d) == 4:
-                                        p1, p2, p3, plot_type = results_3d
-                                    else:
-                                        p1, p2, p3 = results_3d
-                                        plot_type = 'scatter'
-
-                                    # Prefer GL rendering when available
-                                    if self.gl_widget is not None:
-                                        try:
-                                            # Clear previous GL items
-                                            for it in list(self.gl_items):
-                                                try:
-                                                    self.gl_widget.removeItem(it)
-                                                except Exception:
-                                                    pass
-                                            self.gl_items.clear()
-
-                                            # Determine color for corner
-                                            corner_color = self.tech_browser.get_color_for_path(model)
-                                            from PyQt6.QtGui import QColor
-                                            try:
-                                                if isinstance(corner_color, QColor):
-                                                    qcol = corner_color
-                                                elif hasattr(corner_color, 'color'):
-                                                    pen_color = corner_color.color()
-                                                    qcol = pen_color if isinstance(pen_color, QColor) else QColor(str(pen_color))
-                                                elif isinstance(corner_color, str):
-                                                    qcol = QColor(corner_color)
-                                                else:
-                                                    qcol = QColor('#00ff00')
-                                            except Exception:
-                                                qcol = QColor('#00ff00')
-                                            r, g, b, a = qcol.getRgbF()
-
-                                            if plot_type == 'surface' and hasattr(p1, 'shape') and len(p1.shape) == 2:
-                                                # Build mesh from grid
-                                                Xg, Yg, Zg = np.asarray(p1), np.asarray(p2), np.asarray(p3)
-                                                ny, nx = Xg.shape
-                                                verts = np.column_stack((Xg.ravel(), Yg.ravel(), Zg.ravel()))
-                                                faces = []
-                                                for i in range(ny - 1):
-                                                    for j in range(nx - 1):
-                                                        v0 = i * nx + j
-                                                        v1 = v0 + 1
-                                                        v2 = v0 + nx
-                                                        v3 = v2 + 1
-                                                        faces.append([v0, v1, v2])
-                                                        faces.append([v1, v3, v2])
-                                                faces = np.array(faces, dtype=np.uint32)
-                                                try:
-                                                    md = MeshData(vertexes=verts, faces=faces)
-                                                    mesh = GLMeshItem(meshdata=md, smooth=False, drawFaces=True, drawEdges=False, shader='shaded', glOptions='opaque')
-                                                    mesh.setColor((r, g, b, 1.0))
-                                                    self.gl_widget.addItem(mesh)
-                                                    self.gl_items.append(mesh)
-                                                except Exception as e:
-                                                    debug_print(f"GL mesh creation failed: {e}")
-                                            else:
-                                                # Scatter plot
-                                                try:
-                                                    xs = np.asarray(p1).ravel()
-                                                    ys = np.asarray(p2).ravel()
-                                                    zs = np.asarray(p3).ravel()
-                                                    pos = np.column_stack((xs, ys, zs))
-                                                    sp = GLScatterPlotItem(pos=pos, size=5, color=(r, g, b, 1.0))
-                                                    self.gl_widget.addItem(sp)
-                                                    self.gl_items.append(sp)
-                                                except Exception as e:
-                                                    debug_print(f"GL scatter creation failed: {e}")
-
-                                            # Camera defaults
-                                            try:
-                                                self.gl_widget.setCameraPosition(distance=10, elevation=30, azimuth=-135)
-                                            except Exception:
-                                                pass
-                                        except Exception as e:
-                                            debug_print(f"GL plotting error: {e}")
-                                    else:
-                                        # Fallback to matplotlib if GL unavailable
-                                        if self.mpl_canvas is not None:
-                                            try:
-                                                self.mpl_canvas.setVisible(True)
-                                                if self.mpl_toolbar is not None:
-                                                    self.mpl_toolbar.setVisible(True)
-                                            except Exception:
-                                                pass
-
-                                            # Fallback: render with existing matplotlib code path
-                                            try:
-                                                if new_plot:
-                                                    self.mpl_figure.clear()
-                                                    self.mpl_ax = None
-                                            except Exception:
-                                                pass
-
-                                except Exception as e:
-                                    msg = f"3D plotting error: {e}"
-                                    debug_print(msg)
-                                    import traceback
-                                    traceback.print_exc()
-                                    try:
-                                        if self.top_level_app and hasattr(self.top_level_app, 'statusBar'):
-                                            self.top_level_app.statusBar().showMessage(msg, 5000)
-                                    except Exception:
-                                        pass
+                            if results_3d and self.gl_widget is not None:
+                                # Collect for post-loop rendering with shared normalization
+                                corner_color = self.tech_browser.get_color_for_path(model)
+                                all_3d_results.append((results_3d, corner_color, model, param1, param2, param3))
                                 new_plot = False
                                 continue
 
                         # 2D plotting (only when NOT in 3D mode)
                         else:
                             try:
-                                # Hide matplotlib canvas when not in 3D mode
-                                if self.mpl_canvas is not None:
-                                    self.mpl_canvas.setVisible(False)
-                                # Hide toolbar when not in 3D mode
-                                if self.mpl_toolbar is not None:
-                                    self.mpl_toolbar.setVisible(False)
+                                # Hide GL widget when not in 3D mode
+                                if self.gl_widget is not None:
+                                    self.gl_widget.setVisible(False)
                             except Exception:
                                 pass
                             try:
@@ -3390,6 +3192,207 @@ class ROARLookupWindow(QWidget):
                             pass
                 new_plot = False
                 self.plot_widget.showGrid(x=True, y=True)
+
+            # ── Post-loop: render all collected 3D results with shared normalization ──
+            if all_3d_results and self.gl_widget is not None:
+                try:
+                    self.plot_widget.hide()
+                    self.gl_widget.setVisible(True)
+
+                    # 3D plots always use a black background
+                    self.gl_widget.setBackgroundColor(0, 0, 0)
+
+                    # Clear previous GL items
+                    for it in list(self.gl_items):
+                        try:
+                            self.gl_widget.removeItem(it)
+                        except Exception:
+                            pass
+                    self.gl_items.clear()
+
+                    # Compute global min/max across ALL corners for consistent normalization
+                    global_x_min = np.inf
+                    global_x_max = -np.inf
+                    global_y_min = np.inf
+                    global_y_max = -np.inf
+                    global_z_min = np.inf
+                    global_z_max = -np.inf
+                    for (res_3d, _color, _model, _p1, _p2, _p3) in all_3d_results:
+                        if len(res_3d) == 4:
+                            d1, d2, d3, _pt = res_3d
+                        else:
+                            d1, d2, d3 = res_3d
+                        a1 = np.asarray(d1, dtype=float)
+                        a2 = np.asarray(d2, dtype=float)
+                        a3 = np.asarray(d3, dtype=float)
+                        global_x_min = min(global_x_min, float(np.nanmin(a1)))
+                        global_x_max = max(global_x_max, float(np.nanmax(a1)))
+                        global_y_min = min(global_y_min, float(np.nanmin(a2)))
+                        global_y_max = max(global_y_max, float(np.nanmax(a2)))
+                        global_z_min = min(global_z_min, float(np.nanmin(a3)))
+                        global_z_max = max(global_z_max, float(np.nanmax(a3)))
+
+                    def _norm_global(arr, gmin, gmax):
+                        """Normalize array to [-5, 5] using global min/max.
+
+                        Handles edge-cases that arise with very small numbers
+                        (e.g. 1e-12 … 1e-9), constant data, or non-finite bounds.
+                        """
+                        a = np.asarray(arr, dtype=np.float64)
+                        gmin = float(gmin)
+                        gmax = float(gmax)
+
+                        # Guard against non-finite bounds (uninitialised inf, nan)
+                        if not (np.isfinite(gmin) and np.isfinite(gmax)):
+                            amin = float(np.nanmin(a)) if np.any(np.isfinite(a)) else 0.0
+                            amax = float(np.nanmax(a)) if np.any(np.isfinite(a)) else 0.0
+                            gmin, gmax = amin, amax
+
+                        rng = gmax - gmin
+
+                        if rng == 0:
+                            # All data is the same value – place the surface at
+                            # the middle of the viewport (z = 0).
+                            return np.zeros_like(a)
+
+                        # Use relative tolerance: if the range is tiny compared
+                        # to the magnitude of the values we still want full
+                        # [-5, 5] spread.  The key is to do the subtraction in
+                        # float64 which gives ~15 significant digits – more than
+                        # enough for 1e-12 scale numbers.
+                        return (a - gmin) / rng * 10.0 - 5.0
+
+                    from PyQt6.QtGui import QColor
+
+                    def _ensure_bright(qcol):
+                        """Ensure a QColor is bright enough to be visible on a black
+                        background.  If the colour is too dark, boost its value
+                        (brightness) while keeping hue and saturation."""
+                        h, s, v, a = qcol.getHsvF()
+                        # Boost value so it is at least 0.55, and push saturation
+                        # up a bit so colours stay vivid.
+                        v = max(v, 0.55)
+                        s = max(s, 0.4) if s > 0.05 else s  # keep greys neutral
+                        return QColor.fromHsvF(h, s, v, a)
+
+                    # Render each corner's mesh/scatter
+                    for (res_3d, corner_color, model_path, axis1, axis2, axis3) in all_3d_results:
+                        if len(res_3d) == 4:
+                            p1, p2, p3, plot_type = res_3d
+                        else:
+                            p1, p2, p3 = res_3d
+                            plot_type = 'scatter'
+
+                        # Resolve corner colour from tech browser and ensure visibility
+                        try:
+                            if isinstance(corner_color, QColor):
+                                qcol = corner_color
+                            elif hasattr(corner_color, 'color'):
+                                pen_color = corner_color.color()
+                                qcol = pen_color if isinstance(pen_color, QColor) else QColor(str(pen_color))
+                            elif isinstance(corner_color, str):
+                                qcol = QColor(corner_color)
+                            else:
+                                qcol = QColor('#00ff00')
+                        except Exception:
+                            qcol = QColor('#00ff00')
+                        qcol = _ensure_bright(qcol)
+                        r, g, b, _a = qcol.getRgbF()
+
+                        if plot_type == 'surface' and hasattr(p1, 'shape') and len(p1.shape) == 2:
+                            Xn = _norm_global(p1, global_x_min, global_x_max)
+                            Yn = _norm_global(p2, global_y_min, global_y_max)
+                            Zn = _norm_global(p3, global_z_min, global_z_max)
+
+                            ny, nx = Xn.shape
+                            nan_mask = np.isnan(Zn)
+                            Zn_filled = np.where(nan_mask, 0.0, Zn)
+
+                            verts = np.column_stack((Xn.ravel(), Yn.ravel(), Zn_filled.ravel())).astype(np.float32)
+                            faces = []
+                            flat_nan = nan_mask.ravel()
+                            for i in range(ny - 1):
+                                for j in range(nx - 1):
+                                    v0 = i * nx + j
+                                    v1 = v0 + 1
+                                    v2 = v0 + nx
+                                    v3 = v2 + 1
+                                    if flat_nan[v0] or flat_nan[v1] or flat_nan[v2] or flat_nan[v3]:
+                                        continue
+                                    faces.append([v0, v1, v2])
+                                    faces.append([v1, v3, v2])
+
+                            if len(faces) > 0:
+                                faces_arr = np.array(faces, dtype=np.uint32)
+                                try:
+                                    md = MeshData(vertexes=verts, faces=faces_arr)
+                                    # Subtle bright edge tinted with the surface colour
+                                    edge_color = (r * 0.6 + 0.4, g * 0.6 + 0.4, b * 0.6 + 0.4, 0.35)
+                                    mesh = GLMeshItem(
+                                        meshdata=md,
+                                        smooth=False,
+                                        drawFaces=True,
+                                        drawEdges=True,
+                                        edgeColor=edge_color,
+                                        shader='shaded',
+                                        glOptions='translucent'
+                                    )
+                                    mesh.setColor((r, g, b, 0.45))
+                                    self.gl_widget.addItem(mesh)
+                                    self.gl_items.append(mesh)
+                                except Exception as e:
+                                    debug_print(f"GL mesh creation failed: {e}")
+                        else:
+                            # Scatter fallback
+                            try:
+                                xs_n = _norm_global(np.asarray(p1, dtype=float).ravel(), global_x_min, global_x_max)
+                                ys_n = _norm_global(np.asarray(p2, dtype=float).ravel(), global_y_min, global_y_max)
+                                zs_n = _norm_global(np.asarray(p3, dtype=float).ravel(), global_z_min, global_z_max)
+                                pos = np.column_stack((xs_n, ys_n, zs_n)).astype(np.float32)
+                                sp = GLScatterPlotItem(pos=pos, size=5, color=(r, g, b, 0.7))
+                                self.gl_widget.addItem(sp)
+                                self.gl_items.append(sp)
+                            except Exception as e:
+                                debug_print(f"GL scatter creation failed: {e}")
+
+                    # Add ground grid – dim white lines on black
+                    try:
+                        g = gl.GLGridItem()
+                        g.setSize(10, 10)
+                        g.setSpacing(1, 1)
+                        g.translate(0, 0, -5)
+                        g.setColor((1.0, 1.0, 1.0, 0.12))
+                        self.gl_widget.addItem(g)
+                        self.gl_items.append(g)
+                    except Exception:
+                        pass
+
+                    # Add axis labels – white text
+                    try:
+                        from pyqtgraph.opengl import GLTextItem
+                        label_color = QColor(220, 220, 220)
+                        _a1 = all_3d_results[0][3]
+                        _a2 = all_3d_results[0][4]
+                        _a3 = all_3d_results[0][5]
+                        for text, pos in [(_a1, (0, -7, -5)),
+                                          (_a2, (-7, 0, -5)),
+                                          (_a3, (-7, -7, 0))]:
+                            t = GLTextItem(pos=np.array(pos, dtype=float), text=text, color=label_color)
+                            self.gl_widget.addItem(t)
+                            self.gl_items.append(t)
+                    except Exception:
+                        pass
+
+                    # Camera
+                    try:
+                        self.gl_widget.setCameraPosition(distance=20, elevation=30, azimuth=-135)
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    debug_print(f"3D post-loop rendering error: {e}")
+                    import traceback
+                    traceback.print_exc()
 
             # Fix for Y-axis log scale showing wrong exponents in Design Equations mode
             # When log mode is active, we need to force a proper recalculation of axis ranges

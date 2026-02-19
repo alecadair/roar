@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=ROAR
+Exec=roar
+Icon=roar_icon
+Type=Application
+Categories=Utility;
+StartupWMClass=ROARApp
