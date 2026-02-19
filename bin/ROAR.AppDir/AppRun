@@ -1,8 +1,0 @@
-#!/bin/bash
-HERE="$(dirname "$(readlink -f "$0")")"
-
-export QT_QPA_PLATFORM_PLUGIN_PATH="$HERE/usr/bin/PyQt6/Qt6/plugins/platforms"
-export QT_PLUGIN_PATH="$HERE/usr/bin/PyQt6/Qt6/plugins"
-
-exec "$HERE/usr/bin/roar" "$@"
-
