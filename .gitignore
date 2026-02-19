@@ -1,5 +1,7 @@
 .idea/
 
+bin/
+
 # dotenv
 .env
 
