@@ -1906,6 +1906,7 @@ class ROARLookupWindow(QWidget):
 
         self.checkbox_logx.stateChanged.connect(self.update_log_scale)
         self.checkbox_logy.stateChanged.connect(self.update_log_scale)
+        self.checkbox_logz.stateChanged.connect(self.on_logz_changed)
 
         self.checkbox_3d.stateChanged.connect(self._update_z_controls_state)
         self.checkbox_black_bg.stateChanged.connect(self.on_background_color_changed)
@@ -2049,6 +2050,10 @@ class ROARLookupWindow(QWidget):
             # 3D plots always use black background
             self.gl_widget.setBackgroundColor(0, 0, 0)
         # Redraw the plot with new background color
+        self.update_graph_from_tech_browser()
+
+    def on_logz_changed(self):
+        """Replot when the LogZ checkbox is toggled."""
         self.update_graph_from_tech_browser()
 
 
@@ -3137,12 +3142,23 @@ class ROARLookupWindow(QWidget):
                                                 debug_print("[CONSTRAINT 3D] No points meet all constraints")
                                                 results_3d = None
                                             else:
+                                                # ── Log Z ──
+                                                z_log = getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked()
+                                                if z_log:
+                                                    Z_grid = np.where(Z_grid > 0, np.log10(Z_grid), np.nan)
                                                 results_3d = (X_grid, Y_grid, Z_grid, 'surface')
                                         else:
+                                            # ── Log Z ──
+                                            z_log = getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked()
+                                            if z_log:
+                                                Z_grid = np.where(Z_grid > 0, np.log10(Z_grid), np.nan)
                                             results_3d = (X_grid, Y_grid, Z_grid, 'surface')
                                     else:
                                         # Not enough unique values → scatter fallback
                                         z_data = np.asarray(result_matrix_all[param3]).ravel()
+                                        z_log = getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked()
+                                        if z_log:
+                                            z_data = np.where(z_data > 0, np.log10(z_data), np.nan)
                                         results_3d = (x_data, y_data, z_data, 'scatter')
                                 else:
                                     results_3d = None
@@ -3374,6 +3390,9 @@ class ROARLookupWindow(QWidget):
                         _a1 = all_3d_results[0][3]
                         _a2 = all_3d_results[0][4]
                         _a3 = all_3d_results[0][5]
+                        z_log_active = getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked()
+                        if z_log_active:
+                            _a3 = f"log10({_a3})"
                         for text, pos in [(_a1, (0, -7, -5)),
                                           (_a2, (-7, 0, -5)),
                                           (_a3, (-7, -7, 0))]:
