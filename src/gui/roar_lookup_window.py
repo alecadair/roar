@@ -3365,35 +3365,111 @@ class ROARLookupWindow(QWidget):
                             except Exception as e:
                                 debug_print(f"GL scatter creation failed: {e}")
 
-                    # Add ground grid – dim white lines on black
+                    # ── Draw 3-D axes with numbered ticks ──
                     try:
+                        from pyqtgraph.opengl import GLLinePlotItem, GLTextItem
+
+                        axis_color = (1.0, 1.0, 1.0, 0.6)
+                        tick_color = (0.8, 0.8, 0.8, 0.5)
+                        label_color = QColor(220, 220, 220)
+                        dim_label_color = QColor(160, 160, 160)
+
+                        # Axis endpoints in normalised space [-5, 5]
+                        origin = np.array([-5, -5, -5], dtype=np.float32)
+
+                        # --- helper: generate nice tick positions & labels ---
+                        def _make_ticks(vmin, vmax, n_ticks=5):
+                            """Return (normalised_positions[], label_strings[])
+                            for *n_ticks* evenly-spaced values between vmin/vmax,
+                            mapped into the [-5, 5] normalised range."""
+                            if vmin == vmax or not (np.isfinite(vmin) and np.isfinite(vmax)):
+                                return [0.0], [format_eng(vmin)]
+                            raw = np.linspace(vmin, vmax, n_ticks)
+                            rng = vmax - vmin
+                            norms = [(v - vmin) / rng * 10.0 - 5.0 for v in raw]
+                            labels = [format_eng(v) for v in raw]
+                            return norms, labels
+
+                        n_ticks = 5
+                        tick_len = 0.25  # half-length of the small tick cross-bar
+
+                        # ── X axis (along x, at y=-5, z=-5) ──
+                        x_line = np.array([[-5, -5, -5], [5, -5, -5]], dtype=np.float32)
+                        item = GLLinePlotItem(pos=x_line, color=axis_color, width=1.5, antialias=True)
+                        self.gl_widget.addItem(item); self.gl_items.append(item)
+
+                        xn, xl = _make_ticks(global_x_min, global_x_max, n_ticks)
+                        for pos_n, lbl in zip(xn, xl):
+                            # tick mark
+                            tp = np.array([[pos_n, -5, -5 - tick_len],
+                                           [pos_n, -5, -5 + tick_len]], dtype=np.float32)
+                            ti = GLLinePlotItem(pos=tp, color=tick_color, width=1.0, antialias=True)
+                            self.gl_widget.addItem(ti); self.gl_items.append(ti)
+                            # label
+                            t = GLTextItem(pos=np.array([pos_n, -5, -5.8], dtype=np.float64),
+                                           text=lbl, color=dim_label_color)
+                            self.gl_widget.addItem(t); self.gl_items.append(t)
+
+                        # axis name
+                        _a1 = all_3d_results[0][3]
+                        t = GLTextItem(pos=np.array([0, -5, -7.0], dtype=np.float64),
+                                       text=_a1, color=label_color)
+                        self.gl_widget.addItem(t); self.gl_items.append(t)
+
+                        # ── Y axis (along y, at x=-5, z=-5) ──
+                        y_line = np.array([[-5, -5, -5], [-5, 5, -5]], dtype=np.float32)
+                        item = GLLinePlotItem(pos=y_line, color=axis_color, width=1.5, antialias=True)
+                        self.gl_widget.addItem(item); self.gl_items.append(item)
+
+                        yn, yl = _make_ticks(global_y_min, global_y_max, n_ticks)
+                        for pos_n, lbl in zip(yn, yl):
+                            tp = np.array([[-5, pos_n, -5 - tick_len],
+                                           [-5, pos_n, -5 + tick_len]], dtype=np.float32)
+                            ti = GLLinePlotItem(pos=tp, color=tick_color, width=1.0, antialias=True)
+                            self.gl_widget.addItem(ti); self.gl_items.append(ti)
+                            t = GLTextItem(pos=np.array([-5, pos_n, -5.8], dtype=np.float64),
+                                           text=lbl, color=dim_label_color)
+                            self.gl_widget.addItem(t); self.gl_items.append(t)
+
+                        _a2 = all_3d_results[0][4]
+                        t = GLTextItem(pos=np.array([-5, 0, -7.0], dtype=np.float64),
+                                       text=_a2, color=label_color)
+                        self.gl_widget.addItem(t); self.gl_items.append(t)
+
+                        # ── Z axis (along z, at x=-5, y=-5) ──
+                        z_line = np.array([[-5, -5, -5], [-5, -5, 5]], dtype=np.float32)
+                        item = GLLinePlotItem(pos=z_line, color=axis_color, width=1.5, antialias=True)
+                        self.gl_widget.addItem(item); self.gl_items.append(item)
+
+                        zn, zl = _make_ticks(global_z_min, global_z_max, n_ticks)
+                        for pos_n, lbl in zip(zn, zl):
+                            tp = np.array([[-5 - tick_len, -5, pos_n],
+                                           [-5 + tick_len, -5, pos_n]], dtype=np.float32)
+                            ti = GLLinePlotItem(pos=tp, color=tick_color, width=1.0, antialias=True)
+                            self.gl_widget.addItem(ti); self.gl_items.append(ti)
+                            t = GLTextItem(pos=np.array([-6.0, -5, pos_n], dtype=np.float64),
+                                           text=lbl, color=dim_label_color)
+                            self.gl_widget.addItem(t); self.gl_items.append(t)
+
+                        _a3 = all_3d_results[0][5]
+                        if getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked():
+                            _a3 = f"log10({_a3})"
+                        t = GLTextItem(pos=np.array([-7.0, -5, 0], dtype=np.float64),
+                                       text=_a3, color=label_color)
+                        self.gl_widget.addItem(t); self.gl_items.append(t)
+
+                        # ── Ground grid (subtle) ──
                         g = gl.GLGridItem()
                         g.setSize(10, 10)
                         g.setSpacing(1, 1)
                         g.translate(0, 0, -5)
-                        g.setColor((1.0, 1.0, 1.0, 0.12))
+                        g.setColor((1.0, 1.0, 1.0, 0.08))
                         self.gl_widget.addItem(g)
                         self.gl_items.append(g)
-                    except Exception:
-                        pass
 
-                    # Add axis labels – white text
-                    try:
-                        from pyqtgraph.opengl import GLTextItem
-                        label_color = QColor(220, 220, 220)
-                        _a1 = all_3d_results[0][3]
-                        _a2 = all_3d_results[0][4]
-                        _a3 = all_3d_results[0][5]
-                        if getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked():
-                            _a3 = f"log10({_a3})"
-                        for text, pos in [(_a1, (0, -7, -5)),
-                                          (_a2, (-7, 0, -5)),
-                                          (_a3, (-7, -7, 0))]:
-                            t = GLTextItem(pos=np.array(pos, dtype=float), text=text, color=label_color)
-                            self.gl_widget.addItem(t)
-                            self.gl_items.append(t)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        debug_print(f"3D axis drawing error: {e}")
+                        import traceback; traceback.print_exc()
 
                     # Camera
                     try:
