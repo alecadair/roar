@@ -1188,9 +1188,9 @@ class ROARApp(QMainWindow):
         if DEBUG_DESIGN:
             #design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "cs2.json")
             #design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "single_transistor_basic_variables.json")
-            design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "3d_test.json")
+            #design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "3d_test.json")
             #design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "common_source.json")
-            #design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "current_mirror_ota.json")
+            design_path = os.path.join(ROAR_DESIGN_SCRIPTS, "current_mirror_ota.json")
             self.editor_window.load_all_data(file_path=design_path, show_success_message=False)
         try:
             with open('/tmp/roar_debug.log', 'a', encoding='utf-8') as _fh:

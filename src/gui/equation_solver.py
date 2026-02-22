@@ -84,15 +84,21 @@ class ROAREquationSolver:
 
 
     def add_equation(self, symbol, equation):
+        """Add an equation to the solver.
+
+        Returns:
+            str: Empty string on success, or an error message describing the
+                 syntax / parse failure.
+        """
         # Skip empty equations or empty symbols
         if not symbol or not equation or (isinstance(equation, str) and not equation.strip()):
-            return 0
+            return ""
         if not symbol.strip():
-            return 0
+            return ""
 
         if ":" in equation:
             self.equations[symbol] = equation
-            return 0
+            return ""
         try:
             original_equation = equation
 
@@ -146,6 +152,7 @@ class ROAREquationSolver:
                                         rational=False, evaluate=True)
 
             self.equations[symbol] = sympified_equation
+            return ""  # success
 
         except (SympifyError, TypeError, ValueError, NameError) as e:
             debug_print(f"Error adding equation '{symbol}': {e}")
@@ -155,6 +162,7 @@ class ROAREquationSolver:
             # Do NOT store equation as string - this causes issues with dependency graph
             # Instead, store a simple constant or skip it
             self.equations[symbol] = sympify("0")  # Store as zero to avoid crashes
+            return str(e)  # return error description
 
     def remove_equation(self, name):
         if name in self.equations:
@@ -346,6 +354,12 @@ class ROAREquationSolver:
                         debug_print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', shape: {result.shape}, unique={unique_count}, range=[{np.min(result):.3f}, {np.max(result):.3f}]")
                     else:
                         debug_print(f"[SOLVER DEBUG] Evaluated lookup '{equation}', value: {result}")
+                continue
+            # Guard: if the symbol came from the dependency graph but has no
+            # equation definition (e.g. a typo in a constraint like "kcgs1"
+            # when the actual equation is "kcgs1_2"), skip it gracefully.
+            if equation not in self.equations:
+                debug_print(f"[SOLVER DEBUG] Symbol '{equation}' has no equation defined – skipping")
                 continue
             equation_to_evaluate = self.equations[equation]
             debug_print(f"[SOLVER DEBUG] Evaluating equation '{equation}' = {equation_to_evaluate}")

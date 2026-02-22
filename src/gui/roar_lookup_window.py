@@ -2771,6 +2771,37 @@ class ROARLookupWindow(QWidget):
             self.plot_widget.line_markers.clear()
 
             if not models_selected:
+                # ── Design Eqs with all-custom corners: synthesize iterations ──
+                # When every device in the instance table has explicit corners
+                # the user does not need to check anything in the tech browser.
+                # Build synthetic models_selected entries from the first corner
+                # tuple so the plotting loop has something to iterate over.
+                if (not self.is_device_params_mode
+                        and self.top_level_app
+                        and hasattr(self.top_level_app, 'editor_window')):
+                    try:
+                        device_corners = self.top_level_app.editor_window.get_device_corners()
+                        all_custom = device_corners and all(
+                            dc.get('corners') is not None
+                            for dc in device_corners.values()
+                        )
+                        if all_custom:
+                            tuples = self._build_corner_tuples(device_corners, [])
+                            if tuples:
+                                # Use one synthetic entry per tuple so each gets
+                                # its own plotting iteration.
+                                for tup in tuples:
+                                    first_dev_info = next(iter(tup.values()))
+                                    # Construct a path the outer loop can parse:
+                                    # "PDK>pdk>model>length>corner"
+                                    syn_path = f"PDK>{first_dev_info['path']}"
+                                    models_selected.append(syn_path)
+                                debug_print(f"[DESIGN EQS] Synthesized models_selected "
+                                            f"from all-custom corners: {models_selected}")
+                    except Exception as e:
+                        debug_print(f"[DESIGN EQS] Could not synthesize models_selected: {e}")
+
+            if not models_selected:
                 self.plot_widget.getPlotItem().setXRange(0, 1)
                 self.plot_widget.getPlotItem().setYRange(0, 1)
                 self.plot_widget.getPlotItem().setTitle("")
@@ -2837,11 +2868,20 @@ class ROARLookupWindow(QWidget):
                             debug_print(f"[DESIGN EQS] Could not get device corners: {e}")
 
                     # ── Build corner_dfs_dict with per-device DataFrames ──
-                    # Use device-namespaced keys ("M1::pdk>model>length>corner")
-                    # so the equation solver routes each lookup to the right DF.
+                    # Only use device-namespaced keys ("M1::pdk>model>length>corner")
+                    # when at least one device has CUSTOM (non-global) corners.
+                    # When all devices are Global they all share the same tech-browser
+                    # DataFrame, so use the legacy single-entry dict with a plain path
+                    # key — this ensures that lookups with any device name (even
+                    # misspelled ones) still resolve to data.
                     corner_dfs_dict = {}
 
-                    if device_corners:
+                    any_custom = device_corners and any(
+                        dc.get('corners') is not None
+                        for dc in device_corners.values()
+                    )
+
+                    if any_custom and device_corners:
                         # Build corner tuples from instance-table corner data
                         tuples = self._build_corner_tuples(device_corners, models_selected)
                         if tuples:
@@ -2880,17 +2920,37 @@ class ROARLookupWindow(QWidget):
                             debug_print(f"[DESIGN EQS] Per-device corner_dfs: {list(corner_dfs_dict.keys())}")
 
                     if not corner_dfs_dict:
-                        # Fallback: use the global tech-browser corner
+                        # All-Global or fallback: use the global tech-browser corner
                         current_corner_path = f"{pdk}>{model_name}>{length}>{corner}"
                         corner_dfs_dict[current_corner_path] = cid_corner.df
-                        debug_print(f"[DESIGN EQS] Fallback global corner: {list(corner_dfs_dict.keys())}")
+                        debug_print(f"[DESIGN EQS] Global corner: {list(corner_dfs_dict.keys())}")
 
                     equation_solver = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
                     equation_solver.corners = list(corner_dfs_dict.values())
                     expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
+                    syntax_errors = {}
                     for expression_sym in expressions:
                         expression = expressions[expression_sym]
-                        equation_solver.add_equation(expression_sym, expression)
+                        err = equation_solver.add_equation(expression_sym, expression)
+                        if err:
+                            syntax_errors[expression_sym] = err
+
+                    if syntax_errors:
+                        # Highlight errors in the design editor and show popup
+                        try:
+                            ew = self.top_level_app.editor_window
+                            ew.expression_editor.clear_error_highlights()
+                            ew.constraint_editor.clear_error_highlights()
+                            ew.expression_editor.highlight_error_rows(syntax_errors)
+                        except Exception:
+                            pass
+                        from PyQt6.QtWidgets import QMessageBox
+                        lines = [f"  • {s}: {m[:100]}" for s, m in syntax_errors.items()]
+                        QMessageBox.warning(
+                            self, "Syntax Errors",
+                            "Cannot graph — fix the highlighted expressions first.\n\n"
+                            + "\n".join(lines))
+                        continue  # skip this corner iteration
 
                     # Pass corner_dfs_dict (with per-device namespaced keys)
                     result_matrix = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=corner_dfs_dict)

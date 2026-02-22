@@ -121,38 +121,65 @@ class DeviceCornerSelectorWindow(QDialog):
 
         layout.addLayout(button_layout)
 
-    def apply_corner_selection_to_browser(self, corner_names):
-        """Check specific corners in the tech browser."""
-        if not self.tech_browser or not corner_names:
+    def apply_corner_selection_to_browser(self, corner_info):
+        """Check specific corners in the tech browser.
+
+        Args:
+            corner_info: list of dicts with 'name' and 'path' keys, or list
+                         of plain corner-name strings (legacy format).
+        """
+        if not self.tech_browser or not corner_info:
             return
 
         try:
-            # Get all items in the tech browser tree and check matching corners
-            if hasattr(self.tech_browser, 'tree'):
+            # Build a set of full paths AND a set of plain corner names so we
+            # can match whichever way the data was stored.
+            target_paths = set()
+            target_names = set()
+            for c in corner_info:
+                if isinstance(c, dict):
+                    if c.get('path'):
+                        target_paths.add(c['path'])
+                    if c.get('name'):
+                        target_names.add(c['name'])
+                elif isinstance(c, str):
+                    target_names.add(c)
+
+            # ── Strategy 1: use path_to_item for an exact match ──
+            if hasattr(self.tech_browser, 'path_to_item') and target_paths:
+                for full_path, tree_item in self.tech_browser.path_to_item.items():
+                    if full_path in target_paths:
+                        tree_item.setCheckState(0, Qt.CheckState.Checked)
+                    else:
+                        tree_item.setCheckState(0, Qt.CheckState.Unchecked)
+                return  # done
+
+            # ── Strategy 2: walk the whole tree and match by corner name ──
+            if hasattr(self.tech_browser, 'tree') and target_names:
                 tree = self.tech_browser.tree
 
-                def check_tree_items(parent_item, depth=0):
-                    """Recursively check items at corner level (depth 2)."""
-                    if parent_item is None:
-                        count = tree.topLevelItemCount()
-                        for i in range(count):
-                            check_tree_items(tree.topLevelItem(i), 0)
-                    else:
-                        child_count = parent_item.childCount()
-                        for i in range(child_count):
-                            child = parent_item.child(i)
-                            if depth == 1:  # Device type level, go deeper
-                                check_tree_items(child, depth + 1)
-                            elif depth == 2:  # Corner level
-                                corner_name = child.text(0)
-                                if corner_name in corner_names:
-                                    child.setCheckState(0, Qt.CheckState.Checked)
-                                else:
-                                    child.setCheckState(0, Qt.CheckState.Unchecked)
+                def _walk(item):
+                    """Recurse through every item; check leaf items whose
+                    text matches a target corner name."""
+                    for i in range(item.childCount()):
+                        child = item.child(i)
+                        if child.childCount() == 0:
+                            # Leaf = corner item
+                            name = child.text(0)
+                            if name in target_names:
+                                child.setCheckState(0, Qt.CheckState.Checked)
+                            else:
+                                child.setCheckState(0, Qt.CheckState.Unchecked)
+                        else:
+                            _walk(child)
 
-                check_tree_items(None)
+                root = tree.invisibleRootItem()
+                _walk(root)
+
         except Exception as e:
             print(f"Error applying corner selection to browser: {e}")
+            import traceback
+            traceback.print_exc()
 
     def get_checked_corners_from_browser(self):
         """Extract checked corner information (full paths) from tech browser.
@@ -956,6 +983,48 @@ class BaseEditor(QWidget):
         except Exception:
             pass
 
+    def clear_error_highlights(self):
+        """Remove any error-highlighting backgrounds, restoring normal row colours."""
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            # Remove the error tooltip
+            for col in range(self.tree.columnCount()):
+                try:
+                    item.setToolTip(col, "")
+                except Exception:
+                    pass
+        # Let the normal disabled/alternating colour logic take over
+        self.update_row_colors()
+
+    def highlight_error_rows(self, error_symbols):
+        """Highlight rows whose symbol (column 0) appears in *error_symbols*.
+
+        Args:
+            error_symbols: dict mapping symbol name → error message string.
+        """
+        if not error_symbols:
+            return
+        error_bg = QBrush(QColor("#FFB347"))   # orange highlight
+        error_fg = QColor("#7B3F00")           # dark brown text
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            sym = item.text(0)
+            if sym in error_symbols:
+                for col in range(self.tree.columnCount()):
+                    try:
+                        item.setData(col, Qt.ItemDataRole.BackgroundRole, error_bg)
+                        item.setForeground(col, QBrush(error_fg))
+                    except Exception:
+                        pass
+                    try:
+                        item.setToolTip(col, f"⚠ Syntax Error: {error_symbols[sym]}")
+                    except Exception:
+                        pass
+        try:
+            self.tree.viewport().update()
+        except Exception:
+            pass
+
     def get_table_data(self):
         data = []
         for i in range(self.tree.topLevelItemCount()):
@@ -1286,6 +1355,40 @@ class ROAREditorWindow(QWidget):
 
         return device_corners
 
+    # ------------------------------------------------------------------
+    # Expression / constraint validation
+    # ------------------------------------------------------------------
+    def validate_expressions(self):
+        """Parse all expressions and constraints through the equation solver.
+
+        Returns:
+            dict: ``{symbol: error_message}`` for every entry that has a
+                  syntax or parse error.  Empty dict means everything is OK.
+        """
+        try:
+            from .equation_solver import ROAREquationSolver
+        except ImportError:
+            try:
+                from equation_solver import ROAREquationSolver
+            except ImportError:
+                return {}
+
+        errors = {}
+        expressions, constraints = self.get_expressions_and_constraints()
+        solver = ROAREquationSolver(top_level_app=self.top_level_app)
+
+        for sym, expr in expressions.items():
+            err = solver.add_equation(sym, expr)
+            if err:
+                errors[sym] = err
+
+        for sym, expr in constraints.items():
+            err = solver.add_equation(sym, expr)
+            if err:
+                errors[sym] = err
+
+        return errors
+
     def on_refresh_clicked(self):
         """Refresh all Design Eqs graphs by re-evaluating equations and constraints.
 
@@ -1295,6 +1398,41 @@ class ROAREditorWindow(QWidget):
         """
         if not self.top_level_app:
             return
+
+        # ── Validate first ──
+        # Clear any previous error highlights
+        self.expression_editor.clear_error_highlights()
+        self.constraint_editor.clear_error_highlights()
+
+        errors = self.validate_expressions()
+        if errors:
+            # Separate expression vs constraint errors
+            expressions, constraints = self.get_expressions_and_constraints()
+            expr_errors = {s: m for s, m in errors.items() if s in expressions}
+            cons_errors = {s: m for s, m in errors.items() if s in constraints}
+
+            # Highlight offending rows
+            if expr_errors:
+                self.expression_editor.highlight_error_rows(expr_errors)
+            if cons_errors:
+                self.constraint_editor.highlight_error_rows(cons_errors)
+
+            # Build user-friendly message
+            lines = []
+            for sym, msg in errors.items():
+                # Truncate long error messages
+                short = (msg[:120] + "…") if len(msg) > 120 else msg
+                lines.append(f"  • {sym}:  {short}")
+            detail = "\n".join(lines)
+
+            QMessageBox.warning(
+                self,
+                "Syntax Errors in Design Equations",
+                f"{len(errors)} expression(s) contain syntax errors.\n"
+                f"Please fix the highlighted entries before refreshing.\n\n"
+                f"{detail}"
+            )
+            return  # ← do NOT graph anything
 
         # Create progress dialog
         progress = QProgressDialog("Refreshing Design Equations...", "Cancel", 0, 100, self)
