@@ -98,6 +98,27 @@ except Exception:
         except Exception:
             ROARLookupWindow = None
 
+# Import the Python console and code editor widgets (PyQt6-QScintilla based)
+ROARConsole = None
+ROARTextEditor = None
+try:
+    from roar_console import ROARConsole as _ROARConsole, ROARTextEditor as _ROARTextEditor
+    ROARConsole = _ROARConsole
+    ROARTextEditor = _ROARTextEditor
+except Exception:
+    try:
+        from gui.roar_console import ROARConsole as _ROARConsole, ROARTextEditor as _ROARTextEditor
+        ROARConsole = _ROARConsole
+        ROARTextEditor = _ROARTextEditor
+    except Exception:
+        try:
+            from .roar_console import ROARConsole as _ROARConsole, ROARTextEditor as _ROARTextEditor
+            ROARConsole = _ROARConsole
+            ROARTextEditor = _ROARTextEditor
+        except Exception:
+            ROARConsole = None
+            ROARTextEditor = None
+
 # Environment variables
 ROAR_HOME = os.environ.get("ROAR_HOME", "")
 ROAR_LIB = os.environ.get("ROAR_LIB", "")
@@ -1061,8 +1082,56 @@ class ROARApp(QMainWindow):
         # Connect the expressions_changed signal to a slot in ROARApp
         self.editor_window.expressions_changed.connect(self.update_lookup_windows)
 
-        # Add splitter to the layout
-        main_layout.addWidget(splitter_h)
+        # ---- Python Console / Editor Panel (bottom) ----
+        # Wrap the horizontal splitter inside a vertical splitter so the
+        # console/editor panel can live below the main workspace.
+        from PyQt6.QtWidgets import QTabWidget as _QTabWidget
+
+        self.main_splitter_v = QSplitter(Qt.Orientation.Vertical)
+        self.main_splitter_v.addWidget(splitter_h)
+
+        # Build the console/editor tab widget
+        self.console_tab_widget = _QTabWidget()
+        self.console_tab_widget.setTabPosition(_QTabWidget.TabPosition.South)
+
+        # Python Console tab
+        self.python_console = None
+        if ROARConsole is not None:
+            try:
+                self.python_console = ROARConsole(
+                    parent=self,
+                    locals_={"app": self, "__name__": "__console__"},
+                )
+                self.console_tab_widget.addTab(self.python_console, "Console")
+            except Exception:
+                self.python_console = None
+
+        # Python Editor tab
+        self.python_editor = None
+        if ROARTextEditor is not None:
+            try:
+                self.python_editor = ROARTextEditor(parent=self, show_toolbar=True)
+                self.console_tab_widget.addTab(self.python_editor, "Editor")
+            except Exception:
+                self.python_editor = None
+
+        # If neither widget could be created, add a placeholder label
+        if self.python_console is None and self.python_editor is None:
+            _placeholder = QLabel("Python console/editor unavailable. "
+                                  "Install PyQt6-QScintilla to enable.")
+            _placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.console_tab_widget.addTab(_placeholder, "Console")
+
+        self.main_splitter_v.addWidget(self.console_tab_widget)
+
+        # Start with the console panel hidden; users toggle via menu/shortcut
+        self.console_tab_widget.setVisible(False)
+        self._console_panel_visible = False
+        # Remember sizes so we can restore the panel to a sensible height
+        self._console_panel_height = 250
+
+        # Add the vertical splitter to the layout (replaces the old splitter_h)
+        main_layout.addWidget(self.main_splitter_v)
 
         # Set central widget
         self.setCentralWidget(central_widget)
@@ -1319,12 +1388,39 @@ class ROARApp(QMainWindow):
         except Exception:
             pass
 
+        # ---- Console / Editor panel toggles ----
+        window_menu.addSeparator()
+
+        self._toggle_console_action = QAction("Python Console", self, checkable=True)
+        self._toggle_console_action.setShortcut(QKeySequence("Ctrl+`"))
+        self._toggle_console_action.setChecked(False)
+        self._toggle_console_action.triggered.connect(self.toggle_console_panel)
+        window_menu.addAction(self._toggle_console_action)
+
+        self._toggle_editor_action = QAction("Python Editor", self, checkable=True)
+        self._toggle_editor_action.setShortcut(QKeySequence("Ctrl+E"))
+        self._toggle_editor_action.setChecked(False)
+        self._toggle_editor_action.triggered.connect(self.toggle_editor_panel)
+        window_menu.addAction(self._toggle_editor_action)
+
         # ----- EXPORT MENU -----
         export_menu = menubar.addMenu("Export")
         export_action = QAction("Export Data", self)
         export_action.triggered.connect(self.export_data)
         export_action.setEnabled(False)  # Disabled - feature coming soon
         export_menu.addAction(export_action)
+
+        # ---- Export → Python Script submenu ----
+        python_script_menu = export_menu.addMenu("Export to Python Script")
+
+        export_py_file_action = QAction("Save to File…", self)
+        export_py_file_action.setShortcut(QKeySequence("Ctrl+Shift+E"))
+        export_py_file_action.triggered.connect(self.export_design_to_python_file)
+        python_script_menu.addAction(export_py_file_action)
+
+        export_py_editor_action = QAction("Send to Editor Panel", self)
+        export_py_editor_action.triggered.connect(self.export_design_to_python_editor)
+        python_script_menu.addAction(export_py_editor_action)
 
         # ----- HELP MENU -----
         help_menu = menubar.addMenu("Help")
@@ -1400,6 +1496,15 @@ class ROARApp(QMainWindow):
 
             # Theme
             'theme': getattr(self, '_current_theme', 'light'),
+
+            # Console / Editor panel
+            'console_panel': {
+                'visible': getattr(self, '_console_panel_visible', False),
+                'active_tab': self.console_tab_widget.tabText(
+                    self.console_tab_widget.currentIndex())
+                    if hasattr(self, 'console_tab_widget') else 'Console',
+                'height': getattr(self, '_console_panel_height', 250),
+            },
 
             # Design editor state
             'design_editor': self._capture_design_editor_state(),
@@ -1574,6 +1679,17 @@ class ROARApp(QMainWindow):
                                 for theme_action in sub_menu.actions():
                                     if theme_action.text().lower() == theme:
                                         theme_action.setChecked(True)
+            except Exception:
+                pass
+
+            # Restore console/editor panel visibility
+            try:
+                cp = state.get('console_panel', {})
+                self._console_panel_height = cp.get('height', 250)
+                if cp.get('visible', False):
+                    self.show_console_panel(tab_name=cp.get('active_tab', 'Console'))
+                else:
+                    self.hide_console_panel()
             except Exception:
                 pass
 
@@ -1914,6 +2030,105 @@ class ROARApp(QMainWindow):
             except Exception:
                 pass
 
+    # ---- Console / Editor Panel Controls ----
+
+    def toggle_console_panel(self, checked=None):
+        """Toggle visibility of the bottom console/editor panel.
+
+        When *checked* is ``None`` the panel visibility is flipped.
+        Otherwise it is set to the boolean value of *checked*.
+
+        Keyboard shortcut: ``Ctrl+` `` (set in menu bar).
+        """
+        if checked is None:
+            checked = not self._console_panel_visible
+
+        if checked:
+            self.show_console_panel(tab_name="Console")
+        else:
+            self.hide_console_panel()
+
+        # Keep the menu check-mark in sync
+        try:
+            self._toggle_console_action.setChecked(self._console_panel_visible)
+        except Exception:
+            pass
+
+    def toggle_editor_panel(self, checked=None):
+        """Toggle visibility of the bottom panel and switch to the Editor tab.
+
+        Keyboard shortcut: ``Ctrl+E`` (set in menu bar).
+        """
+        if checked is None:
+            checked = not self._console_panel_visible or \
+                      self.console_tab_widget.currentWidget() is not self.python_editor
+
+        if checked:
+            self.show_console_panel(tab_name="Editor")
+        else:
+            self.hide_console_panel()
+
+        # Keep the menu check-marks in sync
+        try:
+            self._toggle_console_action.setChecked(
+                self._console_panel_visible and
+                self.console_tab_widget.currentWidget() is self.python_console)
+            self._toggle_editor_action.setChecked(
+                self._console_panel_visible and
+                self.console_tab_widget.currentWidget() is self.python_editor)
+        except Exception:
+            pass
+
+    def show_console_panel(self, tab_name: str | None = None):
+        """Show the bottom console/editor panel.
+
+        Parameters
+        ----------
+        tab_name : str, optional
+            If given, switch to the tab whose label matches (e.g. ``"Console"``
+            or ``"Editor"``).
+        """
+        self.console_tab_widget.setVisible(True)
+        self._console_panel_visible = True
+
+        # Restore a sensible splitter proportion
+        total = self.main_splitter_v.height()
+        panel_h = min(self._console_panel_height, total // 2)
+        self.main_splitter_v.setSizes([total - panel_h, panel_h])
+
+        # Switch to the requested tab
+        if tab_name is not None:
+            for i in range(self.console_tab_widget.count()):
+                if self.console_tab_widget.tabText(i) == tab_name:
+                    self.console_tab_widget.setCurrentIndex(i)
+                    break
+
+        # Give keyboard focus to the active panel widget
+        try:
+            current = self.console_tab_widget.currentWidget()
+            if current is not None:
+                current.setFocus()
+        except Exception:
+            pass
+
+    def hide_console_panel(self):
+        """Hide the bottom console/editor panel and give space back to the
+        main workspace."""
+        # Remember the current panel height so we can restore it later
+        sizes = self.main_splitter_v.sizes()
+        if len(sizes) == 2 and sizes[1] > 0:
+            self._console_panel_height = sizes[1]
+
+        self.console_tab_widget.setVisible(False)
+        self._console_panel_visible = False
+
+        # Sync both menu check-marks
+        try:
+            self._toggle_console_action.setChecked(False)
+            self._toggle_editor_action.setChecked(False)
+        except Exception:
+            pass
+
     def run_solver(self):
         """Placeholder function for running solver."""
         QMessageBox.information(self, "Run Solver", "Solver started.")
@@ -1938,6 +2153,108 @@ class ROARApp(QMainWindow):
     def export_data(self):
         """Handles data export."""
         QMessageBox.information(self, "Export", "Data export feature is not implemented yet.")
+
+    # ---- Python Script export helpers ----
+
+    def _generate_design_python_script(self) -> str | None:
+        """Collect design editor state and generate a Python script string.
+
+        Returns ``None`` (and shows an error dialog) when the required export
+        function or design data is unavailable.
+        """
+        # Lazy import – keeps module-level import block unchanged
+        _export_fn = None
+        try:
+            from roar_console import export_design_to_python as _fn
+            _export_fn = _fn
+        except Exception:
+            pass
+        if _export_fn is None:
+            try:
+                from gui.roar_console import export_design_to_python as _fn
+                _export_fn = _fn
+            except Exception:
+                pass
+        if _export_fn is None:
+            QMessageBox.critical(
+                self, "Export Error",
+                "Could not import the export function.\n"
+                "Make sure roar_console.py is present and PyQt6-QScintilla is installed.")
+            return None
+
+        try:
+            expressions, constraints = \
+                self.editor_window.get_expressions_and_constraints()
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "Export Error",
+                f"Failed to read expressions/constraints:\n{exc}")
+            return None
+
+        try:
+            instances = self.editor_window.instance_table.get_table_data()
+        except Exception:
+            instances = []
+
+        try:
+            device_corners = self.editor_window.get_device_corners()
+        except Exception:
+            device_corners = {}
+
+        try:
+            script = _export_fn(
+                expressions=expressions,
+                constraints=constraints,
+                instances=instances,
+                device_corners=device_corners,
+            )
+            return script
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "Export Error",
+                f"Script generation failed:\n{exc}")
+            return None
+
+    def export_design_to_python_file(self):
+        """Export the current design to a ``.py`` file (Export → Python Script → Save to File)."""
+        script = self._generate_design_python_script()
+        if script is None:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Python Script", "",
+            "Python Files (*.py);;All Files (*)")
+        if not path:
+            return
+
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(script)
+            QMessageBox.information(
+                self, "Export Successful",
+                f"Design exported to:\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "Export Error",
+                f"Failed to write file:\n{exc}")
+
+    def export_design_to_python_editor(self):
+        """Export the current design into the built-in Python Editor panel
+        (Export → Python Script → Send to Editor Panel)."""
+        script = self._generate_design_python_script()
+        if script is None:
+            return
+
+        if self.python_editor is None:
+            QMessageBox.warning(
+                self, "Editor Unavailable",
+                "The Python Editor panel is not available.\n"
+                "Install PyQt6-QScintilla to enable it.")
+            return
+
+        self.python_editor.set_text(script)
+        # Make sure the panel is visible and switched to the Editor tab
+        self.show_console_panel(tab_name="Editor")
 
     def show_about_dialog(self):
         """Displays an About dialog."""
