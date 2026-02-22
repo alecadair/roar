@@ -2606,10 +2606,115 @@ class ROARLookupWindow(QWidget):
             corner_dfs.append(corner_df)
         return corner_dfs
 
+    # ------------------------------------------------------------------
+    #  Corner-tuple builder for Design-Equations mode
+    # ------------------------------------------------------------------
+    def _build_corner_tuples(self, device_corners, models_selected):
+        """Build matched corner tuples for per-device equation evaluation.
+
+        Returns a list of tuples.  Each tuple is a dict mapping
+        device_name -> {"path": ..., "df": DataFrame, "corner_name": ...}.
+
+        When all devices are Global the list has one entry per
+        tech-browser-selected corner (same as before).
+
+        When any device has a custom corner list the function builds
+        index-matched tuples (tuple-0 = every device's first corner,
+        tuple-1 = every device's second corner, etc).
+        """
+        tech_dict = self.tech_browser.tech_dict
+
+        # Resolve each device's corner list
+        per_device = {}  # device_name -> list of {path, df, corner_name}
+
+        for dev_name, dev_info in device_corners.items():
+            corners_list = dev_info.get('corners')  # None => global
+
+            if corners_list is None:
+                # Global: use the tech-browser-selected corners
+                resolved = []
+                for mpath in models_selected:
+                    tokens = mpath.split('>')
+                    if len(tokens) >= 5:
+                        _pdk, _model, _length, _corner = tokens[1], tokens[2], tokens[3], tokens[4]
+                        try:
+                            df = tech_dict[_pdk][_model][_length]["corners"][_corner].df
+                            resolved.append({
+                                "path": f"{_pdk}>{_model}>{_length}>{_corner}",
+                                "df": df,
+                                "corner_name": _corner,
+                            })
+                        except (KeyError, AttributeError):
+                            debug_print(f"[TUPLES] Could not resolve global corner {mpath} for device {dev_name}")
+                per_device[dev_name] = resolved
+            else:
+                # Device-specific corners
+                corner_paths = dev_info.get('corner_paths') or []
+                pdk = dev_info.get('pdk')
+                model = dev_info.get('model')
+                length = dev_info.get('length')
+                resolved = []
+                for idx, cname in enumerate(corners_list):
+                    df = None
+                    # Try stored path first
+                    if idx < len(corner_paths) and corner_paths[idx]:
+                        cpath = corner_paths[idx]
+                        cp_tokens = cpath.split('>')
+                        if len(cp_tokens) >= 5:
+                            try:
+                                df = tech_dict[cp_tokens[1]][cp_tokens[2]][cp_tokens[3]]["corners"][cp_tokens[4]].df
+                                pdk = cp_tokens[1]
+                                model = cp_tokens[2]
+                                length = cp_tokens[3]
+                            except (KeyError, AttributeError):
+                                pass
+                    # Fallback: use pdk/model/length from device_corners metadata
+                    if df is None and pdk and model and length:
+                        try:
+                            df = tech_dict[pdk][model][length]["corners"][cname].df
+                        except (KeyError, AttributeError):
+                            pass
+                    if df is not None:
+                        resolved.append({
+                            "path": f"{pdk}>{model}>{length}>{cname}",
+                            "df": df,
+                            "corner_name": cname,
+                        })
+                    else:
+                        debug_print(f"[TUPLES] Could not resolve corner '{cname}' "
+                                    f"for device {dev_name} (pdk={pdk}, model={model}, length={length})")
+                per_device[dev_name] = resolved
+
+        if not per_device:
+            return []
+
+        # Build index-matched tuples
+        min_len = min(len(v) for v in per_device.values()) if per_device else 0
+        if min_len == 0:
+            debug_print("[TUPLES] At least one device has 0 resolved corners")
+            return []
+
+        max_len = max(len(v) for v in per_device.values())
+        if max_len != min_len:
+            debug_print(f"[TUPLES] Corner-count mismatch (min={min_len}, max={max_len}); truncating to {min_len}")
+
+        tuples_list = []
+        for i in range(min_len):
+            tup = {}
+            for dev_name, resolved in per_device.items():
+                tup[dev_name] = resolved[i]
+            tuples_list.append(tup)
+
+        debug_print(f"[TUPLES] Built {len(tuples_list)} corner tuple(s) for "
+                    f"{len(per_device)} device(s): "
+                    + ", ".join(f"{d}({len(v)})" for d, v in per_device.items()))
+        return tuples_list
+
     def update_graph_from_tech_browser(self, equation_eval=None, skip_post_processing=False):
         if self._is_updating:
             return
         self._is_updating = True
+        self._custom_tuples_done = set()  # Reset per-call tracking for all-custom corner tuples
 
         try:
             # Top-level try to ensure the finally block below always executes
@@ -2731,22 +2836,63 @@ class ROARLookupWindow(QWidget):
                         except Exception as e:
                             debug_print(f"[DESIGN EQS] Could not get device corners: {e}")
 
-                    # Use only the global corner from the tech browser for all devices.
-                    # Device-specific instance table corner selections are ignored for now.
+                    # ── Build corner_dfs_dict with per-device DataFrames ──
+                    # Use device-namespaced keys ("M1::pdk>model>length>corner")
+                    # so the equation solver routes each lookup to the right DF.
                     corner_dfs_dict = {}
-                    current_corner_path = f"{pdk}>{model_name}>{length}>{corner}"
-                    corner_dfs_dict[current_corner_path] = cid_corner.df
 
-                    debug_print(f"[DESIGN EQS] Using global corner: {list(corner_dfs_dict.keys())}")
+                    if device_corners:
+                        # Build corner tuples from instance-table corner data
+                        tuples = self._build_corner_tuples(device_corners, models_selected)
+                        if tuples:
+                            # Find the first UN-USED tuple that contains the
+                            # current outer-loop corner name.
+                            matched_tuple = None
+                            for ti, tup in enumerate(tuples):
+                                if ti in self._custom_tuples_done:
+                                    continue
+                                for dev_name, cinfo in tup.items():
+                                    if cinfo.get('corner_name') == corner:
+                                        matched_tuple = tup
+                                        self._custom_tuples_done.add(ti)
+                                        break
+                                if matched_tuple is not None:
+                                    break
+
+                            # When no tuple matched (all devices custom, or
+                            # outer-loop corner is irrelevant), pick the first
+                            # un-used tuple and mark it done.
+                            if matched_tuple is None:
+                                for ti, tup in enumerate(tuples):
+                                    if ti not in self._custom_tuples_done:
+                                        matched_tuple = tup
+                                        self._custom_tuples_done.add(ti)
+                                        break
+                            if matched_tuple is None:
+                                # All tuples already consumed — skip this
+                                # outer-loop iteration.
+                                continue
+
+                            # Populate corner_dfs_dict with namespaced keys
+                            for dev_name, cinfo in matched_tuple.items():
+                                ns_key = f"{dev_name}::{cinfo['path']}"
+                                corner_dfs_dict[ns_key] = cinfo['df']
+                            debug_print(f"[DESIGN EQS] Per-device corner_dfs: {list(corner_dfs_dict.keys())}")
+
+                    if not corner_dfs_dict:
+                        # Fallback: use the global tech-browser corner
+                        current_corner_path = f"{pdk}>{model_name}>{length}>{corner}"
+                        corner_dfs_dict[current_corner_path] = cid_corner.df
+                        debug_print(f"[DESIGN EQS] Fallback global corner: {list(corner_dfs_dict.keys())}")
 
                     equation_solver = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
-                    equation_solver.corners = [cid_corner.df]
+                    equation_solver.corners = list(corner_dfs_dict.values())
                     expressions, constraints = self.top_level_app.editor_window.get_expressions_and_constraints()
                     for expression_sym in expressions:
                         expression = expressions[expression_sym]
                         equation_solver.add_equation(expression_sym, expression)
 
-                    # Pass corner_dfs_dict instead of list
+                    # Pass corner_dfs_dict (with per-device namespaced keys)
                     result_matrix = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=corner_dfs_dict)
                     if not result_matrix or not isinstance(result_matrix, dict):
                         msg = f"Design Eq solver returned no results for {param1},{param2}"
@@ -2783,7 +2929,7 @@ class ROARLookupWindow(QWidget):
                         constraint_symbols = list(constraints.keys())
                         if constraint_symbols:
                             try:
-                                constraint_results = equation_solver.evaluate_equations(symbols_to_add=constraint_symbols, corner_dfs=[cid_corner.df])
+                                constraint_results = equation_solver.evaluate_equations(symbols_to_add=constraint_symbols, corner_dfs=corner_dfs_dict)
                                 if constraint_results:
                                     # Determine base length safely (handle scalars)
                                     def _safe_length_for_key(key):

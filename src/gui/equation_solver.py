@@ -182,85 +182,100 @@ class ROAREquationSolver:
         else:
             lookup_var = split_lookup[0]
 
-        # Determine which corners to use for this device
-        device_specific_info = None
-        device_specific_corners = None
-        if device and device in self.device_corners:
-            device_specific_info = self.device_corners[device]
-            # Handle both old format (list) and new format (dict with 'corners' key)
-            if isinstance(device_specific_info, dict):
-                device_specific_corners = device_specific_info.get('corners')
-            else:
-                device_specific_corners = device_specific_info
-            debug_print(f"[LOOKUP DEBUG] Device '{device}' has specific corners: {device_specific_corners}")
+        # ------------------------------------------------------------------
+        # Determine which DataFrames to use for this lookup
+        # ------------------------------------------------------------------
+        # corner_dfs may be:
+        #   - a plain dict {path: df} (legacy / global mode)
+        #   - a device-namespaced dict {"M1::path": df, "M2::path": df, ...}
+        #   - a list [df, ...]
+        #
+        # When device-namespaced keys are present (contain "::"), filter by
+        # the device extracted from the lookup string.  Otherwise fall back
+        # to the previous behaviour that uses self.device_corners to decide
+        # which corners to keep.
+        # ------------------------------------------------------------------
 
-        # Filter corner_dfs if device has specific corners
-        corners_to_use = corner_dfs
-        if device_specific_corners is not None:
-            # Device has custom corner selection
-            if isinstance(corner_dfs, dict):
-                # Filter to only the corners specified for this device
-                # Handle both simple corner names and full path keys (PDK>model>length>corner)
-                corners_to_use = {}
-                for full_path, df in corner_dfs.items():
-                    # Extract corner name from full path (last segment after '>')
-                    corner_name = full_path.split('>')[-1] if '>' in full_path else full_path
-                    if corner_name in device_specific_corners:
-                        corners_to_use[full_path] = df
-                debug_print(f"[LOOKUP DEBUG] Filtered corners for device '{device}': {list(corners_to_use.keys())}")
+        corners_to_use = corner_dfs  # default: use everything
+
+        if isinstance(corner_dfs, dict):
+            # Check whether the dict uses device-namespaced keys
+            _any_ns = any('::' in k for k in corner_dfs)
+
+            if _any_ns and device:
+                # Filter to entries belonging to this device
+                prefix = f"{device}::"
+                corners_to_use = {k: v for k, v in corner_dfs.items()
+                                  if k.startswith(prefix)}
+                debug_print(f"[LOOKUP DEBUG] Device-namespaced filter for '{device}': "
+                            f"{len(corners_to_use)}/{len(corner_dfs)} entries matched")
                 if not corners_to_use:
-                    debug_print(f"[LOOKUP DEBUG] WARNING: No matching corners found for device '{device}'!")
-                    debug_print(f"[LOOKUP DEBUG]   Requested: {device_specific_corners}")
-                    debug_print(f"[LOOKUP DEBUG]   Available corner names: {[k.split('>')[-1] if '>' in k else k for k in corner_dfs.keys()]}")
-            elif isinstance(corner_dfs, list):
-                # If corner_dfs is a list, we need corner names from somewhere else
-                # For now, use all corners (global behavior)
-                debug_print(f"[LOOKUP DEBUG] Device {device} has custom corners {device_specific_corners} but corner_dfs is a list")
-                debug_print(f"[LOOKUP DEBUG] Cannot filter - using all {len(corner_dfs)} corners")
-        else:
-            # No device-specific corners, use all available corners (global selection)
-            if device:
-                debug_print(f"[LOOKUP DEBUG] Device '{device}' using global corner selection")
+                    debug_print(f"[LOOKUP DEBUG] WARNING: No namespaced entries for '{device}'!")
+                    debug_print(f"[LOOKUP DEBUG]   Keys: {list(corner_dfs.keys())[:10]}")
+            elif _any_ns and not device:
+                # No device in lookup but namespaced keys present – use all
+                debug_print(f"[LOOKUP DEBUG] No device in lookup '{lookup}', using all {len(corner_dfs)} namespaced entries")
             else:
-                debug_print(f"[LOOKUP DEBUG] No device specified, using global corner selection")
+                # Legacy / global mode: use the old per-device filtering
+                device_specific_info = None
+                device_specific_corners = None
+                if device and device in self.device_corners:
+                    device_specific_info = self.device_corners[device]
+                    if isinstance(device_specific_info, dict):
+                        device_specific_corners = device_specific_info.get('corners')
+                    else:
+                        device_specific_corners = device_specific_info
+                    debug_print(f"[LOOKUP DEBUG] Device '{device}' has specific corners: {device_specific_corners}")
 
-        #corner_collection = self.top_level_app.roar_design.devices[device].corner_collection
-        #corners_to_eval = self.top_level_app.roar_design.
-        for corner in corners_to_use if not isinstance(corners_to_use, dict) else corners_to_use.values():
-        #for corner in corner_collection.corners:
-            #df = corner.df
+                if device_specific_corners is not None:
+                    corners_to_use = {}
+                    for full_path, df in corner_dfs.items():
+                        corner_name = full_path.split('>')[-1] if '>' in full_path else full_path
+                        if corner_name in device_specific_corners:
+                            corners_to_use[full_path] = df
+                    debug_print(f"[LOOKUP DEBUG] Filtered corners for device '{device}': {list(corners_to_use.keys())}")
+                    if not corners_to_use:
+                        debug_print(f"[LOOKUP DEBUG] WARNING: No matching corners for '{device}'!")
+                        debug_print(f"[LOOKUP DEBUG]   Requested: {device_specific_corners}")
+                        debug_print(f"[LOOKUP DEBUG]   Available: {[k.split('>')[-1] for k in corner_dfs]}")
+                else:
+                    if device:
+                        debug_print(f"[LOOKUP DEBUG] Device '{device}' using global corner selection")
+                    else:
+                        debug_print(f"[LOOKUP DEBUG] No device specified, using global corner selection")
+
+        elif isinstance(corner_dfs, list):
+            debug_print(f"[LOOKUP DEBUG] corner_dfs is list ({len(corner_dfs)} entries)")
+
+        # ------------------------------------------------------------------
+        # Extract column vectors from the selected DataFrames
+        # ------------------------------------------------------------------
+        for corner in (corners_to_use.values() if isinstance(corners_to_use, dict)
+                       else corners_to_use):
             df = corner
-            #df = corner.df
             if lookup_var in df.columns:
                 col_values = df[lookup_var].values
                 column_vectors.append(col_values)
-                # Debug: show what we extracted
-                if len(column_vectors) == 1:  # Only print for first corner to avoid spam
+                if len(column_vectors) == 1:
                     unique_count = len(np.unique(col_values))
-                    debug_print(f"[LOOKUP DEBUG] Extracting '{lookup_var}' from df: {len(col_values)} values, {unique_count} unique, range=[{np.min(col_values):.3f}, {np.max(col_values):.3f}]")
-                    if device_specific_corners:
-                        debug_print(f"[LOOKUP DEBUG]   Using device-specific corners for {device}: {device_specific_corners}")
-                    if unique_count == 1:
-                        debug_print(f"[LOOKUP DEBUG]   ⚠ WARNING: Column '{lookup_var}' has only ONE unique value in dataframe!")
-                        debug_print(f"[LOOKUP DEBUG]   DataFrame shape: {df.shape}, columns: {list(df.columns[:5])}...")
+                    debug_print(f"[LOOKUP DEBUG] Extracting '{lookup_var}' from df: "
+                                f"{len(col_values)} values, {unique_count} unique, "
+                                f"range=[{np.min(col_values):.3f}, {np.max(col_values):.3f}]")
 
-        # Check if we found any data
         if not column_vectors:
-            debug_print(f"[LOOKUP DEBUG] ⚠ WARNING: No data found for lookup '{lookup_var}' in any dataframe!")
-            debug_print(f"[LOOKUP DEBUG]   Device: {device if device else 'None'}")
-            debug_print(f"[LOOKUP DEBUG]   Available corners: {len(corners_to_use) if not isinstance(corners_to_use, dict) else len(corners_to_use)}")
-            # Return empty array with proper shape instead of crashing
+            debug_print(f"[LOOKUP DEBUG] WARNING: No data for '{lookup_var}' in any dataframe!")
+            debug_print(f"[LOOKUP DEBUG]   Device: {device or 'None'}")
             if corner_dfs and len(corner_dfs) > 0:
-                first_df = next(iter(corner_dfs.values())) if isinstance(corner_dfs, dict) else corner_dfs[0]
+                first_df = (next(iter(corner_dfs.values()))
+                            if isinstance(corner_dfs, dict) else corner_dfs[0])
                 nrows = first_df.shape[0] if hasattr(first_df, 'shape') else len(first_df)
                 return np.zeros((nrows, 1)), corner_dfs
             else:
                 return np.zeros((1, 1)), []
 
-        # Stack the column vectors horizontally to form a 2D matrix
         matrix = np.column_stack(column_vectors)
-        return matrix, corner_dfs if not isinstance(corners_to_use, dict) else list(corners_to_use.values())
-        #return matrix
+        return matrix, (corner_dfs if not isinstance(corners_to_use, dict)
+                        else list(corners_to_use.values()))
 
     def add_variable_from_dataframe(self, dataframe):
         for column in dataframe.columns:
@@ -350,30 +365,51 @@ class ROAREquationSolver:
                     corner_count = 0
                     # Iterate over corner dataframes (handle both dict and list)
                     corner_dfs_iter = corner_dfs.values() if isinstance(corner_dfs, dict) else corner_dfs
+
+                    # Determine number of result columns for bounds checking
+                    n_result_cols = 1
+                    if isinstance(result, np.ndarray) and result.ndim == 2:
+                        n_result_cols = result.shape[1]
+
                     for corner_df in corner_dfs_iter:
                         # Handle scalar results (constants) vs array results
                         if isinstance(result, (int, float)) or (isinstance(result, np.ndarray) and result.ndim == 0):
                             # Scalar result - use the same value for all corners
                             result_column = result
                         elif isinstance(result, np.ndarray) and result.ndim == 1:
-                            # 1D array - use the entire array for each corner
+                            # 1D array — write only if length matches this DF,
+                            # otherwise skip (different-device array).
+                            if hasattr(corner_df, 'shape') and result.shape[0] != corner_df.shape[0]:
+                                corner_count += 1
+                                continue
                             result_column = result
                         else:
                             # 2D array - extract the column for this corner
+                            if corner_count >= n_result_cols:
+                                # More DFs than result columns (device-namespaced
+                                # lookup matched fewer DFs than total).  Skip
+                                # writing to this DF.
+                                corner_count += 1
+                                continue
                             result_column = result[:, corner_count]
-                        corner_df[equation] = result_column
+                            # Skip if row count doesn't match this DF
+                            if (hasattr(corner_df, 'shape')
+                                    and result_column.shape[0] != corner_df.shape[0]):
+                                corner_count += 1
+                                continue
+                        try:
+                            corner_df[equation] = result_column
+                        except Exception:
+                            pass  # Size mismatch — skip silently
                         corner_count += 1
-                    #for device in self.top_level_app.roar_design.devices:
-                    #    corner_count = 0
-                    #    for corner in self.top_level_app.roar_design.devices[device].corner_collection.corners:
-                    #        result_column = result[:, corner_count]
-                    #        corner.df[equation] = result_column
-                    #        corner_count += 1
-                    #if equation not in self.top_level_app.lookups:
-                    #    self.top_level_app.lookups = self.top_level_app.lookups + (equation,)
                 results[equation] = result
             else:
-                return None
+                # Evaluation failed (e.g. array size mismatch from different
+                # devices).  Store a nan scalar so downstream expressions that
+                # depend on this one can still be resolved symbolically by the
+                # 3D meshgrid evaluator.
+                debug_print(f"[SOLVER DEBUG] Equation '{equation}' returned None – storing np.nan and continuing")
+                results[equation] = np.nan
         return results
 
     def evaluate_equation(self, symbolic_equation, results, corner_dfs=None):
@@ -442,6 +478,13 @@ class ROAREquationSolver:
                     pass
 
             return evaluated_equation
+        except (ValueError, IndexError) as e:
+            # Shape/broadcasting mismatch – likely different-device arrays with
+            # different row counts.  Return np.nan so the caller can continue;
+            # the 3D grid evaluator will resolve the expression symbolically.
+            debug_print(f"[SOLVER DEBUG] Broadcasting error evaluating equation "
+                        f"(different device sizes?): {e}")
+            return np.nan
         except Exception as e:
             if symbolic_equation in results:
                 result = results[symbolic_equation]

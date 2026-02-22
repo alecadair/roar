@@ -75,7 +75,22 @@ class CornerMappingDialog(QDialog):
         self.status_label.setWordWrap(True)
         self.status_label.setStyleSheet("padding: 8px; border-radius: 3px;")
         layout.addWidget(self.status_label)
-        
+
+        # Corner tuples table
+        self.tuples_group = QGroupBox("Corner Tuples (Evaluation Order)")
+        tuples_layout = QVBoxLayout()
+        tuples_info = QLabel(
+            "Each row below is one evaluation pass. Lookups for each device "
+            "use that row's corner. Devices are matched by index position."
+        )
+        tuples_info.setWordWrap(True)
+        tuples_layout.addWidget(tuples_info)
+        self.tuples_table = QTableWidget()
+        self.tuples_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        tuples_layout.addWidget(self.tuples_table)
+        self.tuples_group.setLayout(tuples_layout)
+        layout.addWidget(self.tuples_group)
+
         # Quick fix section
         fix_group = QGroupBox("Quick Fix Options")
         fix_layout = QVBoxLayout()
@@ -198,7 +213,10 @@ class CornerMappingDialog(QDialog):
             
         # Update status summary
         self.update_status_summary(corner_counts)
-        
+
+        # ── Populate the corner-tuples table ──
+        self._update_tuples_table(device_corners)
+
     def count_tech_browser_corners(self):
         """Count how many corners are currently selected in tech browser."""
         if not self.tech_browser:
@@ -248,7 +266,62 @@ class CornerMappingDialog(QDialog):
             )
             self.status_label.setStyleSheet("padding: 8px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 3px; color: #856404;")
             self.pad_corners_btn.setEnabled(True)
-            
+
+    # ------------------------------------------------------------------
+    def _update_tuples_table(self, device_corners):
+        """Populate the corner-tuples table using the lookup window's helper."""
+        tbl = self.tuples_table
+        tbl.clear()
+        tbl.setRowCount(0)
+
+        if not device_corners:
+            tbl.setColumnCount(1)
+            tbl.setHorizontalHeaderLabels(["(no devices)"])
+            return
+
+        # Try to call _build_corner_tuples from the first lookup window
+        tuples_list = None
+        try:
+            top = self.design_editor.top_level_app if self.design_editor else None
+            if top and hasattr(top, 'graph_grid'):
+                lw = getattr(top.graph_grid, 'lookup_window_1', None)
+                if lw and hasattr(lw, '_build_corner_tuples'):
+                    models_sel = []
+                    if hasattr(lw, 'tech_browser'):
+                        models_sel = lw.tech_browser.get_checked_item_paths()
+                    tuples_list = lw._build_corner_tuples(device_corners, models_sel)
+        except Exception:
+            pass
+
+        if not tuples_list:
+            tbl.setColumnCount(1)
+            tbl.setHorizontalHeaderLabels(["(no tuples resolved)"])
+            return
+
+        dev_names = list(tuples_list[0].keys())
+        tbl.setColumnCount(len(dev_names) + 1)
+        tbl.setHorizontalHeaderLabels(["Tuple #"] + dev_names)
+        tbl.setRowCount(len(tuples_list))
+
+        ok_brush = QBrush(QColor("#d4edda"))
+        for row_idx, tup in enumerate(tuples_list):
+            tbl.setItem(row_idx, 0, QTableWidgetItem(str(row_idx + 1)))
+            for col_idx, dev in enumerate(dev_names):
+                cinfo = tup.get(dev, {})
+                cname = cinfo.get("corner_name", "?")
+                path = cinfo.get("path", "")
+                item = QTableWidgetItem(cname)
+                item.setToolTip(path)
+                item.setBackground(ok_brush)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                tbl.setItem(row_idx, col_idx + 1, item)
+
+        header = tbl.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        tbl.setColumnWidth(0, 60)
+        for c in range(1, tbl.columnCount()):
+            header.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+
     def set_all_to_global(self):
         """Set all devices to use global corner selection."""
         if not self.design_editor:
