@@ -19,7 +19,7 @@ import traceback
 import threading
 from typing import Any, Dict, Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QSizePolicy
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont, QKeyEvent
 
@@ -235,6 +235,9 @@ class ROARConsole(QWidget):
                  locals_: Optional[Dict[str, Any]] = None):
         super().__init__(parent)
 
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumSize(100, 60)
+
         if locals_ is None:
             locals_ = {"__name__": "__console__", "__doc__": None}
 
@@ -438,6 +441,9 @@ class ROARTextEditor(QWidget):
     def __init__(self, parent: Optional[QWidget] = None, *,
                  show_toolbar: bool = True):
         super().__init__(parent)
+
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumSize(100, 60)
 
         font = QFont("Courier", 10)
         font.setStyleHint(QFont.StyleHint.Monospace)

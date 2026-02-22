@@ -1082,59 +1082,74 @@ class ROARApp(QMainWindow):
         # Connect the expressions_changed signal to a slot in ROARApp
         self.editor_window.expressions_changed.connect(self.update_lookup_windows)
 
-        # ---- Python Console / Editor Panel (bottom) ----
-        # Wrap the horizontal splitter inside a vertical splitter so the
-        # console/editor panel can live below the main workspace.
-        from PyQt6.QtWidgets import QTabWidget as _QTabWidget
+        # Add splitter to the layout
+        main_layout.addWidget(splitter_h)
 
-        self.main_splitter_v = QSplitter(Qt.Orientation.Vertical)
-        self.main_splitter_v.addWidget(splitter_h)
+        # Set central widget
+        self.setCentralWidget(central_widget)
 
-        # Build the console/editor tab widget
-        self.console_tab_widget = _QTabWidget()
-        self.console_tab_widget.setTabPosition(_QTabWidget.TabPosition.South)
+        # ---- Dockable Python Editor + Console Panel ----
+        # A QDockWidget that can be dragged to any edge of the main window.
+        # Contains a vertical splitter: ROARTextEditor on top, ROARConsole below.
+        from PyQt6.QtWidgets import QDockWidget
 
-        # Python Console tab
+        self.python_dock = QDockWidget("Python Editor && Console", self)
+        self.python_dock.setObjectName("PythonEditorConsoleDock")
+        self.python_dock.setAllowedAreas(
+            Qt.DockWidgetArea.TopDockWidgetArea
+            | Qt.DockWidgetArea.BottomDockWidgetArea
+            | Qt.DockWidgetArea.LeftDockWidgetArea
+            | Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        # Allow the dock to be closed, floated, and moved
+        self.python_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetClosable
+            | QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+
+        # Build the inner widget: vertical splitter with editor on top, console below
+        dock_splitter = QSplitter(Qt.Orientation.Vertical)
+        dock_splitter.setMinimumSize(200, 150)
+        dock_splitter.setChildrenCollapsible(False)
+
+        self.python_editor = None
+        if ROARTextEditor is not None:
+            try:
+                self.python_editor = ROARTextEditor(show_toolbar=True)
+                dock_splitter.addWidget(self.python_editor)
+            except Exception:
+                self.python_editor = None
+
         self.python_console = None
         if ROARConsole is not None:
             try:
                 self.python_console = ROARConsole(
-                    parent=self,
                     locals_={"app": self, "__name__": "__console__"},
                 )
-                self.console_tab_widget.addTab(self.python_console, "Console")
+                dock_splitter.addWidget(self.python_console)
             except Exception:
                 self.python_console = None
 
-        # Python Editor tab
-        self.python_editor = None
-        if ROARTextEditor is not None:
-            try:
-                self.python_editor = ROARTextEditor(parent=self, show_toolbar=True)
-                self.console_tab_widget.addTab(self.python_editor, "Editor")
-            except Exception:
-                self.python_editor = None
-
-        # If neither widget could be created, add a placeholder label
-        if self.python_console is None and self.python_editor is None:
+        # Fallback label when neither widget could be created
+        if self.python_editor is None and self.python_console is None:
             _placeholder = QLabel("Python console/editor unavailable. "
                                   "Install PyQt6-QScintilla to enable.")
             _placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.console_tab_widget.addTab(_placeholder, "Console")
+            dock_splitter.addWidget(_placeholder)
 
-        self.main_splitter_v.addWidget(self.console_tab_widget)
+        # Give the editor ~60% and the console ~40% of the dock height
+        dock_splitter.setSizes([300, 200])
 
-        # Start with the console panel hidden; users toggle via menu/shortcut
-        self.console_tab_widget.setVisible(False)
-        self._console_panel_visible = False
-        # Remember sizes so we can restore the panel to a sensible height
-        self._console_panel_height = 250
+        self.python_dock.setWidget(dock_splitter)
+        self.python_dock.setMinimumSize(300, 200)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.python_dock)
 
-        # Add the vertical splitter to the layout (replaces the old splitter_h)
-        main_layout.addWidget(self.main_splitter_v)
+        # Start hidden – users toggle via menu / shortcut / drag
+        self.python_dock.setVisible(False)
 
-        # Set central widget
-        self.setCentralWidget(central_widget)
+        # Keep menu check-marks in sync whenever the dock is shown/hidden/closed
+        self.python_dock.visibilityChanged.connect(self._on_dock_visibility_changed)
 
         # Initialize menu bar
         self.init_menu_bar()
@@ -1388,20 +1403,14 @@ class ROARApp(QMainWindow):
         except Exception:
             pass
 
-        # ---- Console / Editor panel toggles ----
+        # ---- Python Editor & Console dock toggle ----
         window_menu.addSeparator()
 
-        self._toggle_console_action = QAction("Python Console", self, checkable=True)
-        self._toggle_console_action.setShortcut(QKeySequence("Ctrl+`"))
-        self._toggle_console_action.setChecked(False)
-        self._toggle_console_action.triggered.connect(self.toggle_console_panel)
-        window_menu.addAction(self._toggle_console_action)
-
-        self._toggle_editor_action = QAction("Python Editor", self, checkable=True)
-        self._toggle_editor_action.setShortcut(QKeySequence("Ctrl+E"))
-        self._toggle_editor_action.setChecked(False)
-        self._toggle_editor_action.triggered.connect(self.toggle_editor_panel)
-        window_menu.addAction(self._toggle_editor_action)
+        self._toggle_dock_action = QAction("Python Editor && Console", self, checkable=True)
+        self._toggle_dock_action.setShortcut(QKeySequence("Ctrl+`"))
+        self._toggle_dock_action.setChecked(False)
+        self._toggle_dock_action.triggered.connect(self._toggle_python_dock)
+        window_menu.addAction(self._toggle_dock_action)
 
         # ----- EXPORT MENU -----
         export_menu = menubar.addMenu("Export")
@@ -1497,13 +1506,14 @@ class ROARApp(QMainWindow):
             # Theme
             'theme': getattr(self, '_current_theme', 'light'),
 
-            # Console / Editor panel
+            # Console / Editor dock
             'console_panel': {
-                'visible': getattr(self, '_console_panel_visible', False),
-                'active_tab': self.console_tab_widget.tabText(
-                    self.console_tab_widget.currentIndex())
-                    if hasattr(self, 'console_tab_widget') else 'Console',
-                'height': getattr(self, '_console_panel_height', 250),
+                'visible': self.python_dock.isVisible()
+                    if hasattr(self, 'python_dock') else False,
+                'floating': self.python_dock.isFloating()
+                    if hasattr(self, 'python_dock') else False,
+                'area': int(self.dockWidgetArea(self.python_dock))
+                    if hasattr(self, 'python_dock') else 2,  # 2 = Right
             },
 
             # Design editor state
@@ -1682,14 +1692,19 @@ class ROARApp(QMainWindow):
             except Exception:
                 pass
 
-            # Restore console/editor panel visibility
+            # Restore console/editor dock visibility and position
             try:
                 cp = state.get('console_panel', {})
-                self._console_panel_height = cp.get('height', 250)
-                if cp.get('visible', False):
-                    self.show_console_panel(tab_name=cp.get('active_tab', 'Console'))
+                if cp.get('floating', False):
+                    self.python_dock.setFloating(True)
                 else:
-                    self.hide_console_panel()
+                    area_int = cp.get('area', 2)  # 2 = RightDockWidgetArea
+                    try:
+                        area = Qt.DockWidgetArea(area_int)
+                    except Exception:
+                        area = Qt.DockWidgetArea.RightDockWidgetArea
+                    self.addDockWidget(area, self.python_dock)
+                self.python_dock.setVisible(cp.get('visible', False))
             except Exception:
                 pass
 
@@ -2030,104 +2045,38 @@ class ROARApp(QMainWindow):
             except Exception:
                 pass
 
-    # ---- Console / Editor Panel Controls ----
+    # ---- Python Editor & Console Dock Controls ----
 
-    def toggle_console_panel(self, checked=None):
-        """Toggle visibility of the bottom console/editor panel.
-
-        When *checked* is ``None`` the panel visibility is flipped.
-        Otherwise it is set to the boolean value of *checked*.
+    def _toggle_python_dock(self, checked=None):
+        """Toggle visibility of the Python Editor & Console dock widget.
 
         Keyboard shortcut: ``Ctrl+` `` (set in menu bar).
         """
         if checked is None:
-            checked = not self._console_panel_visible
+            checked = not self.python_dock.isVisible()
+        self.python_dock.setVisible(checked)
 
-        if checked:
-            self.show_console_panel(tab_name="Console")
-        else:
-            self.hide_console_panel()
-
-        # Keep the menu check-mark in sync
+    def _on_dock_visibility_changed(self, visible):
+        """Slot connected to ``python_dock.visibilityChanged`` so the menu
+        check-mark stays in sync when the user closes the dock via its
+        title-bar button or drags it around."""
         try:
-            self._toggle_console_action.setChecked(self._console_panel_visible)
-        except Exception:
-            pass
-
-    def toggle_editor_panel(self, checked=None):
-        """Toggle visibility of the bottom panel and switch to the Editor tab.
-
-        Keyboard shortcut: ``Ctrl+E`` (set in menu bar).
-        """
-        if checked is None:
-            checked = not self._console_panel_visible or \
-                      self.console_tab_widget.currentWidget() is not self.python_editor
-
-        if checked:
-            self.show_console_panel(tab_name="Editor")
-        else:
-            self.hide_console_panel()
-
-        # Keep the menu check-marks in sync
-        try:
-            self._toggle_console_action.setChecked(
-                self._console_panel_visible and
-                self.console_tab_widget.currentWidget() is self.python_console)
-            self._toggle_editor_action.setChecked(
-                self._console_panel_visible and
-                self.console_tab_widget.currentWidget() is self.python_editor)
+            self._toggle_dock_action.setChecked(visible)
         except Exception:
             pass
 
     def show_console_panel(self, tab_name: str | None = None):
-        """Show the bottom console/editor panel.
+        """Show the Python Editor & Console dock.
 
-        Parameters
-        ----------
-        tab_name : str, optional
-            If given, switch to the tab whose label matches (e.g. ``"Console"``
-            or ``"Editor"``).
+        The *tab_name* parameter is accepted for backward compatibility but
+        is ignored — the editor and console are always shown together now.
         """
-        self.console_tab_widget.setVisible(True)
-        self._console_panel_visible = True
-
-        # Restore a sensible splitter proportion
-        total = self.main_splitter_v.height()
-        panel_h = min(self._console_panel_height, total // 2)
-        self.main_splitter_v.setSizes([total - panel_h, panel_h])
-
-        # Switch to the requested tab
-        if tab_name is not None:
-            for i in range(self.console_tab_widget.count()):
-                if self.console_tab_widget.tabText(i) == tab_name:
-                    self.console_tab_widget.setCurrentIndex(i)
-                    break
-
-        # Give keyboard focus to the active panel widget
-        try:
-            current = self.console_tab_widget.currentWidget()
-            if current is not None:
-                current.setFocus()
-        except Exception:
-            pass
+        self.python_dock.setVisible(True)
+        self.python_dock.raise_()
 
     def hide_console_panel(self):
-        """Hide the bottom console/editor panel and give space back to the
-        main workspace."""
-        # Remember the current panel height so we can restore it later
-        sizes = self.main_splitter_v.sizes()
-        if len(sizes) == 2 and sizes[1] > 0:
-            self._console_panel_height = sizes[1]
-
-        self.console_tab_widget.setVisible(False)
-        self._console_panel_visible = False
-
-        # Sync both menu check-marks
-        try:
-            self._toggle_console_action.setChecked(False)
-            self._toggle_editor_action.setChecked(False)
-        except Exception:
-            pass
+        """Hide the Python Editor & Console dock."""
+        self.python_dock.setVisible(False)
 
     def run_solver(self):
         """Placeholder function for running solver."""

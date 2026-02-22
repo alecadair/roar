@@ -3140,18 +3140,26 @@ class ROARLookupWindow(QWidget):
                                             else:
                                                 # Apply log scale to Z if LogZ is checked
                                                 if getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked():
+                                                    n_pos = int(np.sum(Z_grid > 0))
+                                                    debug_print(f"[3D LOGZ] Applying log10 (with constraints): {n_pos}/{Z_grid.size} positive values")
                                                     Z_grid = np.where(Z_grid > 0, np.log10(Z_grid), np.nan)
+                                                    debug_print(f"[3D LOGZ] After log10: range [{np.nanmin(Z_grid):.4g}, {np.nanmax(Z_grid):.4g}]")
                                                 results_3d = (X_grid, Y_grid, Z_grid, 'surface')
                                         else:
                                             # Apply log scale to Z if LogZ is checked
                                             if getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked():
+                                                n_pos = int(np.sum(Z_grid > 0))
+                                                debug_print(f"[3D LOGZ] Applying log10 (no constraints): {n_pos}/{Z_grid.size} positive values")
                                                 Z_grid = np.where(Z_grid > 0, np.log10(Z_grid), np.nan)
+                                                debug_print(f"[3D LOGZ] After log10: range [{np.nanmin(Z_grid):.4g}, {np.nanmax(Z_grid):.4g}]")
                                             results_3d = (X_grid, Y_grid, Z_grid, 'surface')
                                     else:
                                         # Not enough unique values → scatter fallback
                                         z_data = np.asarray(result_matrix_all[param3]).ravel()
                                         # Apply log scale to Z if LogZ is checked
                                         if getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked():
+                                            n_pos = int(np.sum(z_data > 0))
+                                            debug_print(f"[3D LOGZ] Applying log10 (scatter): {n_pos}/{z_data.size} positive values")
                                             z_data = np.where(z_data > 0, np.log10(z_data), np.nan)
                                         results_3d = (x_data, y_data, z_data, 'scatter')
                                 else:
@@ -3441,7 +3449,25 @@ class ROARLookupWindow(QWidget):
                         item = GLLinePlotItem(pos=z_line, color=axis_color, width=1.5, antialias=True)
                         self.gl_widget.addItem(item); self.gl_items.append(item)
 
-                        zn, zl = _make_ticks(global_z_min, global_z_max, n_ticks)
+                        _z_is_log = (getattr(self, 'checkbox_logz', None)
+                                     and self.checkbox_logz.isChecked())
+                        if _z_is_log:
+                            # Z data is already log10-transformed.  Generate
+                            # tick positions in log10 space but show the
+                            # *original* (anti-log) values as labels so the
+                            # axis reads like a standard log scale.
+                            zn, _ = _make_ticks(global_z_min, global_z_max, n_ticks)
+                            # Convert normalised tick positions back to log10
+                            # values, then to original domain values.
+                            z_rng = global_z_max - global_z_min
+                            if z_rng == 0:
+                                zl = [format_eng(10 ** global_z_min)] * len(zn)
+                            else:
+                                zl = [format_eng(10 ** (global_z_min + (p + 5.0) / 10.0 * z_rng))
+                                      for p in zn]
+                        else:
+                            zn, zl = _make_ticks(global_z_min, global_z_max, n_ticks)
+
                         for pos_n, lbl in zip(zn, zl):
                             tp = np.array([[-5 - tick_len, -5, pos_n],
                                            [-5 + tick_len, -5, pos_n]], dtype=np.float32)
@@ -3452,8 +3478,8 @@ class ROARLookupWindow(QWidget):
                             self.gl_widget.addItem(t); self.gl_items.append(t)
 
                         _a3 = all_3d_results[0][5]
-                        if getattr(self, 'checkbox_logz', None) and self.checkbox_logz.isChecked():
-                            _a3 = f"log10({_a3})"
+                        if _z_is_log:
+                            _a3 = f"{_a3} (log)"
                         t = GLTextItem(pos=np.array([-7.0, -5, 0], dtype=np.float64),
                                        text=_a3, color=label_color)
                         self.gl_widget.addItem(t); self.gl_items.append(t)

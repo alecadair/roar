@@ -1103,7 +1103,7 @@ class ROAREditorWindow(QWidget):
         self.refresh_button.clicked.connect(self.on_refresh_clicked)
         self.save_button = QPushButton("Save")
         self.open_editor_button = QPushButton("Open Editor")
-        self.corner_mapping_button = QPushButton("Corner Mapping")
+        self.corner_mapping_button = QPushButton("Corner Map")
         self.corner_mapping_button.setToolTip(
             "View and configure device corner mappings for 3D plotting.\n"
             "Ensures all devices use compatible corner sets."
