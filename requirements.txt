@@ -2,6 +2,8 @@ matplotlib
 pandas
 sympy
 PyQt6==6.8
+PyQt6-QScintilla
+jedi
 pyqtgraph>=0.13
 PyOpenGL
 colorama

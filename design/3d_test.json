@@ -112,10 +112,18 @@
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[*Global*]",
+            "Corners": "[nfettt27]",
             "disabled": false,
             "plot": false,
-            "_corners_data": null
+            "_corners_data": [
+                {
+                    "length": "500",
+                    "model": "n_01v8_lvt",
+                    "name": "nfettt27",
+                    "path": "PDK>SKY130A>n_01v8_lvt>500>nfettt27",
+                    "pdk": "SKY130A"
+                }
+            ]
         },
         {
             "Instance": "M2",
@@ -123,10 +131,18 @@
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[*Global*]",
+            "Corners": "[pfetff27]",
             "disabled": false,
             "plot": false,
-            "_corners_data": null
+            "_corners_data": [
+                {
+                    "length": "500",
+                    "model": "p_01v8_lvt",
+                    "name": "pfetff27",
+                    "path": "PDK>SKY130A>p_01v8_lvt>500>pfetff27",
+                    "pdk": "SKY130A"
+                }
+            ]
         }
     ]
 }

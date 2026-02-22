@@ -1,14 +1,20 @@
 {
     "expression_editor": [
         {
+            "Symbol": "av",
+            "Expression": "30",
+            "disabled": false,
+            "plot": false
+        },
+        {
             "Symbol": "cload",
-            "Expression": "4e-12",
+            "Expression": "0.000000000001",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "fu",
-            "Expression": "100e6",
+            "Expression": "100000000",
             "disabled": false,
             "plot": false
         },
@@ -19,310 +25,215 @@
             "plot": false
         },
         {
-            "Symbol": "av",
-            "Expression": "50",
+            "Symbol": "gbw",
+            "Expression": "av*fu",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgm1",
-            "Expression": "kgm:M1",
+            "Symbol": "kgm1_2",
+            "Expression": "kgm:M1_2",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgm2",
-            "Expression": "kgm1",
+            "Symbol": "kgm3_4",
+            "Expression": "kgm:M3_4",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgm3",
-            "Expression": "kgm:M3",
+            "Symbol": "kgm5_6",
+            "Expression": "kgm1_2",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgm4",
-            "Expression": "kgm3",
+            "Symbol": "kgm7_8",
+            "Expression": "kgm3_4",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgm5",
-            "Expression": "kgm1",
+            "Symbol": "kcgs1_2",
+            "Expression": "kcgs:M1_2",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgm6",
-            "Expression": "kgm1",
+            "Symbol": "kcgs3_4",
+            "Expression": "kcgs:M3_4",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgm7",
-            "Expression": "kgm3",
+            "Symbol": "kcgs5_6",
+            "Expression": "kcgs:M1_2",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgm8",
-            "Expression": "kgm3",
+            "Symbol": "kcgs7_8",
+            "Expression": "kcgs:M3_4",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgds6",
-            "Expression": "kgds:M1",
+            "Symbol": "kcgd7_8",
+            "Expression": "kcgd:M3_4",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgds8",
-            "Expression": "kgds:M3",
+            "Symbol": "kcgd3_4",
+            "Expression": "kcgd:M3_4",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kcgs1",
-            "Expression": "kcgs:M1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcgs4",
-            "Expression": "kcgs:M3",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcgd4",
-            "Expression": "kcgd:M3",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcds4",
-            "Expression": "kcds:M3",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcgd6",
-            "Expression": "kcgd:M1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcds6",
-            "Expression": "kcds:M1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcgd8",
-            "Expression": "kcgd:M3",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcds8",
-            "Expression": "kcds:M3",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kcgs8",
-            "Expression": "kcgs:M3",
+            "Symbol": "kcgd5_6",
+            "Expression": "kcgd:M1_2",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "kcs4",
-            "Expression": "kcgs4 + kcgd4 + kcds4",
+            "Expression": "kcgd3_4 + kcgs3_4",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "kcs8",
-            "Expression": "kcs4",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "idensity1",
-            "Expression": "iden:M1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "kgds1",
-            "Expression": "kgds:M1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "idso1_2",
-            "Expression": "fu*cload/(beta*kgm1)",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "beta",
-            "Expression": "(kgm4 - alpha*wu*kcs4)/(alpha*wu*kcs8)",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "alpha",
-            "Expression": "1/tan(30)",
+            "Expression": "kcgd7_8 + kcgs7_8",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "kco",
-            "Expression": "kcgd8 + kcds8 + kcgd6 + kcds6",
+            "Expression": "kcgd7_8 + kcgd5_6",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "idsl1_2",
-            "Expression": "1/(1 - wu*kco/kgm1)",
+            "Symbol": "i0",
+            "Expression": "wu*cload/(beta*kgm1_2)",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "id1_2",
-            "Expression": "idso1_2*idsl1_2",
+            "Symbol": "beta_numerator",
+            "Expression": "kgm3_4 - alpha*wu*kcs3_4",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "i_total",
-            "Expression": "id1_2 + beta*id1_2",
+            "Symbol": "beta_denominator",
+            "Expression": "alpha*wu*kcs8",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "mult_test",
-            "Expression": "kgm1*kgm3",
+            "Symbol": "alpha",
+            "Expression": "1/tand(30)",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "gain",
-            "Expression": "kgm1/(kgds6 + kgds8)",
+            "Symbol": "beta",
+            "Expression": "beta_numerator/beta_denominator",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "i_sl",
+            "Expression": "1/(1 - (wu*kco/kgm1_2))",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "i1_2",
+            "Expression": "i0*i_sl",
             "disabled": false,
             "plot": false
         }
     ],
-    "constraint_editor": [
-        {
-            "Symbol": "min_kcgs",
-            "Constraint Expression": "kcgs1 > 0",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "pos_current",
-            "Constraint Expression": "id1_2 > 0",
-            "disabled": false,
-            "plot": false
-        }
-    ],
+    "constraint_editor": [],
     "instance_table": [
         {
-            "Instance": "M1",
+            "Instance": "M1_2",
             "kgm": "",
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[*Global*]",
-            "disabled": false,
-            "plot": false,
-            "_corners_data": null
-        },
-        {
-            "Instance": "M2",
-            "kgm": "",
-            "ID": "",
-            "W": "",
-            "L": "",
-            "Corners": "[*Global*]",
-            "disabled": false,
-            "plot": false,
-            "_corners_data": null
-        },
-        {
-            "Instance": "M3",
-            "kgm": "",
-            "ID": "",
-            "W": "",
-            "L": "",
-            "Corners": "[pfettt-25, pfettt25, pfettt75]",
+            "Corners": "[nfettt25]",
             "disabled": false,
             "plot": false,
             "_corners_data": [
-                "pfettt-25",
-                "pfettt25",
-                "pfettt75"
+                {
+                    "length": "500",
+                    "model": "n_01v8",
+                    "name": "nfettt25",
+                    "path": "PDK>SKY130A>n_01v8>500>nfettt25",
+                    "pdk": "SKY130A"
+                }
             ]
         },
         {
-            "Instance": "M4",
+            "Instance": "M3_4",
             "kgm": "",
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[*Global*]",
+            "Corners": "[pfettt25]",
             "disabled": false,
             "plot": false,
-            "_corners_data": null
+            "_corners_data": [
+                {
+                    "length": "500",
+                    "model": "p_01v8",
+                    "name": "pfettt25",
+                    "path": "PDK>SKY130A>p_01v8>500>pfettt25",
+                    "pdk": "SKY130A"
+                }
+            ]
         },
         {
-            "Instance": "M5",
+            "Instance": "M5_6",
             "kgm": "",
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[*Global*]",
+            "Corners": "[nfettt25]",
             "disabled": false,
             "plot": false,
-            "_corners_data": null
+            "_corners_data": [
+                {
+                    "length": "500",
+                    "model": "n_01v8",
+                    "name": "nfettt25",
+                    "path": "PDK>SKY130A>n_01v8>500>nfettt25",
+                    "pdk": "SKY130A"
+                }
+            ]
         },
         {
-            "Instance": "M6",
+            "Instance": "M7_8",
             "kgm": "",
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[*Global*]",
+            "Corners": "[pfettt-25]",
             "disabled": false,
             "plot": false,
-            "_corners_data": null
-        },
-        {
-            "Instance": "M7",
-            "kgm": "",
-            "ID": "",
-            "W": "",
-            "L": "",
-            "Corners": "[*Global*]",
-            "disabled": false,
-            "plot": false,
-            "_corners_data": null
-        },
-        {
-            "Instance": "M8",
-            "kgm": "",
-            "ID": "",
-            "W": "",
-            "L": "",
-            "Corners": "[*Global*]",
-            "disabled": false,
-            "plot": false,
-            "_corners_data": null
+            "_corners_data": [
+                {
+                    "length": "500",
+                    "model": "p_01v8",
+                    "name": "pfettt-25",
+                    "path": "PDK>SKY130A>p_01v8>500>pfettt-25",
+                    "pdk": "SKY130A"
+                }
+            ]
         }
     ]
 }
