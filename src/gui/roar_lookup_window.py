@@ -14,6 +14,438 @@ from PyQt6.QtGui import QColor, QCursor, QIcon
 # Requires pyqtgraph and PyOpenGL to be available
 from pyqtgraph.opengl import MeshData, GLMeshItem, GLScatterPlotItem
 
+try:
+    from pyqtgraph.opengl import GLTextItem, GLLinePlotItem
+except ImportError:
+    GLTextItem = None
+    GLLinePlotItem = None
+
+
+class ROAR3DViewWidget(gl.GLViewWidget):
+    """Custom GLViewWidget with 3-D point-marker support.
+
+    Behaviour mirrors the 2-D ``ROARPlotWidget`` markers:
+
+        Left-click  – place a red dot on the nearest data point and show an
+                      ``(x, y, z)`` label.  Clicking near an existing marker
+                      removes it (toggle).
+        Delete      – remove all markers at once.
+        Escape      – (reserved, currently same as Delete).
+        F           – auto-fit camera.
+
+    Camera rotation / pan / zoom with the mouse are **not** affected because
+    marker placement only triggers when the mouse has **not moved** between
+    press and release (i.e. a true click, not a drag).
+    """
+
+    # Pixel-distance threshold: a click must land within this many pixels of
+    # a data point to create a marker, and within this distance of an existing
+    # marker to delete it.
+    PICK_TOLERANCE_PX = 25
+    # Maximum mouse-move (pixels) between press/release to still count as a
+    # click rather than a camera drag.
+    CLICK_DRAG_THRESHOLD = 5
+
+    # Visual style constants
+    MARKER_SIZE_NORMAL = 14
+    MARKER_COLOR_NORMAL = (1.0, 0.0, 0.0, 1.0)        # red
+    MARKER_SIZE_HOVER = 20
+    MARKER_COLOR_HOVER = (1.0, 0.65, 0.0, 1.0)         # orange
+    LABEL_COLOR_NORMAL = QColor(255, 255, 100)           # light yellow
+    LABEL_COLOR_HOVER = QColor(255, 200, 50)             # brighter gold
+
+    def __init__(self, *args, parent_lookup_window=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.parent_lookup_window = parent_lookup_window
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)  # receive move events without button held
+
+        # 3-D point markers: list of dicts
+        #   {'scatter': GLScatterPlotItem, 'text': GLTextItem,
+        #    'pos_norm': ndarray(3,), 'pos_orig': ndarray(3,)}
+        self._3d_point_markers = []
+
+        # Data points registered by the render pass for mouse picking.
+        self._all_norm_points = []   # list of Nx3 float64 arrays (GL coords)
+        self._all_orig_points = []   # list of Nx3 float64 arrays (real coords)
+        self._all_point_colors = []  # list of (r, g, b, a) tuples – one per set
+
+        # Track mouse-press position to distinguish click from drag.
+        self._press_pos = None
+
+        # Hover tracking – mirrors the 2-D _hovered_marker pattern.
+        self._hovered_marker = None
+
+        self._set_face_visible('z_min', cz > 0)
+        self._set_face_visible('z_max', cz <= 0)
+
+    def paintGL(self, *args, **kwargs):
+        """Update which grid faces are visible before each paint."""
+        self._update_grid_faces()
+        super().paintGL(*args, **kwargs)
+
+    # ------------------------------------------------------------------
+    # Coordinate helpers
+    # ------------------------------------------------------------------
+    def _get_axis_names(self):
+        """Return (x_name, y_name, z_name) from the parent combo boxes."""
+        lw = self.parent_lookup_window
+        if lw is None:
+            return ('X', 'Y', 'Z')
+        return (
+            getattr(lw, 'combo_x', None) and lw.combo_x.currentText() or 'X',
+            getattr(lw, 'combo_y', None) and lw.combo_y.currentText() or 'Y',
+            getattr(lw, 'combo_z', None) and lw.combo_z.currentText() or 'Z',
+        )
+
+    # ------------------------------------------------------------------
+    # Screen-space projection (used for mouse picking)
+    # ------------------------------------------------------------------
+    def _project_to_screen(self, pts_3d):
+        """Project Nx3 GL-space points → Nx2 *widget* pixel coordinates.
+
+        Accounts for the device-pixel-ratio so that the returned values
+        match ``event.position()`` coordinates directly (no manual DPI
+        conversion needed by callers).
+        """
+        try:
+            import OpenGL.GL as _gl
+            self.makeCurrent()
+            mv = np.array(_gl.glGetDoublev(_gl.GL_MODELVIEW_MATRIX), dtype=np.float64)
+            proj = np.array(_gl.glGetDoublev(_gl.GL_PROJECTION_MATRIX), dtype=np.float64)
+            vp = np.array(_gl.glGetIntegerv(_gl.GL_VIEWPORT), dtype=np.float64)
+        except Exception:
+            return None
+
+        pts = np.asarray(pts_3d, dtype=np.float64)
+        n = pts.shape[0]
+        pts4 = np.hstack([pts, np.ones((n, 1), dtype=np.float64)])
+        clip = (pts4 @ mv.T) @ proj.T
+        w = clip[:, 3:4].copy()
+        w[w == 0] = 1e-30
+        ndc = clip[:, :3] / w
+
+        # GL viewport is in *physical* (device) pixels.  Convert to
+        # widget (logical) pixels by dividing by devicePixelRatio so we
+        # can compare directly with Qt mouse event positions.
+        dpr = self.devicePixelRatioF()
+        sx = (vp[0] + vp[2] * (ndc[:, 0] + 1.0) / 2.0) / dpr
+        # GL y=0 is at the bottom; Qt y=0 is at the top.
+        gl_sy = (vp[1] + vp[3] * (ndc[:, 1] + 1.0) / 2.0) / dpr
+        widget_h = float(self.height())
+        sy = widget_h - gl_sy
+
+        return np.column_stack([sx, sy])
+
+    def _find_nearest_point(self, mouse_x, mouse_y):
+        """Find the nearest data point to widget coords (*mouse_x*, *mouse_y*).
+
+        Returns ``(norm_xyz, orig_xyz, dist_px, color_rgba)`` or
+        ``(None, None, inf, None)``.
+        Mouse coords are in Qt widget-logical pixels (from ``event.position()``).
+        """
+        if not self._all_norm_points:
+            return None, None, float('inf'), None
+
+        best_dist = float('inf')
+        best_norm = best_orig = None
+        best_color = None
+
+        colors = self._all_point_colors
+        for i, (norm_pts, orig_pts) in enumerate(
+                zip(self._all_norm_points, self._all_orig_points)):
+            screen = self._project_to_screen(norm_pts)
+            if screen is None:
+                continue
+            dsq = (screen[:, 0] - mouse_x) ** 2 + (screen[:, 1] - mouse_y) ** 2
+            idx = int(np.argmin(dsq))
+            d = float(np.sqrt(dsq[idx]))
+            if d < best_dist:
+                best_dist = d
+                best_norm = norm_pts[idx].copy()
+                best_orig = orig_pts[idx].copy()
+                best_color = colors[i] if i < len(colors) else (1.0, 0.0, 0.0, 1.0)
+
+        return best_norm, best_orig, best_dist, best_color
+
+    def _find_nearest_marker(self, mouse_x, mouse_y):
+        """Return the existing marker dict closest to the mouse, or *None*."""
+        if not self._3d_point_markers:
+            return None
+        pts = np.array([m['pos_norm'] for m in self._3d_point_markers], dtype=np.float64)
+        screen = self._project_to_screen(pts)
+        if screen is None:
+            return None
+        dsq = (screen[:, 0] - mouse_x) ** 2 + (screen[:, 1] - mouse_y) ** 2
+        idx = int(np.argmin(dsq))
+        if np.sqrt(dsq[idx]) < self.PICK_TOLERANCE_PX:
+            return self._3d_point_markers[idx]
+        return None
+
+    # ------------------------------------------------------------------
+    # Marker add / remove
+    # ------------------------------------------------------------------
+    # Z floor of the normalised cube (where the grid sits)
+    _Z_FLOOR = -5.0
+
+    def add_point_marker(self, norm_xyz, orig_xyz, surface_color=None):
+        """Place a marker dot (colored to match its surface), a label,
+        a vertical drop-line to the z = -5 floor, and a floor dot."""
+        if GLTextItem is None or GLLinePlotItem is None:
+            return
+
+        norm_xyz = np.asarray(norm_xyz, dtype=np.float64)
+        orig_xyz = np.asarray(orig_xyz, dtype=np.float64)
+
+        # Resolve marker colour from the surface it sits on
+        if surface_color is not None:
+            mc = tuple(float(c) for c in surface_color[:4])
+        else:
+            mc = self.MARKER_COLOR_NORMAL
+        # Store the base colour on the marker dict so hover can restore it
+        marker_color = mc
+
+        # ── Scatter dot at the data point (surface colour) ──
+        scatter = GLScatterPlotItem(
+            pos=np.array([norm_xyz], dtype=np.float32),
+            size=self.MARKER_SIZE_NORMAL,
+            color=marker_color,
+            pxMode=True,
+        )
+        self.addItem(scatter)
+
+        # ── Label at the data point ──
+        ax, ay, az = self._get_axis_names()
+        label = (f"{ax}={format_eng(orig_xyz[0])},  "
+                 f"{ay}={format_eng(orig_xyz[1])},  "
+                 f"{az}={format_eng(orig_xyz[2])}")
+        text = GLTextItem(
+            pos=norm_xyz + np.array([0.3, 0.3, 0.3]),
+            text=label, color=self.LABEL_COLOR_NORMAL,
+        )
+        self.addItem(text)
+
+        # ── Vertical drop-line from data point to the z-floor ──
+        floor_pt = np.array([norm_xyz[0], norm_xyz[1], self._Z_FLOOR],
+                            dtype=np.float32)
+        drop_color = (mc[0], mc[1], mc[2], 0.35)
+        drop_line = GLLinePlotItem(
+            pos=np.array([norm_xyz.astype(np.float32), floor_pt]),
+            color=drop_color, width=1.5, antialias=True,
+        )
+        self.addItem(drop_line)
+
+        # ── Small scatter dot on the floor ──
+        floor_dot = GLScatterPlotItem(
+            pos=np.array([floor_pt], dtype=np.float32),
+            size=8, color=(mc[0], mc[1], mc[2], 0.5), pxMode=True,
+        )
+        self.addItem(floor_dot)
+
+        self._3d_point_markers.append({
+            'scatter': scatter,
+            'text': text,
+            'drop_line': drop_line,
+            'floor_dot': floor_dot,
+            'pos_norm': norm_xyz.copy(),
+            'pos_orig': orig_xyz.copy(),
+            'base_color': marker_color,      # for restoring after hover
+        })
+
+        # Push values to the spin boxes
+        self._update_spin_boxes(orig_xyz)
+
+    def _update_spin_boxes(self, orig_xyz):
+        lw = self.parent_lookup_window
+        if lw is None:
+            return
+        try:
+            for spin, val in [(lw.spin_x, orig_xyz[0]),
+                              (lw.spin_y, orig_xyz[1]),
+                              (lw.spin_z, orig_xyz[2])]:
+                if val < spin.minimum():
+                    spin.setMinimum(val)
+                if val > spin.maximum():
+                    spin.setMaximum(val)
+                spin.setValue(val)
+        except Exception:
+            pass
+
+    def _remove_point_marker(self, marker):
+        # If this was the hovered marker, clear the hover state
+        if self._hovered_marker is marker:
+            self._hovered_marker = None
+        for key in ('scatter', 'text', 'drop_line', 'floor_dot'):
+            try:
+                self.removeItem(marker[key])
+            except Exception:
+                pass
+        try:
+            self._3d_point_markers.remove(marker)
+        except ValueError:
+            pass
+
+    def _set_marker_style(self, marker, hovered):
+        """Apply normal or hovered visual style to a marker and its drop-line."""
+        scatter = marker.get('scatter')
+        text = marker.get('text')
+        drop_line = marker.get('drop_line')
+        floor_dot = marker.get('floor_dot')
+        bc = marker.get('base_color', self.MARKER_COLOR_NORMAL)
+
+        if hovered:
+            size = self.MARKER_SIZE_HOVER
+            color = self.MARKER_COLOR_HOVER
+            text_color = self.LABEL_COLOR_HOVER
+            line_color = (1.0, 1.0, 0.3, 0.6)
+            floor_dot_color = (1.0, 0.65, 0.0, 0.8)
+        else:
+            size = self.MARKER_SIZE_NORMAL
+            color = bc
+            text_color = self.LABEL_COLOR_NORMAL
+            line_color = (bc[0], bc[1], bc[2], 0.35)
+            floor_dot_color = (bc[0], bc[1], bc[2], 0.5)
+
+        if scatter is not None:
+            try:
+                scatter.setData(size=size, color=np.array([color], dtype=np.float32))
+            except Exception:
+                pass
+        if text is not None:
+            try:
+                text.setData(color=text_color)
+            except Exception:
+                pass
+        if drop_line is not None:
+            try:
+                drop_line.setData(color=line_color, width=2.5 if hovered else 1.5)
+            except Exception:
+                pass
+        if floor_dot is not None:
+            try:
+                floor_dot.setData(size=12 if hovered else 8,
+                                  color=np.array([floor_dot_color], dtype=np.float32))
+            except Exception:
+                pass
+
+    def _update_marker_hover(self, mouse_x, mouse_y):
+        """Check proximity to existing markers and highlight/unhighlight."""
+        nearest = self._find_nearest_marker(mouse_x, mouse_y)
+
+        if nearest is self._hovered_marker:
+            return  # no change
+
+        # Un-highlight previous
+        if self._hovered_marker is not None:
+            self._set_marker_style(self._hovered_marker, hovered=False)
+
+        # Highlight new
+        if nearest is not None:
+            self._set_marker_style(nearest, hovered=True)
+
+        self._hovered_marker = nearest
+        self.update()  # repaint
+
+    def clear_all_3d_markers(self):
+        """Remove every marker."""
+        for m in list(self._3d_point_markers):
+            self._remove_point_marker(m)
+
+    # ------------------------------------------------------------------
+    # Qt event overrides – click-vs-drag disambiguation
+    # ------------------------------------------------------------------
+    def mousePressEvent(self, event):
+        """Record press position; always forward to base class for camera."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = (event.position().x(), event.position().y())
+        super().mousePressEvent(event)          # camera orbit still works
+
+    def mouseReleaseEvent(self, event):
+        """On release, check if it was a *click* (not a drag) and handle markers."""
+        if event.button() == Qt.MouseButton.LeftButton and self._press_pos is not None:
+            rx, ry = event.position().x(), event.position().y()
+            dx = abs(rx - self._press_pos[0])
+            dy = abs(ry - self._press_pos[1])
+            self._press_pos = None
+
+            if dx <= self.CLICK_DRAG_THRESHOLD and dy <= self.CLICK_DRAG_THRESHOLD:
+                # True click – try to toggle a marker
+                self._handle_click(rx, ry)
+
+        super().mouseReleaseEvent(event)
+
+    def _handle_click(self, mx, my):
+        """Toggle marker at click position: remove if near existing, else add."""
+        # First check if clicking on an existing marker (to remove it)
+        existing = self._find_nearest_marker(mx, my)
+        if existing is not None:
+            self._remove_point_marker(existing)
+            self.update()
+            return
+
+        # Otherwise add a new one
+        norm_xyz, orig_xyz, dist, color = self._find_nearest_point(mx, my)
+        if dist <= self.PICK_TOLERANCE_PX and norm_xyz is not None:
+            self.add_point_marker(norm_xyz, orig_xyz, surface_color=color)
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        """Update marker hover highlight and show nearest-point coords."""
+        super().mouseMoveEvent(event)
+        mx, my = event.position().x(), event.position().y()
+
+        # ── Marker hover highlighting ──
+        self._update_marker_hover(mx, my)
+
+        # Change cursor when over an existing marker
+        if self._hovered_marker is not None:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            self.unsetCursor()
+
+        # ── Status-bar coordinate readout ──
+        norm_xyz, orig_xyz, dist, _color = self._find_nearest_point(mx, my)
+        if dist <= self.PICK_TOLERANCE_PX * 2 and orig_xyz is not None:
+            ax, ay, az = self._get_axis_names()
+            coord_str = (f"{ax}={format_eng(orig_xyz[0])},  "
+                         f"{ay}={format_eng(orig_xyz[1])},  "
+                         f"{az}={format_eng(orig_xyz[2])}")
+            lw = self.parent_lookup_window
+            if lw is not None:
+                app = getattr(lw, 'top_level_app', None)
+                if app is not None and hasattr(app, 'coord_label'):
+                    try:
+                        app.coord_label.setText(f"Coordinates: ({coord_str})")
+                    except Exception:
+                        pass
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key.Key_Delete or key == Qt.Key.Key_Escape:
+            self.clear_all_3d_markers()
+            self.update()
+            event.accept()
+        elif key == Qt.Key.Key_F:
+            lw = self.parent_lookup_window
+            if lw is not None:
+                try:
+                    lw.auto_fit_3d()
+                except Exception:
+                    pass
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+    def leaveEvent(self, event):
+        """Reset hover highlight when the mouse leaves the widget."""
+        if self._hovered_marker is not None:
+            self._set_marker_style(self._hovered_marker, hovered=False)
+            self._hovered_marker = None
+            self.update()
+        self.unsetCursor()
+        super().leaveEvent(event)
+
+
 # Import debug_print function - handles case where this module is imported before roar_gui
 try:
     from roar_gui import debug_print
@@ -1865,12 +2297,12 @@ class ROARLookupWindow(QWidget):
 
         # Create pyqtgraph OpenGL widget for 3D mesh plotting
         try:
-            self.gl_widget = gl.GLViewWidget()
+            self.gl_widget = ROAR3DViewWidget(parent_lookup_window=self)
             self.gl_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             self.gl_widget.setVisible(False)
             self.gl_items = []
         except Exception as e:
-            debug_print(f"Could not create GLViewWidget: {e}")
+            debug_print(f"Could not create ROAR3DViewWidget: {e}")
             self.gl_widget = None
             self.gl_items = []
 
@@ -2052,6 +2484,23 @@ class ROARLookupWindow(QWidget):
         # Redraw the plot with new background color
         self.update_graph_from_tech_browser()
 
+    def auto_fit_3d(self):
+        """Reset the 3D GL camera so the entire scene fits in view.
+
+        Data is normalised to a [-5, 5] cube, so a distance of 20 with a
+        moderate elevation gives a good overview.  The centre of the view is
+        placed at the origin of the normalised cube.
+        """
+        if self.gl_widget is None or not self.gl_widget.isVisible():
+            return
+        try:
+            self.gl_widget.setCameraPosition(distance=20, elevation=30, azimuth=-135)
+            # Reset the centre of rotation to the origin of the normalised cube
+            self.gl_widget.opts['center'] = pg.Vector(0, 0, 0)
+            self.gl_widget.update()
+        except Exception:
+            pass
+
 
     def update_expression_symbols(self, symbols):
         self.expression_symbols = symbols
@@ -2155,6 +2604,14 @@ class ROARLookupWindow(QWidget):
             else:
                 pw.plotItem.removeItem(item)
         pw.difference_items.clear()
+
+        # Also clear 3-D markers on the GL widget
+        gl_w = getattr(self, 'gl_widget', None)
+        if gl_w is not None and hasattr(gl_w, 'clear_all_3d_markers'):
+            try:
+                gl_w.clear_all_3d_markers()
+            except Exception:
+                pass
 
     def sync_log_checkboxes(self):
         x_log = self.plot_widget.getPlotItem().getAxis('bottom').logMode
@@ -3434,6 +3891,7 @@ class ROARLookupWindow(QWidget):
                             pass
                     self.gl_items.clear()
 
+
                     # Compute global min/max across ALL corners for consistent normalization
                     global_x_min = np.inf
                     global_x_max = -np.inf
@@ -3455,6 +3913,21 @@ class ROARLookupWindow(QWidget):
                         global_y_max = max(global_y_max, float(np.nanmax(a2)))
                         global_z_min = min(global_z_min, float(np.nanmin(a3)))
                         global_z_max = max(global_z_max, float(np.nanmax(a3)))
+
+                    # Store normalization bounds on self for ROAR3DViewWidget to use
+                    self._3d_global_x_min = global_x_min
+                    self._3d_global_x_max = global_x_max
+                    self._3d_global_y_min = global_y_min
+                    self._3d_global_y_max = global_y_max
+                    self._3d_global_z_min = global_z_min
+                    self._3d_global_z_max = global_z_max
+
+                    # Clear previously stored data points for mouse picking
+                    if hasattr(self.gl_widget, '_all_norm_points'):
+                        self.gl_widget._all_norm_points.clear()
+                        self.gl_widget._all_orig_points.clear()
+                    if hasattr(self.gl_widget, '_all_point_colors'):
+                        self.gl_widget._all_point_colors.clear()
 
                     def _norm_global(arr, gmin, gmax):
                         """Normalize array to [-5, 5] using global min/max.
@@ -3566,6 +4039,20 @@ class ROARLookupWindow(QWidget):
                                     self.gl_items.append(mesh)
                                 except Exception as e:
                                     debug_print(f"GL mesh creation failed: {e}")
+
+                            # Register surface data points for 3-D marker mouse picking
+                            if hasattr(self.gl_widget, '_all_norm_points'):
+                                valid = ~nan_mask.ravel()
+                                norm_pts = verts[valid].copy()
+                                orig_pts = np.column_stack((
+                                    np.asarray(p1, dtype=np.float64).ravel()[valid],
+                                    np.asarray(p2, dtype=np.float64).ravel()[valid],
+                                    np.asarray(p3, dtype=np.float64).ravel()[valid],
+                                )).astype(np.float64)
+                                self.gl_widget._all_norm_points.append(norm_pts)
+                                self.gl_widget._all_orig_points.append(orig_pts)
+                                if hasattr(self.gl_widget, '_all_point_colors'):
+                                    self.gl_widget._all_point_colors.append((r, g, b, 1.0))
                         else:
                             # Scatter fallback
                             try:
@@ -3576,6 +4063,18 @@ class ROARLookupWindow(QWidget):
                                 sp = GLScatterPlotItem(pos=pos, size=5, color=(r, g, b, 0.7))
                                 self.gl_widget.addItem(sp)
                                 self.gl_items.append(sp)
+
+                                # Register scatter data points for 3-D marker mouse picking
+                                if hasattr(self.gl_widget, '_all_norm_points'):
+                                    self.gl_widget._all_norm_points.append(pos.astype(np.float64))
+                                    orig_pts = np.column_stack((
+                                        np.asarray(p1, dtype=np.float64).ravel(),
+                                        np.asarray(p2, dtype=np.float64).ravel(),
+                                        np.asarray(p3, dtype=np.float64).ravel(),
+                                    ))
+                                    self.gl_widget._all_orig_points.append(orig_pts)
+                                    if hasattr(self.gl_widget, '_all_point_colors'):
+                                        self.gl_widget._all_point_colors.append((r, g, b, 1.0))
                             except Exception as e:
                                 debug_print(f"GL scatter creation failed: {e}")
 
@@ -3690,14 +4189,11 @@ class ROARLookupWindow(QWidget):
                                        text=_a3, color=label_color)
                         self.gl_widget.addItem(t); self.gl_items.append(t)
 
-                        # ── Ground grid (subtle) ──
-                        g = gl.GLGridItem()
-                        g.setSize(10, 10)
-                        g.setSpacing(1, 1)
-                        g.translate(0, 0, -5)
-                        g.setColor((1.0, 1.0, 1.0, 0.08))
-                        self.gl_widget.addItem(g)
-                        self.gl_items.append(g)
+                        # ── Dynamic back-face grid planes ──
+                        # Built on the ROAR3DViewWidget; paintGL will
+                        # show/hide the correct three faces each frame.
+                        if hasattr(self.gl_widget, 'build_grids'):
+                            self.gl_widget.build_grids()
 
                     except Exception as e:
                         debug_print(f"3D axis drawing error: {e}")

@@ -2310,6 +2310,20 @@ class ROARApp(QMainWindow):
                     return
                 except Exception:
                     pass
+            if key in (Qt.Key.Key_Delete, Qt.Key.Key_Escape):
+                # In 3-D mode, clear all point markers
+                try:
+                    gl_w = self._find_active_3d_widget()
+                    if gl_w is not None and hasattr(gl_w, 'clear_all_3d_markers'):
+                        gl_w.clear_all_3d_markers()
+                        gl_w.update()
+                except Exception:
+                    pass
+                if key == Qt.Key.Key_Escape:
+                    pass  # let Escape propagate for other handlers
+                else:
+                    event.accept()
+                    return
             # fallback to raw key constant
             if key == Qt.Key.Key_L:
                 try:
@@ -2844,20 +2858,28 @@ class ROARApp(QMainWindow):
     def _shortcut_auto_fit(self):
         grid = self.graph_grid
         if grid:
-            plot_widgets = []
-            for lw in grid.lookup_windows:
-                if hasattr(lw, 'plot_widget'):
-                    plot_widgets.append(lw.plot_widget)
             cursor_pos = QCursor.pos()
-            for pw in plot_widgets:
-                if pw.geometry().contains(pw.mapFromGlobal(cursor_pos)):
-                    try:
-                        vb = pw.getViewBox()
-                        if vb is not None:
-                            vb.enableAutoRange()
-                    except Exception:
-                        pass
-                    break
+            for lw in grid.lookup_windows:
+                # ── 3D mode: reset GL camera ──
+                gl_w = getattr(lw, 'gl_widget', None)
+                if gl_w is not None and gl_w.isVisible():
+                    if gl_w.geometry().contains(gl_w.mapFromGlobal(cursor_pos)):
+                        try:
+                            lw.auto_fit_3d()
+                        except Exception:
+                            pass
+                        return
+                # ── 2D mode: auto-range the plot view ──
+                pw = getattr(lw, 'plot_widget', None)
+                if pw is not None:
+                    if pw.geometry().contains(pw.mapFromGlobal(cursor_pos)):
+                        try:
+                            vb = pw.getViewBox()
+                            if vb is not None:
+                                vb.enableAutoRange()
+                        except Exception:
+                            pass
+                        return
 
     def _shortcut_add_vertical_marker(self):
         def h(pw):
@@ -2874,6 +2896,20 @@ class ROARApp(QMainWindow):
             except Exception:
                 pass
         self._apply_to_plotwidgets(h)
+
+    def _find_active_3d_widget(self):
+        """Return the ROAR3DViewWidget under the cursor if visible, else None."""
+        grid = getattr(self, 'graph_grid', None)
+        if not grid:
+            return None
+        cursor_pos = QCursor.pos()
+        for lw in getattr(grid, 'lookup_windows', []):
+            gl_w = getattr(lw, 'gl_widget', None)
+            if gl_w is not None and gl_w.isVisible():
+                if gl_w.geometry().contains(gl_w.mapFromGlobal(cursor_pos)):
+                    return gl_w
+        return None
+
 
 
 if __name__ == "__main__":
