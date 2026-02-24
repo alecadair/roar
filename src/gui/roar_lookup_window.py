@@ -76,13 +76,6 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         # Hover tracking – mirrors the 2-D _hovered_marker pattern.
         self._hovered_marker = None
 
-        self._set_face_visible('z_min', cz > 0)
-        self._set_face_visible('z_max', cz <= 0)
-
-    def paintGL(self, *args, **kwargs):
-        """Update which grid faces are visible before each paint."""
-        self._update_grid_faces()
-        super().paintGL(*args, **kwargs)
 
     # ------------------------------------------------------------------
     # Coordinate helpers
@@ -4189,11 +4182,6 @@ class ROARLookupWindow(QWidget):
                                        text=_a3, color=label_color)
                         self.gl_widget.addItem(t); self.gl_items.append(t)
 
-                        # ── Dynamic back-face grid planes ──
-                        # Built on the ROAR3DViewWidget; paintGL will
-                        # show/hide the correct three faces each frame.
-                        if hasattr(self.gl_widget, 'build_grids'):
-                            self.gl_widget.build_grids()
 
                     except Exception as e:
                         debug_print(f"3D axis drawing error: {e}")
