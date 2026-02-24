@@ -97,36 +97,44 @@ class ROAR3DViewWidget(gl.GLViewWidget):
     def _project_to_screen(self, pts_3d):
         """Project Nx3 GL-space points → Nx2 *widget* pixel coordinates.
 
-        Accounts for the device-pixel-ratio so that the returned values
-        match ``event.position()`` coordinates directly (no manual DPI
-        conversion needed by callers).
+        Uses pyqtgraph's own ``viewMatrix()`` and ``projectionMatrix()``
+        so the projection is always consistent with what is actually
+        rendered on screen.  The returned coordinates are in Qt logical
+        pixels and match ``event.position()`` directly.
         """
         try:
-            import OpenGL.GL as _gl
-            self.makeCurrent()
-            mv = np.array(_gl.glGetDoublev(_gl.GL_MODELVIEW_MATRIX), dtype=np.float64)
-            proj = np.array(_gl.glGetDoublev(_gl.GL_PROJECTION_MATRIX), dtype=np.float64)
-            vp = np.array(_gl.glGetIntegerv(_gl.GL_VIEWPORT), dtype=np.float64)
+            # Logical-pixel viewport – same one pyqtgraph uses for rendering
+            vp = self.getViewport()          # (x0, y0, w, h) in logical px
+            x0, y0, w, h = vp
+            if w == 0 or h == 0:
+                return None
+
+            # Grab the matrices pyqtgraph builds from its camera opts
+            mv_q = self.viewMatrix()
+            proj_q = self.projectionMatrix(region=vp, viewport=vp)
+
+            # QMatrix4x4.data() returns 16 floats in column-major order.
+            # reshape(4,4) gives the transposed matrix; .T restores row-major.
+            mv = np.array(mv_q.data(), dtype=np.float64).reshape(4, 4).T
+            proj = np.array(proj_q.data(), dtype=np.float64).reshape(4, 4).T
         except Exception:
             return None
 
         pts = np.asarray(pts_3d, dtype=np.float64)
         n = pts.shape[0]
         pts4 = np.hstack([pts, np.ones((n, 1), dtype=np.float64)])
-        clip = (pts4 @ mv.T) @ proj.T
-        w = clip[:, 3:4].copy()
-        w[w == 0] = 1e-30
-        ndc = clip[:, :3] / w
 
-        # GL viewport is in *physical* (device) pixels.  Convert to
-        # widget (logical) pixels by dividing by devicePixelRatio so we
-        # can compare directly with Qt mouse event positions.
-        dpr = self.devicePixelRatioF()
-        sx = (vp[0] + vp[2] * (ndc[:, 0] + 1.0) / 2.0) / dpr
-        # GL y=0 is at the bottom; Qt y=0 is at the top.
-        gl_sy = (vp[1] + vp[3] * (ndc[:, 1] + 1.0) / 2.0) / dpr
-        widget_h = float(self.height())
-        sy = widget_h - gl_sy
+        # model-view → clip space  (row-vector convention)
+        clip = (pts4 @ mv.T) @ proj.T
+        wc = clip[:, 3:4].copy()
+        wc[wc == 0] = 1e-30
+        ndc = clip[:, :3] / wc          # normalised device coords [-1..1]
+
+        # NDC → logical widget pixels
+        sx = x0 + w * (ndc[:, 0] + 1.0) / 2.0
+        # GL y=0 is at the bottom; Qt y=0 is at the top
+        gl_sy = y0 + h * (ndc[:, 1] + 1.0) / 2.0
+        sy = float(self.height()) - gl_sy
 
         return np.column_stack([sx, sy])
 
