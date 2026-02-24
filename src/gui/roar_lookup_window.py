@@ -47,9 +47,9 @@ class ROAR3DViewWidget(gl.GLViewWidget):
     CLICK_DRAG_THRESHOLD = 5
 
     # Visual style constants
-    MARKER_SIZE_NORMAL = 14
+    MARKER_SIZE_NORMAL = 18
     MARKER_COLOR_NORMAL = (1.0, 0.0, 0.0, 1.0)        # red
-    MARKER_SIZE_HOVER = 20
+    MARKER_SIZE_HOVER = 24
     MARKER_COLOR_HOVER = (1.0, 0.65, 0.0, 1.0)         # orange
     LABEL_COLOR_NORMAL = QColor(255, 255, 100)           # light yellow
     LABEL_COLOR_HOVER = QColor(255, 200, 50)             # brighter gold
@@ -65,6 +65,11 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         #    'pos_norm': ndarray(3,), 'pos_orig': ndarray(3,)}
         self._3d_point_markers = []
 
+        # 3-D vertical marker groups: list of dicts, each group contains
+        # markers placed on every surface at the same (x, y) location.
+        #   {'markers': [marker_dict, ...], 'summary_text': GLTextItem}
+        self._3d_vertical_markers = []
+
         # Data points registered by the render pass for mouse picking.
         self._all_norm_points = []   # list of Nx3 float64 arrays (GL coords)
         self._all_orig_points = []   # list of Nx3 float64 arrays (real coords)
@@ -75,6 +80,11 @@ class ROAR3DViewWidget(gl.GLViewWidget):
 
         # Hover tracking – mirrors the 2-D _hovered_marker pattern.
         self._hovered_marker = None
+
+        # Label dragging state
+        self._dragged_text = None          # the GLTextItem currently being dragged
+        self._drag_start_mouse = None      # (mx, my) at drag start
+        self._drag_start_pos = None        # original 3-D pos of the text at drag start
 
 
     # ------------------------------------------------------------------
@@ -184,6 +194,70 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         return None
 
     # ------------------------------------------------------------------
+    # Text-label picking & dragging helpers
+    # ------------------------------------------------------------------
+    def _collect_all_text_items(self):
+        """Return a list of all GLTextItem objects belonging to markers."""
+        items = []
+        for m in self._3d_point_markers:
+            t = m.get('text')
+            if t is not None:
+                items.append(t)
+        for vg in self._3d_vertical_markers:
+            st = vg.get('summary_text')
+            if st is not None:
+                items.append(st)
+        return items
+
+    def _find_nearest_text_label(self, mouse_x, mouse_y, tolerance=30):
+        """Return the GLTextItem closest to the mouse, or *None*.
+
+        Uses the text's 3-D ``pos`` projected to screen.  *tolerance* is
+        in logical pixels.
+        """
+        texts = self._collect_all_text_items()
+        if not texts:
+            return None
+        pts = np.array([np.asarray(t.pos, dtype=np.float64) for t in texts])
+        screen = self._project_to_screen(pts)
+        if screen is None:
+            return None
+        dsq = (screen[:, 0] - mouse_x) ** 2 + (screen[:, 1] - mouse_y) ** 2
+        idx = int(np.argmin(dsq))
+        if np.sqrt(dsq[idx]) <= tolerance:
+            return texts[idx]
+        return None
+
+    def _screen_delta_to_3d(self, dx_px, dy_px):
+        """Convert a screen-pixel delta into a 3-D offset in the camera's
+        view plane (right / up directions).
+
+        Returns an ndarray(3,) offset in GL world coordinates.
+        """
+        try:
+            mv_q = self.viewMatrix()
+            mv = np.array(mv_q.data(), dtype=np.float64).reshape(4, 4).T
+        except Exception:
+            return np.zeros(3)
+
+        # Camera right and up vectors are the first two rows of the 3×3
+        # upper-left of the view matrix (transposed because it maps world→eye).
+        right = mv[0, :3]
+        up = mv[1, :3]
+        # Normalise
+        right = right / (np.linalg.norm(right) or 1.0)
+        up = up / (np.linalg.norm(up) or 1.0)
+
+        # Scale: relate pixel movement to world units.  Use pixelSize at the
+        # camera center distance to get a reasonable mapping.
+        try:
+            scale = self.pixelSize(self.opts['center'])
+        except Exception:
+            scale = 0.01
+
+        return right * dx_px * scale + up * (-dy_px) * scale
+
+    # ------------------------------------------------------------------
     # Marker add / remove
     # ------------------------------------------------------------------
     # Z floor of the normalised cube (where the grid sits)
@@ -239,7 +313,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         # ── Small scatter dot on the floor ──
         floor_dot = GLScatterPlotItem(
             pos=np.array([floor_pt], dtype=np.float32),
-            size=8, color=(mc[0], mc[1], mc[2], 0.5), pxMode=True,
+            size=10, color=(mc[0], mc[1], mc[2], 0.5), pxMode=True,
         )
         self.addItem(floor_dot)
 
@@ -324,7 +398,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
                 pass
         if floor_dot is not None:
             try:
-                floor_dot.setData(size=12 if hovered else 8,
+                floor_dot.setData(size=14 if hovered else 10,
                                   color=np.array([floor_dot_color], dtype=np.float32))
             except Exception:
                 pass
@@ -348,30 +422,221 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         self.update()  # repaint
 
     def clear_all_3d_markers(self):
-        """Remove every marker."""
+        """Remove every marker (point markers and vertical marker groups)."""
         for m in list(self._3d_point_markers):
             self._remove_point_marker(m)
+        for vg in list(self._3d_vertical_markers):
+            self._remove_vertical_marker_group(vg)
 
     # ------------------------------------------------------------------
-    # Qt event overrides – click-vs-drag disambiguation
+    # Vertical marker (V key) – place markers on every surface at the
+    # same (x, y) original-data location and show ΔZ% above them.
+    # ------------------------------------------------------------------
+    def add_vertical_marker_3d(self, mouse_x, mouse_y):
+        """Place a marker on every surface/corner at the (x,y) closest to the
+        mouse and display a ΔZ percent-difference label above them."""
+        if GLTextItem is None or GLLinePlotItem is None:
+            return
+        if not self._all_norm_points:
+            return
+
+        # 1) Find the reference point nearest to the cursor
+        ref_norm, ref_orig, dist, _ = self._find_nearest_point(mouse_x, mouse_y)
+        if ref_orig is None or dist > self.PICK_TOLERANCE_PX * 3:
+            return
+
+        ref_x, ref_y = ref_orig[0], ref_orig[1]
+
+        # 2) For each surface, find the point with the closest (x, y) in
+        #    original data space and collect its info.
+        colors = self._all_point_colors
+        hits = []  # list of (norm_xyz, orig_xyz, color)
+        for i, (norm_pts, orig_pts) in enumerate(
+                zip(self._all_norm_points, self._all_orig_points)):
+            if len(orig_pts) == 0:
+                continue
+            # Distance in the original (x, y) space
+            dx = orig_pts[:, 0] - ref_x
+            dy = orig_pts[:, 1] - ref_y
+            dsq = dx * dx + dy * dy
+            idx = int(np.argmin(dsq))
+            c = colors[i] if i < len(colors) else (1.0, 0.0, 0.0, 1.0)
+            hits.append((norm_pts[idx].copy(), orig_pts[idx].copy(), c))
+
+        if not hits:
+            return
+
+        # 3) Place a marker on each hit (reuse add_point_marker visuals
+        #    but track them in the vertical-marker group)
+        group_markers = []
+        ax, ay, az = self._get_axis_names()
+        z_values = []
+        highest_norm_z = -np.inf
+        highest_norm_pt = None
+
+        for norm_xyz, orig_xyz, sc in hits:
+            norm_xyz = np.asarray(norm_xyz, dtype=np.float64)
+            orig_xyz = np.asarray(orig_xyz, dtype=np.float64)
+
+            mc = tuple(float(c) for c in sc[:4])
+
+            scatter = GLScatterPlotItem(
+                pos=np.array([norm_xyz], dtype=np.float32),
+                size=self.MARKER_SIZE_NORMAL,
+                color=mc,
+                pxMode=True,
+            )
+            self.addItem(scatter)
+
+            label = (f"{ax}={format_eng(orig_xyz[0])},  "
+                     f"{ay}={format_eng(orig_xyz[1])},  "
+                     f"{az}={format_eng(orig_xyz[2])}")
+            text = GLTextItem(
+                pos=norm_xyz + np.array([0.3, 0.3, 0.3]),
+                text=label, color=self.LABEL_COLOR_NORMAL,
+            )
+            self.addItem(text)
+
+            floor_pt = np.array([norm_xyz[0], norm_xyz[1], self._Z_FLOOR],
+                                dtype=np.float32)
+            drop_color = (mc[0], mc[1], mc[2], 0.35)
+            drop_line = GLLinePlotItem(
+                pos=np.array([norm_xyz.astype(np.float32), floor_pt]),
+                color=drop_color, width=1.5, antialias=True,
+            )
+            self.addItem(drop_line)
+
+            floor_dot = GLScatterPlotItem(
+                pos=np.array([floor_pt], dtype=np.float32),
+                size=10, color=(mc[0], mc[1], mc[2], 0.5), pxMode=True,
+            )
+            self.addItem(floor_dot)
+
+            marker_dict = {
+                'scatter': scatter,
+                'text': text,
+                'drop_line': drop_line,
+                'floor_dot': floor_dot,
+                'pos_norm': norm_xyz.copy(),
+                'pos_orig': orig_xyz.copy(),
+                'base_color': mc,
+            }
+            group_markers.append(marker_dict)
+            # Also add to the flat list so hover/click-to-remove still works
+            self._3d_point_markers.append(marker_dict)
+
+            z_values.append(orig_xyz[2])
+            if norm_xyz[2] > highest_norm_z:
+                highest_norm_z = norm_xyz[2]
+                highest_norm_pt = norm_xyz.copy()
+
+        # 4) Compute ΔZ percent difference and display above the markers
+        summary_text = None
+        if len(z_values) >= 2 and highest_norm_pt is not None:
+            z_min = min(z_values)
+            z_max = max(z_values)
+            if z_min != 0:
+                pct = 100.0 * (z_max - z_min) / abs(z_min)
+            else:
+                pct = 0.0
+            summary_label = f"Δ{az}: {pct:.1f}%"
+            summary_pos = highest_norm_pt + np.array([0.0, 0.0, 1.0])
+            summary_text = GLTextItem(
+                pos=summary_pos,
+                text=summary_label,
+                color=QColor(255, 180, 50),  # orange-gold
+            )
+            self.addItem(summary_text)
+        elif len(z_values) == 1 and highest_norm_pt is not None:
+            # Single surface – no percent difference to show
+            pass
+
+        self._3d_vertical_markers.append({
+            'markers': group_markers,
+            'summary_text': summary_text,
+        })
+
+        # Push last-hit values to spin boxes
+        if hits:
+            self._update_spin_boxes(hits[-1][1])
+
+        self.update()
+
+    def _remove_vertical_marker_group(self, group):
+        """Remove an entire vertical marker group and its summary label."""
+        for m in group.get('markers', []):
+            # Remove from the flat point-marker list too
+            if m in self._3d_point_markers:
+                self._3d_point_markers.remove(m)
+            for key in ('scatter', 'text', 'drop_line', 'floor_dot'):
+                try:
+                    self.removeItem(m[key])
+                except Exception:
+                    pass
+        st = group.get('summary_text')
+        if st is not None:
+            try:
+                self.removeItem(st)
+            except Exception:
+                pass
+        try:
+            self._3d_vertical_markers.remove(group)
+        except ValueError:
+            pass
+
+    # ------------------------------------------------------------------
+    # Qt event overrides – click-vs-drag disambiguation + label dragging
     # ------------------------------------------------------------------
     def mousePressEvent(self, event):
-        """Record press position; always forward to base class for camera."""
+        """Record press position.  If the press lands on a text label,
+        start a label-drag instead of forwarding to the base class
+        (which would orbit the camera)."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self._press_pos = (event.position().x(), event.position().y())
+            mx, my = event.position().x(), event.position().y()
+            self._press_pos = (mx, my)
+
+            # Check if press is on a text label → start drag
+            hit_text = self._find_nearest_text_label(mx, my)
+            if hit_text is not None:
+                self._dragged_text = hit_text
+                self._drag_start_mouse = (mx, my)
+                self._drag_start_pos = np.asarray(hit_text.pos, dtype=np.float64).copy()
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return  # do NOT forward to base – prevents camera orbit
+
         super().mousePressEvent(event)          # camera orbit still works
 
     def mouseReleaseEvent(self, event):
-        """On release, check if it was a *click* (not a drag) and handle markers."""
-        if event.button() == Qt.MouseButton.LeftButton and self._press_pos is not None:
-            rx, ry = event.position().x(), event.position().y()
-            dx = abs(rx - self._press_pos[0])
-            dy = abs(ry - self._press_pos[1])
-            self._press_pos = None
+        """On release, check if it was a *click* (not a drag) and handle markers.
+        Also end any ongoing label drag."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            # End label drag if active
+            if self._dragged_text is not None:
+                self._dragged_text = None
+                self._drag_start_mouse = None
+                self._drag_start_pos = None
+                self.unsetCursor()
+                self.update()
+                event.accept()
+                # Still check for click-to-remove if the mouse barely moved
+                if self._press_pos is not None:
+                    rx, ry = event.position().x(), event.position().y()
+                    dx = abs(rx - self._press_pos[0])
+                    dy = abs(ry - self._press_pos[1])
+                    self._press_pos = None
+                    # Don't toggle markers on drag-release
+                return
 
-            if dx <= self.CLICK_DRAG_THRESHOLD and dy <= self.CLICK_DRAG_THRESHOLD:
-                # True click – try to toggle a marker
-                self._handle_click(rx, ry)
+            if self._press_pos is not None:
+                rx, ry = event.position().x(), event.position().y()
+                dx = abs(rx - self._press_pos[0])
+                dy = abs(ry - self._press_pos[1])
+                self._press_pos = None
+
+                if dx <= self.CLICK_DRAG_THRESHOLD and dy <= self.CLICK_DRAG_THRESHOLD:
+                    # True click – try to toggle a marker
+                    self._handle_click(rx, ry)
 
         super().mouseReleaseEvent(event)
 
@@ -380,6 +645,12 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         # First check if clicking on an existing marker (to remove it)
         existing = self._find_nearest_marker(mx, my)
         if existing is not None:
+            # Check if this marker belongs to a vertical marker group
+            for vg in list(self._3d_vertical_markers):
+                if existing in vg.get('markers', []):
+                    self._remove_vertical_marker_group(vg)
+                    self.update()
+                    return
             self._remove_point_marker(existing)
             self.update()
             return
@@ -391,16 +662,33 @@ class ROAR3DViewWidget(gl.GLViewWidget):
             self.update()
 
     def mouseMoveEvent(self, event):
-        """Update marker hover highlight and show nearest-point coords."""
-        super().mouseMoveEvent(event)
+        """Update marker hover highlight, show coords, and handle label drag."""
         mx, my = event.position().x(), event.position().y()
+
+        # ── Active label drag ──
+        if self._dragged_text is not None and self._drag_start_mouse is not None:
+            dx_px = mx - self._drag_start_mouse[0]
+            dy_px = my - self._drag_start_mouse[1]
+            offset_3d = self._screen_delta_to_3d(dx_px, dy_px)
+            new_pos = self._drag_start_pos + offset_3d
+            try:
+                self._dragged_text.setData(pos=new_pos)
+            except Exception:
+                pass
+            self.update()
+            event.accept()
+            return  # skip camera orbit and other processing
+
+        super().mouseMoveEvent(event)
 
         # ── Marker hover highlighting ──
         self._update_marker_hover(mx, my)
 
-        # Change cursor when over an existing marker
+        # Cursor: pointing hand on marker, open hand on label, default otherwise
         if self._hovered_marker is not None:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
+        elif self._find_nearest_text_label(mx, my) is not None:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self.unsetCursor()
 
@@ -425,6 +713,14 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         if key == Qt.Key.Key_Delete or key == Qt.Key.Key_Escape:
             self.clear_all_3d_markers()
             self.update()
+            event.accept()
+        elif key == Qt.Key.Key_V:
+            # Place a vertical marker on every surface at the mouse position
+            cursor_pos = QCursor.pos()
+            local_pos = self.mapFromGlobal(cursor_pos)
+            if self.rect().contains(local_pos):
+                self.add_vertical_marker_3d(float(local_pos.x()),
+                                            float(local_pos.y()))
             event.accept()
         elif key == Qt.Key.Key_F:
             lw = self.parent_lookup_window
