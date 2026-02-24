@@ -1603,17 +1603,24 @@ class ROAREditorWindow(QWidget):
             )
             return
 
-        # Create and show dialog
-        dialog = CornerMappingDialog(self, self, tech_browser)
+        # Create and show dialog (reuse existing to preserve tuple states)
+        if not hasattr(self, '_corner_mapping_dialog') or self._corner_mapping_dialog is None:
+            dialog = CornerMappingDialog(self, self, tech_browser)
 
-        # Connect signal to refresh design editor if corners changed
-        def on_corners_changed():
-            # Trigger re-evaluation or update if needed
-            if hasattr(self, 'on_expressions_changed'):
-                self.on_expressions_changed()
+            # Connect signal to refresh design editor if corners changed
+            def on_corners_changed():
+                # Trigger re-evaluation or update if needed
+                if hasattr(self, 'on_expressions_changed'):
+                    self.on_expressions_changed()
 
-        dialog.corner_mapping_changed.connect(on_corners_changed)
-        dialog.exec()
+            dialog.corner_mapping_changed.connect(on_corners_changed)
+            self._corner_mapping_dialog = dialog
+        else:
+            # Reuse the existing dialog (preserves tuple checkbox / color state)
+            self._corner_mapping_dialog.tech_browser = tech_browser
+            self._corner_mapping_dialog.update_corner_info()
+
+        self._corner_mapping_dialog.exec()
 
     def plot_expression(self):
         selected_items = self.expression_editor.tree.selectedItems()

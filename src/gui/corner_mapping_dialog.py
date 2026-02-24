@@ -8,10 +8,46 @@ by visualizing which corners each device uses and ensuring compatibility.
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
-    QGroupBox
+    QGroupBox, QCheckBox, QWidget, QColorDialog, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QBrush
+from PyQt6.QtGui import QColor, QBrush, QPixmap, QIcon, QMouseEvent
+
+
+class _ColorSwatch(QLabel):
+    """Small coloured square that opens a QColorDialog on right-click."""
+
+    color_changed = pyqtSignal(int, QColor)  # (row_index, new_color)
+
+    def __init__(self, color: QColor, row_index: int, parent=None):
+        super().__init__(parent)
+        self._color = QColor(color)
+        self._row = row_index
+        self.setFixedSize(20, 20)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Right-click to change color")
+        self._update_pixmap()
+
+    def _update_pixmap(self):
+        pix = QPixmap(20, 20)
+        pix.fill(self._color)
+        self.setPixmap(pix)
+
+    def color(self):
+        return QColor(self._color)
+
+    def setSwatchColor(self, color: QColor):
+        self._color = QColor(color)
+        self._update_pixmap()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton or event.button() == Qt.MouseButton.LeftButton:
+            new = QColorDialog.getColor(self._color, self, "Choose tuple color")
+            if new.isValid():
+                self._color = new
+                self._update_pixmap()
+                self.color_changed.emit(self._row, new)
+        super().mousePressEvent(event)
 
 
 class CornerMappingDialog(QDialog):
@@ -25,7 +61,12 @@ class CornerMappingDialog(QDialog):
         self.tech_browser = tech_browser
         self.setWindowTitle("3D Plot Corner Mapping")
         self.setMinimumSize(800, 600)
-        
+
+        # Per-tuple display state: list of dicts
+        #   {'enabled': bool, 'color': QColor}
+        # Indexed by tuple row number.  Rebuilt by _update_tuples_table.
+        self.tuple_states = []
+
         self.setup_ui()
         self.update_corner_info()
         
@@ -269,7 +310,11 @@ class CornerMappingDialog(QDialog):
 
     # ------------------------------------------------------------------
     def _update_tuples_table(self, device_corners):
-        """Populate the corner-tuples table using the lookup window's helper."""
+        """Populate the corner-tuples table using the lookup window's helper.
+
+        Adds an *Enabled* checkbox column and a *Color* swatch column so the
+        user can select which tuples are plotted and in which colour.
+        """
         tbl = self.tuples_table
         tbl.clear()
         tbl.setRowCount(0)
@@ -277,6 +322,7 @@ class CornerMappingDialog(QDialog):
         if not device_corners:
             tbl.setColumnCount(1)
             tbl.setHorizontalHeaderLabels(["(no devices)"])
+            self.tuple_states = []
             return
 
         # Try to call _build_corner_tuples from the first lookup window
@@ -296,16 +342,95 @@ class CornerMappingDialog(QDialog):
         if not tuples_list:
             tbl.setColumnCount(1)
             tbl.setHorizontalHeaderLabels(["(no tuples resolved)"])
+            self.tuple_states = []
             return
 
+        # Store for external consumers (e.g. lookup window plotting)
+        self._tuples_list = tuples_list
+
         dev_names = list(tuples_list[0].keys())
-        tbl.setColumnCount(len(dev_names) + 1)
-        tbl.setHorizontalHeaderLabels(["Tuple #"] + dev_names)
+        # Columns: Enabled | Color | Tuple# | <device columns …>
+        n_dev = len(dev_names)
+        tbl.setColumnCount(3 + n_dev)
+        tbl.setHorizontalHeaderLabels(["Enabled", "Color", "Tuple #"] + dev_names)
         tbl.setRowCount(len(tuples_list))
+
+        # ---------- default colours: pull from tech browser so they match plots ----------
+        _default_colors = []
+        n = len(tuples_list)
+        for i, tup in enumerate(tuples_list):
+            tb_color = None
+            # Try to get the colour the tech browser already assigned to
+            # the first device's corner path for this tuple.
+            try:
+                first_dev_info = next(iter(tup.values()))
+                cpath = first_dev_info.get('path', '')
+                if cpath and self.tech_browser and hasattr(self.tech_browser, 'get_color_for_path'):
+                    # The tech browser stores paths with a "PDK>" prefix in
+                    # its color_map (e.g. "PDK>SKY130A>n_01v8_lvt>200>nfettt27").
+                    # Try both with and without the prefix.
+                    for candidate in [f"PDK>{cpath}", cpath]:
+                        if candidate in getattr(self.tech_browser, 'color_map', {}):
+                            tb_color = self.tech_browser.color_map[candidate]
+                            break
+                    if tb_color is None:
+                        # Fallback: ask get_color_for_path which will create
+                        # one if needed (mirrors what the plotter does).
+                        tb_color = self.tech_browser.get_color_for_path(f"PDK>{cpath}")
+            except Exception:
+                pass
+            if tb_color is not None and isinstance(tb_color, QColor) and tb_color.isValid():
+                _default_colors.append(QColor(tb_color))
+            else:
+                # Last resort: cycle HSV
+                hue = int(360 * i / max(n, 1)) % 360
+                _default_colors.append(QColor.fromHsv(hue, 200, 220))
+
+        # ---------- rebuild / preserve tuple_states ----------
+        old_states = self.tuple_states
+        new_states = []
+        for idx in range(n):
+            if idx < len(old_states):
+                # Preserve existing enabled / colour settings
+                new_states.append({
+                    'enabled': old_states[idx].get('enabled', True),
+                    'color': QColor(old_states[idx].get('color', _default_colors[idx])),
+                })
+            else:
+                new_states.append({
+                    'enabled': True,
+                    'color': QColor(_default_colors[idx]),
+                })
+        self.tuple_states = new_states
 
         ok_brush = QBrush(QColor("#d4edda"))
         for row_idx, tup in enumerate(tuples_list):
-            tbl.setItem(row_idx, 0, QTableWidgetItem(str(row_idx + 1)))
+            # ── Enabled checkbox ──
+            cb = QCheckBox()
+            cb.setChecked(self.tuple_states[row_idx]['enabled'])
+            cb.setToolTip("Toggle this tuple on/off in plots")
+            cb.stateChanged.connect(lambda state, r=row_idx: self._on_tuple_enabled_changed(r, state))
+            cb_widget = QWidget()
+            cb_layout = QHBoxLayout(cb_widget)
+            cb_layout.addWidget(cb)
+            cb_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cb_layout.setContentsMargins(0, 0, 0, 0)
+            tbl.setCellWidget(row_idx, 0, cb_widget)
+
+            # ── Color swatch ──
+            swatch = _ColorSwatch(self.tuple_states[row_idx]['color'], row_idx)
+            swatch.color_changed.connect(self._on_tuple_color_changed)
+            sw_widget = QWidget()
+            sw_layout = QHBoxLayout(sw_widget)
+            sw_layout.addWidget(swatch)
+            sw_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sw_layout.setContentsMargins(0, 0, 0, 0)
+            tbl.setCellWidget(row_idx, 1, sw_widget)
+
+            # ── Tuple number ──
+            tbl.setItem(row_idx, 2, QTableWidgetItem(str(row_idx + 1)))
+
+            # ── Device corner cells ──
             for col_idx, dev in enumerate(dev_names):
                 cinfo = tup.get(dev, {})
                 cname = cinfo.get("corner_name", "?")
@@ -314,13 +439,56 @@ class CornerMappingDialog(QDialog):
                 item.setToolTip(path)
                 item.setBackground(ok_brush)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                tbl.setItem(row_idx, col_idx + 1, item)
+                tbl.setItem(row_idx, col_idx + 3, item)
 
         header = tbl.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         tbl.setColumnWidth(0, 60)
-        for c in range(1, tbl.columnCount()):
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        tbl.setColumnWidth(1, 50)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        tbl.setColumnWidth(2, 60)
+        for c in range(3, tbl.columnCount()):
             header.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+
+    # ---------- tuple-state callbacks ----------
+    def _on_tuple_enabled_changed(self, row, state):
+        if row < len(self.tuple_states):
+            self.tuple_states[row]['enabled'] = (state == Qt.CheckState.Checked.value
+                                                  if hasattr(Qt.CheckState.Checked, 'value')
+                                                  else state != 0)
+        self.corner_mapping_changed.emit()
+
+    def _on_tuple_color_changed(self, row, color):
+        if row < len(self.tuple_states):
+            self.tuple_states[row]['color'] = QColor(color)
+        # Sync the new colour into the tech browser so the tree icon and
+        # any non-override plotting paths also see the updated colour.
+        try:
+            tl = getattr(self, '_tuples_list', None)
+            if tl and row < len(tl) and self.tech_browser:
+                first_dev_info = next(iter(tl[row].values()))
+                cpath = first_dev_info.get('path', '')
+                if cpath:
+                    full_path = f"PDK>{cpath}"
+                    self.tech_browser.color_map[full_path] = QColor(color)
+                    # Also update the tree icon if possible
+                    if hasattr(self.tech_browser, 'path_to_item'):
+                        tree_item = self.tech_browser.path_to_item.get(full_path)
+                        if tree_item and hasattr(self.tech_browser, 'set_item_icon'):
+                            self.tech_browser.set_item_icon(tree_item, QColor(color))
+        except Exception:
+            pass
+        self.corner_mapping_changed.emit()
+
+    def get_tuple_states(self):
+        """Return the list of tuple display states.
+
+        Each entry is ``{'enabled': bool, 'color': QColor}``.
+        The index matches the tuple index returned by
+        ``_build_corner_tuples``.
+        """
+        return self.tuple_states
 
     def set_all_to_global(self):
         """Set all devices to use global corner selection."""

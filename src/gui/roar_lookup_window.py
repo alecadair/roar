@@ -3464,11 +3464,27 @@ class ROARLookupWindow(QWidget):
                     + ", ".join(f"{d}({len(v)})" for d, v in per_device.items()))
         return tuples_list
 
+    def _get_tuple_states(self):
+        """Return the per-tuple display states from the Corner Mapping dialog.
+
+        Returns a list of ``{'enabled': bool, 'color': QColor}`` dicts,
+        or an empty list if the dialog has never been opened.
+        """
+        try:
+            ew = self.top_level_app.editor_window
+            dlg = getattr(ew, '_corner_mapping_dialog', None)
+            if dlg is not None:
+                return dlg.get_tuple_states()
+        except Exception:
+            pass
+        return []
+
     def update_graph_from_tech_browser(self, equation_eval=None, skip_post_processing=False):
         if self._is_updating:
             return
         self._is_updating = True
         self._custom_tuples_done = set()  # Reset per-call tracking for all-custom corner tuples
+        self._current_tuple_index = -1     # Track which tuple index is being plotted
 
         try:
             # Top-level try to ensure the finally block below always executes
@@ -3571,7 +3587,7 @@ class ROARLookupWindow(QWidget):
             # Collect 3D results from all corners for joint rendering
             all_3d_results = []  # list of (results_3d, color, model_path, param1, param2, param3)
 
-            for model in models_selected:
+            for model_loop_idx, model in enumerate(models_selected):
                 model_tokens = model.split(">")
                 pdk = model_tokens[1]
                 model_name = model_tokens[2]
@@ -3588,6 +3604,11 @@ class ROARLookupWindow(QWidget):
                 color = self.tech_browser.get_color_for_path(model)
                 style = Qt.PenStyle.SolidLine
                 graph_pen = pg.mkPen(color=color, style=style, width=1)
+
+                # Track which tuple this iteration corresponds to for the
+                # global (non-custom) path so the Corner Map dialog colours
+                # and enabled state are applied.
+                self._current_tuple_index = model_loop_idx
 
                 if self.is_device_params_mode:
                     unit1 = ""
@@ -3638,16 +3659,23 @@ class ROARLookupWindow(QWidget):
                     if any_custom and device_corners:
                         # Build corner tuples from instance-table corner data
                         tuples = self._build_corner_tuples(device_corners, models_selected)
+                        tuple_states = self._get_tuple_states()
                         if tuples:
                             # Find the first UN-USED tuple that contains the
                             # current outer-loop corner name.
                             matched_tuple = None
+                            matched_ti = -1
                             for ti, tup in enumerate(tuples):
                                 if ti in self._custom_tuples_done:
+                                    continue
+                                # Skip disabled tuples
+                                if ti < len(tuple_states) and not tuple_states[ti].get('enabled', True):
+                                    self._custom_tuples_done.add(ti)
                                     continue
                                 for dev_name, cinfo in tup.items():
                                     if cinfo.get('corner_name') == corner:
                                         matched_tuple = tup
+                                        matched_ti = ti
                                         self._custom_tuples_done.add(ti)
                                         break
                                 if matched_tuple is not None:
@@ -3659,13 +3687,27 @@ class ROARLookupWindow(QWidget):
                             if matched_tuple is None:
                                 for ti, tup in enumerate(tuples):
                                     if ti not in self._custom_tuples_done:
+                                        # Skip disabled tuples
+                                        if ti < len(tuple_states) and not tuple_states[ti].get('enabled', True):
+                                            self._custom_tuples_done.add(ti)
+                                            continue
                                         matched_tuple = tup
+                                        matched_ti = ti
                                         self._custom_tuples_done.add(ti)
                                         break
                             if matched_tuple is None:
                                 # All tuples already consumed — skip this
                                 # outer-loop iteration.
                                 continue
+
+                            self._current_tuple_index = matched_ti
+
+                            # Override colour from Corner Map dialog if available
+                            if 0 <= matched_ti < len(tuple_states):
+                                tc = tuple_states[matched_ti].get('color')
+                                if tc is not None and isinstance(tc, QColor) and tc.isValid():
+                                    color = tc
+                                    graph_pen = pg.mkPen(color=color, style=style, width=1)
 
                             # Populate corner_dfs_dict with namespaced keys
                             for dev_name, cinfo in matched_tuple.items():
@@ -3678,6 +3720,17 @@ class ROARLookupWindow(QWidget):
                         current_corner_path = f"{pdk}>{model_name}>{length}>{corner}"
                         corner_dfs_dict[current_corner_path] = cid_corner.df
                         debug_print(f"[DESIGN EQS] Global corner: {list(corner_dfs_dict.keys())}")
+
+                        # Apply Corner Map dialog tuple states for global mode
+                        tuple_states_g = self._get_tuple_states()
+                        ti_g = self._current_tuple_index
+                        if 0 <= ti_g < len(tuple_states_g):
+                            if not tuple_states_g[ti_g].get('enabled', True):
+                                continue  # skip disabled tuple
+                            tc_g = tuple_states_g[ti_g].get('color')
+                            if tc_g is not None and isinstance(tc_g, QColor) and tc_g.isValid():
+                                color = tc_g
+                                graph_pen = pg.mkPen(color=color, style=style, width=1)
 
                     equation_solver = ROAREquationSolver(top_level_app=self.top_level_app, device_corners=device_corners)
                     equation_solver.corners = list(corner_dfs_dict.values())
@@ -4134,6 +4187,13 @@ class ROARLookupWindow(QWidget):
                             if results_3d and self.gl_widget is not None:
                                 # Collect for post-loop rendering with shared normalization
                                 corner_color = self.tech_browser.get_color_for_path(model)
+                                # Override with Corner Map dialog tuple colour if set
+                                _ts = self._get_tuple_states()
+                                _ti = self._current_tuple_index
+                                if 0 <= _ti < len(_ts):
+                                    _tc = _ts[_ti].get('color')
+                                    if _tc is not None and isinstance(_tc, QColor) and _tc.isValid():
+                                        corner_color = _tc
                                 all_3d_results.append((results_3d, corner_color, model, param1, param2, param3))
                                 new_plot = False
                                 continue
@@ -4256,7 +4316,6 @@ class ROARLookupWindow(QWidget):
                         # enough for 1e-12 scale numbers.
                         return (a - gmin) / rng * 10.0 - 5.0
 
-                    from PyQt6.QtGui import QColor
 
                     def _ensure_bright(qcol):
                         """Ensure a QColor is bright enough to be visible on a black
