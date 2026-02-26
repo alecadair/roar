@@ -54,6 +54,10 @@ class ROAR3DViewWidget(gl.GLViewWidget):
     LABEL_COLOR_NORMAL = QColor(255, 255, 100)           # light yellow
     LABEL_COLOR_HOVER = QColor(255, 200, 50)             # brighter gold
 
+    # Class-level flag: None = untested, True = shaders work, False = they don't.
+    # Tested once in initializeGL; shared across all widget instances.
+    _shaders_supported = None
+
     def __init__(self, *args, parent_lookup_window=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.parent_lookup_window = parent_lookup_window
@@ -86,6 +90,62 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         self._drag_start_mouse = None      # (mx, my) at drag start
         self._drag_start_pos = None        # original 3-D pos of the text at drag start
 
+    # ------------------------------------------------------------------
+    # GL context robustness (fixes "no valid context" on RHEL 8 / Mesa)
+    # ------------------------------------------------------------------
+    def initializeGL(self):
+        """Called once when the OpenGL context is first created.
+
+        Probes whether the driver can actually compile GLSL shaders.
+        On RHEL 8 with Mesa llvmpipe the context may exist but shader
+        compilation silently fails, so we record the result in the
+        class-level ``_shaders_supported`` flag.
+        """
+        super().initializeGL()
+        if ROAR3DViewWidget._shaders_supported is not None:
+            return  # already tested
+        try:
+            import OpenGL.GL as _GL
+            version = _GL.glGetString(_GL.GL_VERSION)
+            if version is None:
+                ROAR3DViewWidget._shaders_supported = False
+                return
+            vs = _GL.glCreateShader(_GL.GL_VERTEX_SHADER)
+            if vs == 0:
+                ROAR3DViewWidget._shaders_supported = False
+                return
+            _GL.glShaderSource(
+                vs,
+                "void main() { gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex; }"
+            )
+            _GL.glCompileShader(vs)
+            ok = _GL.glGetShaderiv(vs, _GL.GL_COMPILE_STATUS)
+            _GL.glDeleteShader(vs)
+            ROAR3DViewWidget._shaders_supported = bool(ok)
+        except Exception:
+            ROAR3DViewWidget._shaders_supported = False
+
+    def paintGL(self, *args, **kwargs):
+        """Override to catch ``OpenGL.error.Error`` on drivers that lose
+        their context between frames (RHEL 8 Mesa).  On failure we
+        re-acquire the context and retry once; if that also fails we
+        silently skip the frame.
+        """
+        try:
+            super().paintGL()
+        except Exception:
+            try:
+                self.makeCurrent()
+                super().paintGL()
+            except Exception:
+                pass  # skip this frame – avoids flooding stderr
+
+    @classmethod
+    def preferred_shader(cls):
+        """Return ``'shaded'`` when GLSL works, ``None`` otherwise."""
+        if cls._shaders_supported is None:
+            return None   # not yet tested – play it safe
+        return 'shaded' if cls._shaders_supported else None
 
     # ------------------------------------------------------------------
     # Coordinate helpers
@@ -4423,29 +4483,16 @@ class ROARLookupWindow(QWidget):
                                     md = MeshData(vertexes=verts, faces=faces_arr)
                                     # Subtle bright edge tinted with the surface colour
                                     edge_color = (r * 0.6 + 0.4, g * 0.6 + 0.4, b * 0.6 + 0.4, 0.35)
-                                    try:
-                                        mesh = GLMeshItem(
-                                            meshdata=md,
-                                            smooth=False,
-                                            drawFaces=True,
-                                            drawEdges=True,
-                                            edgeColor=edge_color,
-                                            shader='shaded',
-                                            glOptions='translucent'
-                                        )
-                                    except Exception:
-                                        # Fallback: some GL drivers / Mesa versions
-                                        # cannot compile the 'shaded' shader.
-                                        # Use None (fixed-function pipeline) instead.
-                                        mesh = GLMeshItem(
-                                            meshdata=md,
-                                            smooth=False,
-                                            drawFaces=True,
-                                            drawEdges=True,
-                                            edgeColor=edge_color,
-                                            shader=None,
-                                            glOptions='translucent'
-                                        )
+                                    _shader = ROAR3DViewWidget.preferred_shader()
+                                    mesh = GLMeshItem(
+                                        meshdata=md,
+                                        smooth=False,
+                                        drawFaces=True,
+                                        drawEdges=True,
+                                        edgeColor=edge_color,
+                                        shader=_shader,
+                                        glOptions='translucent'
+                                    )
                                     mesh.setColor((r, g, b, 0.45))
                                     self.gl_widget.addItem(mesh)
                                     self.gl_items.append(mesh)
