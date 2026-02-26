@@ -590,10 +590,27 @@ class ROAR3DViewWidget(gl.GLViewWidget):
     def mousePressEvent(self, event):
         """Record press position.  If the press lands on a text label,
         start a label-drag instead of forwarding to the base class
-        (which would orbit the camera)."""
+        (which would orbit the camera).
+        Marker deletion takes priority: if the mouse is over a highlighted
+        marker, do NOT start a label drag – let the release handler run
+        ``_handle_click`` so the marker gets removed."""
         if event.button() == Qt.MouseButton.LeftButton:
             mx, my = event.position().x(), event.position().y()
             self._press_pos = (mx, my)
+
+            # If there is a hovered (highlighted) marker under the cursor,
+            # do NOT start a label drag – the user intends to delete it.
+            if self._hovered_marker is not None:
+                # Fall through to super() so the release handler can
+                # process it as a click-to-delete.
+                super().mousePressEvent(event)
+                return
+
+            # Also check explicitly if a marker is under the cursor
+            # (covers the case where hover hasn't updated yet)
+            if self._find_nearest_marker(mx, my) is not None:
+                super().mousePressEvent(event)
+                return
 
             # Check if press is on a text label → start drag
             hit_text = self._find_nearest_text_label(mx, my)
@@ -613,19 +630,26 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             # End label drag if active
             if self._dragged_text is not None:
+                rx, ry = event.position().x(), event.position().y()
+                # Check if the drag was trivially small (i.e. a click, not
+                # an actual drag).  If so, treat it as a click-to-toggle.
+                was_click = False
+                if self._press_pos is not None:
+                    dx = abs(rx - self._press_pos[0])
+                    dy = abs(ry - self._press_pos[1])
+                    was_click = (dx <= self.CLICK_DRAG_THRESHOLD
+                                 and dy <= self.CLICK_DRAG_THRESHOLD)
+
                 self._dragged_text = None
                 self._drag_start_mouse = None
                 self._drag_start_pos = None
+                self._press_pos = None
                 self.unsetCursor()
                 self.update()
                 event.accept()
-                # Still check for click-to-remove if the mouse barely moved
-                if self._press_pos is not None:
-                    rx, ry = event.position().x(), event.position().y()
-                    dx = abs(rx - self._press_pos[0])
-                    dy = abs(ry - self._press_pos[1])
-                    self._press_pos = None
-                    # Don't toggle markers on drag-release
+
+                if was_click:
+                    self._handle_click(rx, ry)
                 return
 
             if self._press_pos is not None:
@@ -4237,6 +4261,18 @@ class ROARLookupWindow(QWidget):
                     self.plot_widget.hide()
                     self.gl_widget.setVisible(True)
 
+                    # Ensure the OpenGL context is fully initialised before
+                    # creating any GL items.  On some platforms (RHEL 8, Mesa
+                    # software renderers) the context is not current until the
+                    # widget has been shown *and* the event loop has processed
+                    # the exposure event.
+                    from PyQt6.QtWidgets import QApplication
+                    QApplication.processEvents()
+                    try:
+                        self.gl_widget.makeCurrent()
+                    except Exception:
+                        pass
+
                     # 3D plots always use a black background
                     self.gl_widget.setBackgroundColor(0, 0, 0)
 
@@ -4378,18 +4414,38 @@ class ROARLookupWindow(QWidget):
                             if len(faces) > 0:
                                 faces_arr = np.array(faces, dtype=np.uint32)
                                 try:
+                                    # Ensure GL context is current before creating
+                                    # shader-based items (required on Mesa / RHEL 8).
+                                    try:
+                                        self.gl_widget.makeCurrent()
+                                    except Exception:
+                                        pass
                                     md = MeshData(vertexes=verts, faces=faces_arr)
                                     # Subtle bright edge tinted with the surface colour
                                     edge_color = (r * 0.6 + 0.4, g * 0.6 + 0.4, b * 0.6 + 0.4, 0.35)
-                                    mesh = GLMeshItem(
-                                        meshdata=md,
-                                        smooth=False,
-                                        drawFaces=True,
-                                        drawEdges=True,
-                                        edgeColor=edge_color,
-                                        shader='shaded',
-                                        glOptions='translucent'
-                                    )
+                                    try:
+                                        mesh = GLMeshItem(
+                                            meshdata=md,
+                                            smooth=False,
+                                            drawFaces=True,
+                                            drawEdges=True,
+                                            edgeColor=edge_color,
+                                            shader='shaded',
+                                            glOptions='translucent'
+                                        )
+                                    except Exception:
+                                        # Fallback: some GL drivers / Mesa versions
+                                        # cannot compile the 'shaded' shader.
+                                        # Use None (fixed-function pipeline) instead.
+                                        mesh = GLMeshItem(
+                                            meshdata=md,
+                                            smooth=False,
+                                            drawFaces=True,
+                                            drawEdges=True,
+                                            edgeColor=edge_color,
+                                            shader=None,
+                                            glOptions='translucent'
+                                        )
                                     mesh.setColor((r, g, b, 0.45))
                                     self.gl_widget.addItem(mesh)
                                     self.gl_items.append(mesh)
@@ -4412,6 +4468,10 @@ class ROARLookupWindow(QWidget):
                         else:
                             # Scatter fallback
                             try:
+                                try:
+                                    self.gl_widget.makeCurrent()
+                                except Exception:
+                                    pass
                                 xs_n = _norm_global(np.asarray(p1, dtype=float).ravel(), global_x_min, global_x_max)
                                 ys_n = _norm_global(np.asarray(p2, dtype=float).ravel(), global_y_min, global_y_max)
                                 zs_n = _norm_global(np.asarray(p3, dtype=float).ravel(), global_z_min, global_z_max)
@@ -4437,6 +4497,11 @@ class ROARLookupWindow(QWidget):
                     # ── Draw 3-D axes with numbered ticks ──
                     try:
                         from pyqtgraph.opengl import GLLinePlotItem, GLTextItem
+
+                        try:
+                            self.gl_widget.makeCurrent()
+                        except Exception:
+                            pass
 
                         axis_color = (1.0, 1.0, 1.0, 0.6)
                         tick_color = (0.8, 0.8, 0.8, 0.5)
