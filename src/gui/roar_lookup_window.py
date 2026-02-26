@@ -4483,14 +4483,13 @@ class ROARLookupWindow(QWidget):
                                     md = MeshData(vertexes=verts, faces=faces_arr)
                                     # Subtle bright edge tinted with the surface colour
                                     edge_color = (r * 0.6 + 0.4, g * 0.6 + 0.4, b * 0.6 + 0.4, 0.35)
-                                    _shader = ROAR3DViewWidget.preferred_shader()
                                     mesh = GLMeshItem(
                                         meshdata=md,
                                         smooth=False,
                                         drawFaces=True,
                                         drawEdges=True,
                                         edgeColor=edge_color,
-                                        shader=_shader,
+                                        shader=None,
                                         glOptions='translucent'
                                     )
                                     mesh.setColor((r, g, b, 0.45))
