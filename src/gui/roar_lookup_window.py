@@ -125,12 +125,18 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         except Exception:
             ROAR3DViewWidget._shaders_supported = False
 
+        # Flush any items that were deferred because the context wasn't
+        # ready when addItem was first called.
+        self._flush_deferred_items()
+
     def paintGL(self, *args, **kwargs):
         """Override to catch ``OpenGL.error.Error`` on drivers that lose
         their context between frames (RHEL 8 Mesa).  On failure we
         re-acquire the context and retry once; if that also fails we
         silently skip the frame.
         """
+        # Flush items deferred from earlier addItem calls.
+        self._flush_deferred_items()
         try:
             super().paintGL()
         except Exception:
@@ -139,6 +145,38 @@ class ROAR3DViewWidget(gl.GLViewWidget):
                 super().paintGL()
             except Exception:
                 pass  # skip this frame – avoids flooding stderr
+
+    def addItem(self, item):
+        """Override to ensure the GL context is current before adding items.
+
+        On RHEL 8 / Mesa the context may not yet be valid when items are
+        added programmatically (especially right after ``setVisible(True)``).
+        We make the context current first and, if that fails, still add the
+        item so it can be drawn on the next valid frame.
+        """
+        try:
+            self.makeCurrent()
+        except Exception:
+            pass
+        try:
+            super().addItem(item)
+        except Exception:
+            # Context still not ready – store the item so it is drawn on
+            # the next paintGL when the context becomes available.
+            if not hasattr(self, '_deferred_items'):
+                self._deferred_items = []
+            self._deferred_items.append(item)
+
+    def _flush_deferred_items(self):
+        """Add any items that were deferred because the context wasn't ready."""
+        if hasattr(self, '_deferred_items') and self._deferred_items:
+            items = list(self._deferred_items)
+            self._deferred_items.clear()
+            for item in items:
+                try:
+                    super().addItem(item)
+                except Exception:
+                    pass  # still not ready – will be lost
 
     @classmethod
     def preferred_shader(cls):
@@ -952,14 +990,12 @@ class ROARPlotWidget(pg.PlotWidget):
             self.gl_widget = gl.GLViewWidget()
             self.gl_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             self.gl_widget.setVisible(False)
-            # Add a grid for reference
-            try:
-                grid = gl.GLGridItem()
-                grid.setSize(10, 10)
-                grid.setSpacing(1, 1)
-                self.gl_widget.addItem(grid)
-            except Exception:
-                grid = None
+            # NOTE: Do NOT add a GLGridItem here – the GL context is not yet
+            # valid until the widget is shown and the event loop processes
+            # the exposure event.  Adding GL items before the context is
+            # ready causes "Attempt to retrieve context when no valid context"
+            # on RHEL 8 / Mesa.  The grid (if needed) will be added when the
+            # widget is first made visible.
             self.gl_items = []  # Track GL items added to the view
             self.mpl_canvas = None
             self.mpl_figure = None
@@ -4325,13 +4361,39 @@ class ROARLookupWindow(QWidget):
                     # creating any GL items.  On some platforms (RHEL 8, Mesa
                     # software renderers) the context is not current until the
                     # widget has been shown *and* the event loop has processed
-                    # the exposure event.
+                    # the exposure event.  We process events twice and force
+                    # a repaint to give the driver every chance to create the
+                    # underlying surface.
                     from PyQt6.QtWidgets import QApplication
+                    QApplication.processEvents()
+                    self.gl_widget.repaint()          # triggers initializeGL if needed
                     QApplication.processEvents()
                     try:
                         self.gl_widget.makeCurrent()
                     except Exception:
                         pass
+
+                    # Verify context is actually usable (avoids the
+                    # "Attempt to retrieve context when no valid context"
+                    # error from PyOpenGL's contextdata module).
+                    _gl_context_ok = False
+                    try:
+                        import OpenGL.GL as _GL
+                        _GL.glGetString(_GL.GL_VERSION)
+                        _gl_context_ok = True
+                    except Exception:
+                        pass
+
+                    if not _gl_context_ok:
+                        # Last resort: try one more event-loop round.
+                        QApplication.processEvents()
+                        try:
+                            self.gl_widget.makeCurrent()
+                            import OpenGL.GL as _GL
+                            _GL.glGetString(_GL.GL_VERSION)
+                            _gl_context_ok = True
+                        except Exception:
+                            pass
 
                     # 3D plots always use a black background
                     self.gl_widget.setBackgroundColor(0, 0, 0)
