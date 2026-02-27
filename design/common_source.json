@@ -7,8 +7,14 @@
             "plot": false
         },
         {
-            "Symbol": "wu",
+            "Symbol": "fu",
             "Expression": "100e6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "wu",
+            "Expression": "2*pi*fu",
             "disabled": false,
             "plot": false
         },
