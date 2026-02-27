@@ -146,23 +146,37 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         self._flush_deferred_items()
 
         # ── Guard: verify the GL context is current ──────────────
-        try:
-            self.makeCurrent()
-        except Exception:
-            return  # widget not yet realised – skip this frame
-
-        try:
-            from OpenGL import platform as _plat
-            ctx = _plat.GetCurrentContext()
-            if not ctx:
-                return  # no context yet – skip frame silently
-        except Exception:
-            return
+        if not self._qt_context_is_valid():
+            return  # no context yet – skip frame silently
 
         try:
             super().paintGL()
         except Exception:
             pass  # last-resort safety net
+
+    def _qt_context_is_valid(self):
+        """Return *True* if Qt believes an OpenGL context is current.
+
+        We deliberately avoid ``OpenGL.platform.GetCurrentContext()``
+        because on Wayland / XWayland setups PyOpenGL may probe EGL
+        while Qt uses GLX – making the PyOpenGL check always return
+        *False* even though Qt has a perfectly good context.
+        """
+        try:
+            self.makeCurrent()
+        except Exception:
+            pass
+        try:
+            from PyQt6.QtOpenGL import QOpenGLContext
+            return QOpenGLContext.currentContext() is not None
+        except ImportError:
+            pass
+        # Fallback: ask the QOpenGLWidget itself.
+        try:
+            ctx = self.context()
+            return ctx is not None and ctx.isValid()
+        except Exception:
+            return False
 
     def addItem(self, item):
         """Override to ensure the GL context is current before adding items.
@@ -172,20 +186,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         We check for a valid context first and defer the item if none
         exists yet.
         """
-        try:
-            self.makeCurrent()
-        except Exception:
-            pass
-
-        # Check if context is actually usable before touching GL state.
-        _ctx_ok = False
-        try:
-            from OpenGL import platform as _plat
-            _ctx_ok = bool(_plat.GetCurrentContext())
-        except Exception:
-            pass
-
-        if not _ctx_ok:
+        if not self._qt_context_is_valid():
             if not hasattr(self, '_deferred_items'):
                 self._deferred_items = []
             self._deferred_items.append(item)
@@ -202,14 +203,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
     def _flush_deferred_items(self):
         """Add any items that were deferred because the context wasn't ready."""
         if hasattr(self, '_deferred_items') and self._deferred_items:
-            # Re-check context before attempting
-            _ctx_ok = False
-            try:
-                from OpenGL import platform as _plat
-                _ctx_ok = bool(_plat.GetCurrentContext())
-            except Exception:
-                pass
-            if not _ctx_ok:
+            if not self._qt_context_is_valid():
                 return  # still no context – keep items deferred
 
             items = list(self._deferred_items)
@@ -4415,27 +4409,6 @@ class ROARLookupWindow(QWidget):
                     except Exception:
                         pass
 
-                    # Verify context is actually usable (avoids the
-                    # "Attempt to retrieve context when no valid context"
-                    # error from PyOpenGL's contextdata module).
-                    _gl_context_ok = False
-                    try:
-                        import OpenGL.GL as _GL
-                        _GL.glGetString(_GL.GL_VERSION)
-                        _gl_context_ok = True
-                    except Exception:
-                        pass
-
-                    if not _gl_context_ok:
-                        # Last resort: try one more event-loop round.
-                        QApplication.processEvents()
-                        try:
-                            self.gl_widget.makeCurrent()
-                            import OpenGL.GL as _GL
-                            _GL.glGetString(_GL.GL_VERSION)
-                            _gl_context_ok = True
-                        except Exception:
-                            pass
 
                     # 3D plots always use a black background
                     self.gl_widget.setBackgroundColor(0, 0, 0)
