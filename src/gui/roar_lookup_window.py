@@ -130,39 +130,71 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         self._flush_deferred_items()
 
     def paintGL(self, *args, **kwargs):
-        """Override to catch ``OpenGL.error.Error`` on drivers that lose
-        their context between frames (RHEL 8 Mesa).  On failure we
-        re-acquire the context and retry once; if that also fails we
-        silently skip the frame.
+        """Override that guards against the ``OpenGL.error.Error:
+        Attempt to retrieve context when no valid context`` crash on
+        RHEL 8 / Mesa.
+
+        Pyqtgraph's ``drawItemTree`` uses a bare ``except:`` around
+        each item's ``paint()`` call and prints the traceback via
+        ``debug.printExc()``.  That means the error never propagates
+        out of ``super().paintGL()`` — wrapping it in try/except on
+        our side has no effect.  Instead we must check **before**
+        entering the paint that a valid GL context exists, and skip
+        the entire frame if it does not.
         """
         # Flush items deferred from earlier addItem calls.
         self._flush_deferred_items()
+
+        # ── Guard: verify the GL context is current ──────────────
+        try:
+            self.makeCurrent()
+        except Exception:
+            return  # widget not yet realised – skip this frame
+
+        try:
+            from OpenGL import platform as _plat
+            ctx = _plat.GetCurrentContext()
+            if not ctx:
+                return  # no context yet – skip frame silently
+        except Exception:
+            return
+
         try:
             super().paintGL()
         except Exception:
-            try:
-                self.makeCurrent()
-                super().paintGL()
-            except Exception:
-                pass  # skip this frame – avoids flooding stderr
+            pass  # last-resort safety net
 
     def addItem(self, item):
         """Override to ensure the GL context is current before adding items.
 
         On RHEL 8 / Mesa the context may not yet be valid when items are
         added programmatically (especially right after ``setVisible(True)``).
-        We make the context current first and, if that fails, still add the
-        item so it can be drawn on the next valid frame.
+        We check for a valid context first and defer the item if none
+        exists yet.
         """
         try:
             self.makeCurrent()
         except Exception:
             pass
+
+        # Check if context is actually usable before touching GL state.
+        _ctx_ok = False
+        try:
+            from OpenGL import platform as _plat
+            _ctx_ok = bool(_plat.GetCurrentContext())
+        except Exception:
+            pass
+
+        if not _ctx_ok:
+            if not hasattr(self, '_deferred_items'):
+                self._deferred_items = []
+            self._deferred_items.append(item)
+            return
+
         try:
             super().addItem(item)
         except Exception:
-            # Context still not ready – store the item so it is drawn on
-            # the next paintGL when the context becomes available.
+            # Context reported valid but item add still failed – defer.
             if not hasattr(self, '_deferred_items'):
                 self._deferred_items = []
             self._deferred_items.append(item)
@@ -170,6 +202,16 @@ class ROAR3DViewWidget(gl.GLViewWidget):
     def _flush_deferred_items(self):
         """Add any items that were deferred because the context wasn't ready."""
         if hasattr(self, '_deferred_items') and self._deferred_items:
+            # Re-check context before attempting
+            _ctx_ok = False
+            try:
+                from OpenGL import platform as _plat
+                _ctx_ok = bool(_plat.GetCurrentContext())
+            except Exception:
+                pass
+            if not _ctx_ok:
+                return  # still no context – keep items deferred
+
             items = list(self._deferred_items)
             self._deferred_items.clear()
             for item in items:
