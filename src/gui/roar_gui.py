@@ -66,9 +66,61 @@ except Exception:
                             pass
 os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 
+# ── Fix PyOpenGL / Qt OpenGL platform mismatch (RHEL 8/Rocky 8, Wayland) ──
+# On Wayland sessions with XWayland, PyOpenGL auto-selects the EGL
+# platform while Qt6 (xcb backend) creates GLX contexts.
+# eglGetCurrentContext() then returns NULL even though Qt has a valid
+# GLX context, causing "Attempt to retrieve context when no valid
+# context" errors from OpenGL/contextdata.py.
+#
+# Prong 1: Set PYOPENGL_PLATFORM=x11 before PyOpenGL loads so it
+#          picks GLX from the start.
+# Prong 2: After import, patch contextdata.getContext() to fall back
+#          to a Qt-based context ID when the native check returns NULL.
+#          This handles cases where Prong 1 didn't take effect.
+_wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
+_x11     = bool(os.environ.get('DISPLAY'))
+if _wayland and _x11 and not os.environ.get('PYOPENGL_PLATFORM'):
+    os.environ['PYOPENGL_PLATFORM'] = 'x11'
+
 # from PySide6.QtCore import Qt
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
+
+# Prong 2 – unconditionally patch contextdata.getContext().
+# On RHEL 8 / Rocky 8, BOTH EGL and GLX GetCurrentContext() can return
+# NULL when Qt manages the context internally.  We always install the
+# fallback so PyOpenGL asks Qt for the context when native check fails.
+try:
+    from OpenGL import platform as _gl_plat
+    import OpenGL.contextdata as _ctxdata
+    _orig_getContext = _ctxdata.getContext
+
+    def _patched_getContext(context=None):
+        """Fall back to a Qt-derived context ID when native check fails."""
+        if context is not None:
+            return _orig_getContext(context)
+        try:
+            ctx = _gl_plat.GetCurrentContext()
+            if ctx:
+                return ctx
+        except Exception:
+            pass
+        # Native platform says no context – ask Qt instead.
+        # QOpenGLContext lives in QtGui (not QtOpenGL) in PyQt6.
+        try:
+            from PyQt6.QtGui import QOpenGLContext
+            qctx = QOpenGLContext.currentContext()
+            if qctx is not None:
+                return id(qctx)
+        except ImportError:
+            pass
+        # Nothing worked – call original (will raise the error).
+        return _orig_getContext(context)
+
+    _ctxdata.getContext = _patched_getContext
+except Exception:
+    pass
 import qdarktheme
 
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

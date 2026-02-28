@@ -1,8 +1,53 @@
 import os
 import sys
 import numpy as np
+
+# ── Fix PyOpenGL / Qt OpenGL platform mismatch (RHEL 8/Rocky 8, Wayland) ──
+# On Wayland + XWayland, PyOpenGL auto-selects EGL while Qt6 (xcb) uses GLX.
+# eglGetCurrentContext() returns NULL → "no valid context" errors.
+# Prong 1: set env var before PyOpenGL loads (only helps if OpenGL not yet imported).
+_wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
+_x11     = bool(os.environ.get('DISPLAY'))
+if _wayland and _x11 and not os.environ.get('PYOPENGL_PLATFORM'):
+    os.environ['PYOPENGL_PLATFORM'] = 'x11'
+
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
+
+# Prong 2: unconditionally patch contextdata.getContext() to fall back
+# to Qt's context when the native platform check returns NULL.
+# On RHEL 8 / Rocky 8 both EGL and GLX GetCurrentContext() can fail.
+try:
+    from OpenGL import platform as _gl_plat
+    import OpenGL.contextdata as _ctxdata
+    if not getattr(_ctxdata, '_roar_patched', False):
+        _orig_getContext = _ctxdata.getContext
+
+        def _patched_getContext(context=None):
+            """Fall back to a Qt-derived context ID when native check fails."""
+            if context is not None:
+                return _orig_getContext(context)
+            try:
+                ctx = _gl_plat.GetCurrentContext()
+                if ctx:
+                    return ctx
+            except Exception:
+                pass
+            # QOpenGLContext lives in QtGui (not QtOpenGL) in PyQt6.
+            try:
+                from PyQt6.QtGui import QOpenGLContext
+                qctx = QOpenGLContext.currentContext()
+                if qctx is not None:
+                    return id(qctx)
+            except ImportError:
+                pass
+            return _orig_getContext(context)
+
+        _ctxdata.getContext = _patched_getContext
+        _ctxdata._roar_patched = True
+except Exception:
+    pass
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QSplitter, QSizePolicy, QGridLayout, QRadioButton, QCheckBox, QHBoxLayout,
     QComboBox, QLabel, QPushButton, QColorDialog, QDoubleSpinBox, QGraphicsItem
@@ -167,7 +212,8 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         except Exception:
             pass
         try:
-            from PyQt6.QtOpenGL import QOpenGLContext
+            # QOpenGLContext lives in QtGui (not QtOpenGL) in PyQt6.
+            from PyQt6.QtGui import QOpenGLContext
             return QOpenGLContext.currentContext() is not None
         except ImportError:
             pass
