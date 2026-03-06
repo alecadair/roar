@@ -8,10 +8,11 @@ by visualizing which corners each device uses and ensuring compatibility.
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
-    QGroupBox, QCheckBox, QWidget, QColorDialog, QSizePolicy
+    QGroupBox, QCheckBox, QWidget, QColorDialog, QSizePolicy,
+    QApplication
 )
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QBrush, QPixmap, QIcon, QMouseEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtGui import QColor, QBrush, QPixmap, QIcon, QMouseEvent, QCursor
 
 
 class _ColorSwatch(QLabel):
@@ -48,6 +49,144 @@ class _ColorSwatch(QLabel):
                 self._update_pixmap()
                 self.color_changed.emit(self._row, new)
         super().mousePressEvent(event)
+
+
+class _SwapTuplesTable(QTableWidget):
+    """A QTableWidget that lets the user click-and-drag a device-corner
+    cell onto another cell *in the same column* (same device, different
+    tuple row) to swap the two corners.
+
+    Only cells in the device columns (column index >= ``min_drag_col``) are
+    draggable.  While dragging, the cursor changes and the source cell gets
+    a visual highlight.  On release over a valid target the two cells (and
+    the backing ``_tuples_list`` data) are swapped.
+    """
+
+    # Emitted after a successful swap so the parent dialog can fire
+    # corner_mapping_changed.  Args: (col, src_row, dst_row)
+    cells_swapped = pyqtSignal(int, int, int)
+
+    # First column index that is draggable (skip Enabled / Color / Tuple#)
+    min_drag_col = 3
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._drag_source = None   # (row, col) or None
+        self._dragging = False
+        self._orig_brush = None
+        self._prev_hover_row = None  # track last highlighted target row
+
+    # ── mouse handling ──────────────────────────────────────────────
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            item = self.itemAt(event.pos())
+            if item is not None:
+                row, col = item.row(), item.column()
+                if col >= self.min_drag_col:
+                    self._drag_source = (row, col)
+                    self._dragging = False
+                    self._orig_brush = item.background()
+                    self._prev_hover_row = None
+                    # Don't call super – prevent QTableWidget's native
+                    # selection from kicking in on drag-eligible cells.
+                    return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self._drag_source is not None:
+            src_row, src_col = self._drag_source
+            if not self._dragging:
+                self._dragging = True
+                QApplication.setOverrideCursor(QCursor(Qt.CursorShape.DragMoveCursor))
+                # Highlight the source cell
+                src_item = self.item(src_row, src_col)
+                if src_item:
+                    src_item.setBackground(QBrush(QColor("#ADD8E6")))  # Light-blue
+
+            # Determine what we're hovering over
+            target = self.itemAt(event.pos())
+            hover_row = None
+            if target is not None:
+                t_row, t_col = target.row(), target.column()
+                # Valid drop target: same column, different row
+                if t_col == src_col and t_row != src_row:
+                    hover_row = t_row
+
+            # Only update highlights when the hover target actually changes
+            if hover_row != self._prev_hover_row:
+                ok_brush = QBrush(QColor("#d4edda"))
+                # Un-highlight the previous hover row (if any)
+                if self._prev_hover_row is not None:
+                    prev_it = self.item(self._prev_hover_row, src_col)
+                    if prev_it:
+                        prev_it.setBackground(ok_brush)
+                # Highlight the new hover row (if any)
+                if hover_row is not None:
+                    new_it = self.item(hover_row, src_col)
+                    if new_it:
+                        new_it.setBackground(QBrush(QColor("#FFFACD")))  # LemonChiffon
+                self._prev_hover_row = hover_row
+            # Don't call super – prevent selection rubber-banding
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton and self._drag_source is not None:
+            if self._dragging:
+                QApplication.restoreOverrideCursor()
+
+            src_row, src_col = self._drag_source
+            target = self.itemAt(event.pos())
+            did_swap = False
+            t_row = src_row  # default; overwritten when swap occurs
+
+            if self._dragging and target is not None:
+                t_row, t_col = target.row(), target.column()
+                if (t_col == src_col and t_row != src_row):
+                    # ── Perform the swap ──
+                    self._swap_cells(src_col, src_row, t_row)
+                    did_swap = True
+
+            # Reset highlights in the column
+            ok_brush = QBrush(QColor("#d4edda"))
+            for r in range(self.rowCount()):
+                it = self.item(r, src_col)
+                if it:
+                    it.setBackground(ok_brush)
+
+            if did_swap:
+                self.cells_swapped.emit(src_col, src_row, t_row)
+
+            self._drag_source = None
+            self._dragging = False
+            self._orig_brush = None
+            self._prev_hover_row = None
+
+        super().mouseReleaseEvent(event)
+
+    # ── internal swap ───────────────────────────────────────────────
+    def _swap_cells(self, col, row_a, row_b):
+        """Swap the text, tooltip, and UserRole data of two cells in the same column."""
+        item_a = self.item(row_a, col)
+        item_b = self.item(row_b, col)
+        if item_a is None or item_b is None:
+            return
+
+        # text
+        txt_a, txt_b = item_a.text(), item_b.text()
+        item_a.setText(txt_b)
+        item_b.setText(txt_a)
+
+        # tooltip
+        tip_a, tip_b = item_a.toolTip(), item_b.toolTip()
+        item_a.setToolTip(tip_b)
+        item_b.setToolTip(tip_a)
+
+        # UserRole data (if any)
+        data_a = item_a.data(Qt.ItemDataRole.UserRole)
+        data_b = item_b.data(Qt.ItemDataRole.UserRole)
+        item_a.setData(Qt.ItemDataRole.UserRole, data_b)
+        item_b.setData(Qt.ItemDataRole.UserRole, data_a)
 
 
 class CornerMappingDialog(QDialog):
@@ -122,12 +261,14 @@ class CornerMappingDialog(QDialog):
         tuples_layout = QVBoxLayout()
         tuples_info = QLabel(
             "Each row below is one evaluation pass. Lookups for each device "
-            "use that row's corner. Devices are matched by index position."
+            "use that row's corner. Devices are matched by index position.<br>"
+            "<i>Drag a corner cell onto another in the same column to swap them.</i>"
         )
         tuples_info.setWordWrap(True)
         tuples_layout.addWidget(tuples_info)
-        self.tuples_table = QTableWidget()
+        self.tuples_table = _SwapTuplesTable()
         self.tuples_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.tuples_table.cells_swapped.connect(self._on_cells_swapped)
         tuples_layout.addWidget(self.tuples_table)
         self.tuples_group.setLayout(tuples_layout)
         layout.addWidget(self.tuples_group)
@@ -174,11 +315,20 @@ class CornerMappingDialog(QDialog):
         
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.clicked.connect(self.update_corner_info)
-        
+
+        self.apply_btn = QPushButton("Apply to Instance Table")
+        self.apply_btn.setToolTip(
+            "Write the current corner order (after any swaps) back\n"
+            "into each device's Corners column in the Instance Table."
+        )
+        self.apply_btn.clicked.connect(self._apply_to_instance_table)
+        self.apply_btn.setEnabled(False)  # enabled after first swap
+
         self.close_btn = QPushButton("Close")
         self.close_btn.clicked.connect(self.accept)
         
         button_layout.addWidget(self.refresh_btn)
+        button_layout.addWidget(self.apply_btn)
         button_layout.addStretch()
         button_layout.addWidget(self.close_btn)
         
@@ -436,7 +586,7 @@ class CornerMappingDialog(QDialog):
                 cname = cinfo.get("corner_name", "?")
                 path = cinfo.get("path", "")
                 item = QTableWidgetItem(cname)
-                item.setToolTip(path)
+                item.setToolTip(f"{path}\n(Drag onto another cell in this column to swap)")
                 item.setBackground(ok_brush)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 tbl.setItem(row_idx, col_idx + 3, item)
@@ -480,6 +630,97 @@ class CornerMappingDialog(QDialog):
         except Exception:
             pass
         self.corner_mapping_changed.emit()
+
+    # ---------- drag-swap callback ----------
+    def _on_cells_swapped(self, col, src_row, dst_row):
+        """Sync the backing ``_tuples_list`` data after the table swapped two cells.
+
+        ``_SwapTuplesTable`` already swapped the visible text / tooltip / UserRole.
+        Here we swap the corresponding corner-info dicts inside ``_tuples_list``
+        so that subsequent plotting uses the updated corner assignment.
+
+        The swap is column-wise: the same device (column) has its corner
+        exchanged between two different tuples (rows).
+        """
+        tuples_list = getattr(self, '_tuples_list', None)
+        if not tuples_list:
+            return
+        if src_row >= len(tuples_list) or dst_row >= len(tuples_list):
+            return
+
+        dev_idx = col - 3  # offset past Enabled / Color / Tuple#
+        dev_names = list(tuples_list[0].keys())
+        if dev_idx < 0 or dev_idx >= len(dev_names):
+            return
+
+        dev = dev_names[dev_idx]
+
+        # Swap the corner info dicts for this device between the two tuples
+        tuples_list[src_row][dev], tuples_list[dst_row][dev] = (
+            tuples_list[dst_row][dev], tuples_list[src_row][dev]
+        )
+
+        self.apply_btn.setEnabled(True)
+        self.corner_mapping_changed.emit()
+
+    # ---------- apply to instance table ----------
+    def _apply_to_instance_table(self):
+        """Write the current (possibly reordered) corner tuples back into
+        each device's Corners column in the Instance Table.
+
+        For each device we rebuild an ordered list of corner-info dicts
+        by reading down the tuples (row 0, row 1, …) and update the
+        instance table item via ``update_corners_display``.
+        """
+        tuples_list = getattr(self, '_tuples_list', None)
+        if not tuples_list or not self.design_editor:
+            return
+
+        instance_table = self.design_editor.instance_table
+        corners_col = instance_table.corners_column_index
+        if corners_col < 0:
+            return
+
+        dev_names = list(tuples_list[0].keys())
+
+        # Build a map: device_name -> tree-widget item
+        item_map = {}
+        for i in range(instance_table.tree.topLevelItemCount()):
+            tree_item = instance_table.tree.topLevelItem(i)
+            item_map[tree_item.text(0)] = tree_item
+
+        updated = []
+        for dev in dev_names:
+            tree_item = item_map.get(dev)
+            if tree_item is None:
+                continue
+
+            # Collect corners in tuple order for this device
+            new_corner_info = []
+            for tup in tuples_list:
+                cinfo = tup.get(dev, {})
+                path = cinfo.get('path', '')
+                corner_name = cinfo.get('corner_name', '')
+                tokens = path.split('>') if path else []
+                new_corner_info.append({
+                    'name': corner_name,
+                    'path': f"PDK>{path}" if path else '',
+                    'pdk': tokens[0] if len(tokens) >= 1 else None,
+                    'model': tokens[1] if len(tokens) >= 2 else None,
+                    'length': tokens[2] if len(tokens) >= 3 else None,
+                })
+
+            instance_table.update_corners_display(tree_item, new_corner_info)
+            updated.append(dev)
+
+        self.apply_btn.setEnabled(False)
+
+        QMessageBox.information(
+            self,
+            "Applied",
+            f"Corner order updated for {len(updated)} device(s):\n"
+            + ", ".join(updated)
+        )
 
     def get_tuple_states(self):
         """Return the list of tuple display states.
@@ -562,3 +803,4 @@ class CornerMappingDialog(QDialog):
         if self.design_editor:
             return self.design_editor.get_device_corners()
         return {}
+
