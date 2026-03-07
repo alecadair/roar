@@ -2702,6 +2702,11 @@ class ROARLookupWindow(QWidget):
         self.copy_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.copy_button.setFixedSize(56, 22)
 
+        self.reset_button = QPushButton("Reset")
+        self.reset_button.setToolTip("Reset this window to its default state\n(does not affect the other mode's saved state)")
+        self.reset_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.reset_button.setFixedSize(56, 22)
+
         # Settings container
         self.settings_container = QWidget()
         s_layout = QHBoxLayout(self.settings_container)
@@ -2775,6 +2780,7 @@ class ROARLookupWindow(QWidget):
         self.row5_layout.addWidget(self.checkbox_3d)
         self.row5_layout.addWidget(self.checkbox_contour)
         self.row5_layout.addWidget(self.copy_button)
+        self.row5_layout.addWidget(self.reset_button)
         self.row5_layout.addWidget(self.expand_button)
         self.row5_layout.addWidget(self.settings_container)
 
@@ -2856,6 +2862,9 @@ class ROARLookupWindow(QWidget):
 
         # Connect copy button
         self.copy_button.clicked.connect(self.on_copy_button_clicked)
+
+        # Connect reset button
+        self.reset_button.clicked.connect(self.reset_window)
 
         # Track copy/paste state
         self.copied_state = None  # Stores the state when in copy mode
@@ -3011,6 +3020,108 @@ class ROARLookupWindow(QWidget):
             self.update_attachment_checkboxes()
             # Trigger a graph update so the new mode renders immediately
             self.update_graph_from_tech_browser()
+
+    def reset_window(self):
+        """Reset this window to its default state.
+
+        * Unchecks every item in the ROARTechBrowser.
+        * Resets combo boxes, spin boxes, and checkboxes to defaults.
+        * Clears the plot and any markers.
+        * Hides the 3-D widget.
+
+        The saved state for the *other* mode is intentionally preserved so
+        that switching modes still restores whatever was there before.
+        """
+        try:
+            self._is_updating = True
+
+            # ── 1. Uncheck everything in the tech browser ──
+            self.tech_browser.tree.blockSignals(True)
+            if hasattr(self.tech_browser, 'startup'):
+                old_startup = self.tech_browser.startup
+                self.tech_browser.startup = True
+
+            root = self.tech_browser.tree.invisibleRootItem()
+
+            def _uncheck_all(item):
+                item.setCheckState(0, Qt.CheckState.Unchecked)
+                for i in range(item.childCount()):
+                    _uncheck_all(item.child(i))
+
+            for i in range(root.childCount()):
+                _uncheck_all(root.child(i))
+
+            self.tech_browser.tree.blockSignals(False)
+            if hasattr(self.tech_browser, 'startup'):
+                self.tech_browser.startup = old_startup
+
+            # ── 2. Reset combo boxes to defaults ──
+            self.combo_x.blockSignals(True)
+            self.combo_y.blockSignals(True)
+            self.combo_z.blockSignals(True)
+
+            if self.is_device_params_mode:
+                self.combo_x.setCurrentText("kgm")
+                self.combo_y.setCurrentText("kcgs")
+                self.combo_z.setCurrentText("iden")
+            else:
+                # Design Eqs: pick the first available items
+                if self.combo_x.count() > 0:
+                    self.combo_x.setCurrentIndex(0)
+                if self.combo_y.count() > 1:
+                    self.combo_y.setCurrentIndex(1)
+                elif self.combo_y.count() > 0:
+                    self.combo_y.setCurrentIndex(0)
+                if self.combo_z.count() > 2:
+                    self.combo_z.setCurrentIndex(2)
+                elif self.combo_z.count() > 0:
+                    self.combo_z.setCurrentIndex(0)
+
+            self.combo_x.blockSignals(False)
+            self.combo_y.blockSignals(False)
+            self.combo_z.blockSignals(False)
+
+            # ── 3. Reset spin boxes ──
+            self.spin_x.setValue(0)
+            self.spin_y.setValue(0)
+            self.spin_z.setValue(0)
+
+            # ── 4. Uncheck all option checkboxes ──
+            self.checkbox_logx.setChecked(False)
+            self.checkbox_logy.setChecked(False)
+            self.checkbox_logz.setChecked(False)
+            self.checkbox_3d.setChecked(False)
+            self.checkbox_contour.setChecked(False)
+            self.checkbox_black_bg.setChecked(False)
+
+            # ── 5. Hide 3-D widget, show 2-D plot ──
+            if self.gl_widget is not None:
+                self.gl_widget.setVisible(False)
+            self.plot_widget.show()
+
+            # ── 6. Clear markers ──
+            try:
+                self.clear_markers()
+            except Exception:
+                pass
+
+            # ── 7. Clear the plot ──
+            self.plot_widget.clear()
+            self.plot_widget.getPlotItem().setTitle("")
+            self.plot_widget.getPlotItem().setLabel('left', "")
+            self.plot_widget.getPlotItem().setLabel('bottom', "")
+
+            # ── 8. Invalidate the mode-state cache for the CURRENT mode ──
+            # so that if the user switches away and back they get a fresh
+            # window rather than the old (now-stale) cached state.
+            self._mode_state_cache[self.is_device_params_mode] = None
+
+        except Exception as e:
+            debug_print(f"Error in reset_window: {e}")
+        finally:
+            self._is_updating = False
+
+        self.update_attachment_checkboxes()
 
     def on_background_color_changed(self):
         """Update the 3D plot background when the Black BG checkbox changes"""
