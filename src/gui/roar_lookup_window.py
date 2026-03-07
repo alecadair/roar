@@ -2517,6 +2517,11 @@ class ROARLookupWindow(QWidget):
         self.expression_symbols = []
         self._is_updating = False
 
+        # Per-mode state cache: save the full window state before switching
+        # so it can be restored when the user switches back.
+        # Keys: True (Device Params), False (Design Eqs)
+        self._mode_state_cache = {True: None, False: None}
+
         # Create the main layout and restore moderate margins so the rest of the app spacing is preserved
         self.main_layout = QVBoxLayout(self)
         # Use comfortable default margins so other UI areas don't appear too tight
@@ -2964,16 +2969,48 @@ class ROARLookupWindow(QWidget):
             pass
 
     def on_mode_changed(self, _checked):
-        self.is_device_params_mode = self.radio_device_params.isChecked()
+        new_mode = self.radio_device_params.isChecked()
 
-        # When switching to Device Params mode, hide any 3D plots
-        if self.is_device_params_mode:
-            if self.gl_widget is not None:
-                self.gl_widget.setVisible(False)
-            self.plot_widget.show()
+        # Ignore the redundant signal (both radio buttons emit toggled)
+        if new_mode == self.is_device_params_mode:
+            return
 
-        self.update_combobox_items()
-        self.update_attachment_checkboxes()
+        # ── Save outgoing mode state ──
+        # capture_state reads the radio button that is *currently still set*
+        # (the old mode) because we haven't updated is_device_params_mode yet.
+        # Force-override the mode key so it records the OLD mode correctly.
+        try:
+            outgoing_state = self.capture_state()
+            outgoing_state['is_device_params_mode'] = self.is_device_params_mode
+            self._mode_state_cache[self.is_device_params_mode] = outgoing_state
+        except Exception:
+            pass
+
+        # ── Switch the mode flag ──
+        self.is_device_params_mode = new_mode
+
+        # ── Restore incoming mode state (if we have one) ──
+        saved = self._mode_state_cache.get(new_mode)
+        if saved is not None:
+            # restore_state will set combos, checkboxes, tech browser checks,
+            # and call update_graph_from_tech_browser at the end.
+            # Override the mode key so restore_state doesn't try to flip the
+            # radio button back (it's already set).
+            saved['is_device_params_mode'] = new_mode
+            self.restore_state(saved)
+        else:
+            # No prior state – fall back to the original behaviour:
+            # just update the combo box items and attachment checkboxes.
+            # When switching to Device Params mode, hide any 3D plots.
+            if self.is_device_params_mode:
+                if self.gl_widget is not None:
+                    self.gl_widget.setVisible(False)
+                self.plot_widget.show()
+
+            self.update_combobox_items()
+            self.update_attachment_checkboxes()
+            # Trigger a graph update so the new mode renders immediately
+            self.update_graph_from_tech_browser()
 
     def on_background_color_changed(self):
         """Update the 3D plot background when the Black BG checkbox changes"""
@@ -3265,6 +3302,10 @@ class ROARLookupWindow(QWidget):
             # Temporarily disable updates to prevent repeated graph updates
             self._is_updating = True
 
+            # Block radio signals to prevent re-entering on_mode_changed
+            self.radio_device_params.blockSignals(True)
+            self.radio_design_eq.blockSignals(True)
+
             # Restore radio button and explicitly set the mode variable
             if state.get('is_device_params_mode', True):
                 self.radio_device_params.setChecked(True)
@@ -3272,6 +3313,15 @@ class ROARLookupWindow(QWidget):
             else:
                 self.radio_design_eq.setChecked(True)
                 self.is_device_params_mode = False
+
+            self.radio_device_params.blockSignals(False)
+            self.radio_design_eq.blockSignals(False)
+
+            # When restoring Device Params mode, hide any 3D GL widget
+            if self.is_device_params_mode:
+                if self.gl_widget is not None:
+                    self.gl_widget.setVisible(False)
+                self.plot_widget.show()
 
             # Update combo boxes to match the mode
             self.update_combobox_items()
@@ -3324,12 +3374,17 @@ class ROARLookupWindow(QWidget):
             # Update the graph
             self.update_graph_from_tech_browser()
 
+            # Update attachment checkboxes to match restored axis selections
+            self.update_attachment_checkboxes()
+
             # Restore markers after the graph is updated
             if 'markers' in state:
                 self.restore_markers(state['markers'])
 
         except Exception as e:
             self._is_updating = False
+            self.radio_device_params.blockSignals(False)
+            self.radio_design_eq.blockSignals(False)
             debug_print(f"Error restoring state: {e}")
 
     def restore_markers(self, markers_data):
