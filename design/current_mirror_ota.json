@@ -49,6 +49,12 @@
             "plot": false
         },
         {
+            "Symbol": "av",
+            "Expression": "kgm1_2/(kgds5_6 + kgds7_8)",
+            "disabled": false,
+            "plot": false
+        },
+        {
             "Symbol": "kgm7_8",
             "Expression": "kgm3_4",
             "disabled": false,
@@ -167,12 +173,6 @@
             "Expression": "kgds:M3_4",
             "disabled": false,
             "plot": false
-        },
-        {
-            "Symbol": "av",
-            "Expression": "kgm1_2/(kgds5_6 + kgds7_8)",
-            "disabled": false,
-            "plot": false
         }
     ],
     "constraint_editor": [],
@@ -183,7 +183,7 @@
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[nfettt75, nfettt-25, nfettt25]",
+            "Corners": "[nfettt75, nfettt25, nfettt-25]",
             "disabled": false,
             "plot": false,
             "_corners_data": [
@@ -197,15 +197,15 @@
                 {
                     "length": "500",
                     "model": "n_01v8",
-                    "name": "nfettt-25",
-                    "path": "PDK>SKY130A>n_01v8>500>nfettt-25",
+                    "name": "nfettt25",
+                    "path": "PDK>SKY130A>n_01v8>500>nfettt25",
                     "pdk": "SKY130A"
                 },
                 {
                     "length": "500",
                     "model": "n_01v8",
-                    "name": "nfettt25",
-                    "path": "PDK>SKY130A>n_01v8>500>nfettt25",
+                    "name": "nfettt-25",
+                    "path": "PDK>SKY130A>n_01v8>500>nfettt-25",
                     "pdk": "SKY130A"
                 }
             ]
@@ -216,10 +216,17 @@
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[pfettt25, pfettt-25, pfettt75]",
+            "Corners": "[pfettt75, pfettt25, pfettt-25]",
             "disabled": false,
             "plot": false,
             "_corners_data": [
+                {
+                    "length": "500",
+                    "model": "p_01v8",
+                    "name": "pfettt75",
+                    "path": "PDK>SKY130A>p_01v8>500>pfettt75",
+                    "pdk": "SKY130A"
+                },
                 {
                     "length": "500",
                     "model": "p_01v8",
@@ -233,13 +240,6 @@
                     "name": "pfettt-25",
                     "path": "PDK>SKY130A>p_01v8>500>pfettt-25",
                     "pdk": "SKY130A"
-                },
-                {
-                    "length": "500",
-                    "model": "p_01v8",
-                    "name": "pfettt75",
-                    "path": "PDK>SKY130A>p_01v8>500>pfettt75",
-                    "pdk": "SKY130A"
                 }
             ]
         },
@@ -249,7 +249,7 @@
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[nfettt75, nfettt-25, nfettt25]",
+            "Corners": "[nfettt75, nfettt25, nfettt-25]",
             "disabled": false,
             "plot": false,
             "_corners_data": [
@@ -263,15 +263,15 @@
                 {
                     "length": "500",
                     "model": "n_01v8",
-                    "name": "nfettt-25",
-                    "path": "PDK>SKY130A>n_01v8>500>nfettt-25",
+                    "name": "nfettt25",
+                    "path": "PDK>SKY130A>n_01v8>500>nfettt25",
                     "pdk": "SKY130A"
                 },
                 {
                     "length": "500",
                     "model": "n_01v8",
-                    "name": "nfettt25",
-                    "path": "PDK>SKY130A>n_01v8>500>nfettt25",
+                    "name": "nfettt-25",
+                    "path": "PDK>SKY130A>n_01v8>500>nfettt-25",
                     "pdk": "SKY130A"
                 }
             ]
@@ -282,10 +282,17 @@
             "ID": "",
             "W": "",
             "L": "",
-            "Corners": "[pfettt25, pfettt-25, pfettt75]",
+            "Corners": "[pfettt75, pfettt25, pfettt-25]",
             "disabled": false,
             "plot": false,
             "_corners_data": [
+                {
+                    "length": "500",
+                    "model": "p_01v8",
+                    "name": "pfettt75",
+                    "path": "PDK>SKY130A>p_01v8>500>pfettt75",
+                    "pdk": "SKY130A"
+                },
                 {
                     "length": "500",
                     "model": "p_01v8",
@@ -298,13 +305,6 @@
                     "model": "p_01v8",
                     "name": "pfettt-25",
                     "path": "PDK>SKY130A>p_01v8>500>pfettt-25",
-                    "pdk": "SKY130A"
-                },
-                {
-                    "length": "500",
-                    "model": "p_01v8",
-                    "name": "pfettt75",
-                    "path": "PDK>SKY130A>p_01v8>500>pfettt75",
                     "pdk": "SKY130A"
                 }
             ]
