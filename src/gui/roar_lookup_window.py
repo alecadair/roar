@@ -281,6 +281,27 @@ class ROAR3DViewWidget(gl.GLViewWidget):
             getattr(lw, 'combo_z', None) and lw.combo_z.currentText() or 'Z',
         )
 
+    def _is_z_log(self):
+        """Return True when the parent lookup window has LogZ checked."""
+        lw = self.parent_lookup_window
+        if lw is None:
+            return False
+        cb = getattr(lw, 'checkbox_logz', None)
+        return cb is not None and cb.isChecked()
+
+    def _display_orig(self, orig_xyz):
+        """Return a copy of *orig_xyz* with the Z component converted back
+        to the true linear value when LogZ mode is active.
+
+        The 3-D render pass stores ``log10(z)`` in the original-points
+        arrays when LogZ is on; this reverses that for labels, spin-boxes,
+        and status-bar display.
+        """
+        out = np.array(orig_xyz, dtype=np.float64)
+        if self._is_z_log():
+            out[2] = 10.0 ** out[2]
+        return out
+
     # ------------------------------------------------------------------
     # Screen-space projection (used for mouse picking)
     # ------------------------------------------------------------------
@@ -471,9 +492,10 @@ class ROAR3DViewWidget(gl.GLViewWidget):
 
         # ── Label at the data point ──
         ax, ay, az = self._get_axis_names()
-        label = (f"{ax}={format_eng(orig_xyz[0])},  "
-                 f"{ay}={format_eng(orig_xyz[1])},  "
-                 f"{az}={format_eng(orig_xyz[2])}")
+        disp = self._display_orig(orig_xyz)
+        label = (f"{ax}={format_eng(disp[0])},  "
+                 f"{ay}={format_eng(disp[1])},  "
+                 f"{az}={format_eng(disp[2])}")
         text = GLTextItem(
             pos=norm_xyz + np.array([0.3, 0.3, 0.3]),
             text=label, color=self.LABEL_COLOR_NORMAL,
@@ -515,9 +537,10 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         if lw is None:
             return
         try:
-            for spin, val in [(lw.spin_x, orig_xyz[0]),
-                              (lw.spin_y, orig_xyz[1]),
-                              (lw.spin_z, orig_xyz[2])]:
+            disp = self._display_orig(orig_xyz)
+            for spin, val in [(lw.spin_x, disp[0]),
+                              (lw.spin_y, disp[1]),
+                              (lw.spin_z, disp[2])]:
                 if val < spin.minimum():
                     spin.setMinimum(val)
                 if val > spin.maximum():
@@ -670,7 +693,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
 
             label = (f"{ax}={format_eng(orig_xyz[0])},  "
                      f"{ay}={format_eng(orig_xyz[1])},  "
-                     f"{az}={format_eng(orig_xyz[2])}")
+                     f"{az}={format_eng(self._display_orig(orig_xyz)[2])}")
             text = GLTextItem(
                 pos=norm_xyz + np.array([0.3, 0.3, 0.3]),
                 text=label, color=self.LABEL_COLOR_NORMAL,
@@ -705,7 +728,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
             # Also add to the flat list so hover/click-to-remove still works
             self._3d_point_markers.append(marker_dict)
 
-            z_values.append(orig_xyz[2])
+            z_values.append(self._display_orig(orig_xyz)[2])
             if norm_xyz[2] > highest_norm_z:
                 highest_norm_z = norm_xyz[2]
                 highest_norm_pt = norm_xyz.copy()
@@ -900,9 +923,10 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         norm_xyz, orig_xyz, dist, _color = self._find_nearest_point(mx, my)
         if dist <= self.PICK_TOLERANCE_PX * 2 and orig_xyz is not None:
             ax, ay, az = self._get_axis_names()
-            coord_str = (f"{ax}={format_eng(orig_xyz[0])},  "
-                         f"{ay}={format_eng(orig_xyz[1])},  "
-                         f"{az}={format_eng(orig_xyz[2])}")
+            disp = self._display_orig(orig_xyz)
+            coord_str = (f"{ax}={format_eng(disp[0])},  "
+                         f"{ay}={format_eng(disp[1])},  "
+                         f"{az}={format_eng(disp[2])}")
             lw = self.parent_lookup_window
             if lw is not None:
                 app = getattr(lw, 'top_level_app', None)
@@ -2271,62 +2295,76 @@ class ROARPlotWidget(pg.PlotWidget):
                             attached_window.plot_widget.select_marker(m, sync=False)
                             break
 
+    def remove_marker(self, marker, sync=True):
+        """Remove a single line marker from this plot widget.
+
+        Cleans up the InfiniteLine, all associated text items, any
+        difference items that reference the marker, and (when *sync* is
+        ``True``) deletes the matching marker on every attached window.
+        """
+        # ── Clear selected / hovered text state if it belongs to this marker ──
+        for text in marker.get('texts', []):
+            if text == self._selected_text:
+                self._selected_text = None
+                self._selected_text_original_html = None
+            if text == self._hovered_text:
+                self._hovered_text = None
+                self._hovered_text_original_html = None
+        summary = marker.get('summary_text')
+        if summary:
+            if summary == self._selected_summary_text:
+                self._selected_summary_text = None
+                self._selected_summary_original_html = None
+            if summary == self._hovered_text:
+                self._hovered_text = None
+                self._hovered_text_original_html = None
+
+        # ── Remove graphics items ──
+        self.plotItem.removeItem(marker['line'])
+        for text in marker.get('texts', []):
+            self.plotItem.removeItem(text)
+        if 'summary_text' in marker:
+            self.plotItem.removeItem(marker['summary_text'])
+        if marker in self.line_markers:
+            self.line_markers.remove(marker)
+
+        # ── Remove difference items that reference this marker ──
+        diff_to_remove = []
+        for diff_item in self.difference_items:
+            if isinstance(diff_item, dict):
+                if diff_item.get('marker1') is marker or diff_item.get('marker2') is marker:
+                    diff_text = diff_item.get('text')
+                    if diff_text:
+                        if diff_text == self._selected_summary_text:
+                            self._selected_summary_text = None
+                            self._selected_summary_original_html = None
+                        if diff_text == self._hovered_text:
+                            self._hovered_text = None
+                            self._hovered_text_original_html = None
+                    self.plotItem.removeItem(diff_item['line'])
+                    self.plotItem.removeItem(diff_item['text'])
+                    diff_to_remove.append(diff_item)
+        for d in diff_to_remove:
+            self.difference_items.remove(d)
+
+        # ── Sync deletion to attached windows ──
+        if sync:
+            plw = getattr(self, "parent_lookup_window", None)
+            if plw:
+                lp = marker.get('linear_pos')
+                vert = marker.get('vertical')
+                for attached_window in plw.get_attached_windows():
+                    for m in list(attached_window.plot_widget.line_markers):
+                        if m['linear_pos'] == lp and m['vertical'] == vert:
+                            attached_window.plot_widget.remove_marker(m, sync=False)
+                            break
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Delete:
             to_remove = [m for m in self.line_markers if m.get('selected', False)]
 
-            # Clear selected text state if the selected text belongs to a deleted marker
             for m in to_remove:
-                for text in m.get('texts', []):
-                    if text == self._selected_text:
-                        self._selected_text = None
-                        self._selected_text_original_html = None
-                    if text == self._hovered_text:
-                        self._hovered_text = None
-                        self._hovered_text_original_html = None
-                summary = m.get('summary_text')
-                if summary:
-                    if summary == self._selected_summary_text:
-                        self._selected_summary_text = None
-                        self._selected_summary_original_html = None
-                    if summary == self._hovered_text:
-                        self._hovered_text = None
-                        self._hovered_text_original_html = None
-
-            # Remove the markers
-            for m in to_remove:
-                self.plotItem.removeItem(m['line'])
-                for text in m['texts']:
-                    self.plotItem.removeItem(text)
-                if 'summary_text' in m:
-                    self.plotItem.removeItem(m['summary_text'])
-                self.line_markers.remove(m)
-
-            # Remove any difference items that involve the deleted markers
-            diff_to_remove = []
-            for diff_item in self.difference_items:
-                if isinstance(diff_item, dict):
-                    # Check if either marker in the difference was deleted
-                    marker1 = diff_item.get('marker1')
-                    marker2 = diff_item.get('marker2')
-                    if marker1 in to_remove or marker2 in to_remove:
-                        # Clear selected state if this diff text was selected
-                        diff_text = diff_item.get('text')
-                        if diff_text:
-                            if diff_text == self._selected_summary_text:
-                                self._selected_summary_text = None
-                                self._selected_summary_original_html = None
-                            if diff_text == self._hovered_text:
-                                self._hovered_text = None
-                                self._hovered_text_original_html = None
-                        # Remove the difference line and text from the plot
-                        self.plotItem.removeItem(diff_item['line'])
-                        self.plotItem.removeItem(diff_item['text'])
-                        diff_to_remove.append(diff_item)
-
-            # Remove the difference items from the list
-            for diff_item in diff_to_remove:
-                self.difference_items.remove(diff_item)
+                self.remove_marker(m, sync=True)
 
             event.accept()
         elif event.key() == Qt.Key.Key_Escape:
@@ -4868,12 +4906,16 @@ class ROARLookupWindow(QWidget):
                         self.gl_widget.addItem(item); self.gl_items.append(item)
 
                         xn, xl = _make_ticks(global_x_min, global_x_max, n_ticks)
-                        for pos_n, lbl in zip(xn, xl):
+                        for idx_t, (pos_n, lbl) in enumerate(zip(xn, xl)):
                             # tick mark
                             tp = np.array([[pos_n, -5, -5 - tick_len],
                                            [pos_n, -5, -5 + tick_len]], dtype=np.float32)
                             ti = GLLinePlotItem(pos=tp, color=tick_color, width=1.0, antialias=True)
                             self.gl_widget.addItem(ti); self.gl_items.append(ti)
+                            # Skip the first tick label (origin corner) –
+                            # it will be replaced by a consolidated origin label.
+                            if idx_t == 0:
+                                continue
                             # label
                             t = GLTextItem(pos=np.array([pos_n, -5, -5.8], dtype=np.float64),
                                            text=lbl, color=dim_label_color)
@@ -4891,14 +4933,23 @@ class ROARLookupWindow(QWidget):
                         self.gl_widget.addItem(item); self.gl_items.append(item)
 
                         yn, yl = _make_ticks(global_y_min, global_y_max, n_ticks)
-                        for pos_n, lbl in zip(yn, yl):
+                        for idx_t, (pos_n, lbl) in enumerate(zip(yn, yl)):
                             tp = np.array([[-5, pos_n, -5 - tick_len],
                                            [-5, pos_n, -5 + tick_len]], dtype=np.float32)
                             ti = GLLinePlotItem(pos=tp, color=tick_color, width=1.0, antialias=True)
                             self.gl_widget.addItem(ti); self.gl_items.append(ti)
+                            # Skip the first tick label (origin corner)
+                            if idx_t == 0:
+                                continue
                             t = GLTextItem(pos=np.array([-5, pos_n, -5.8], dtype=np.float64),
                                            text=lbl, color=dim_label_color)
                             self.gl_widget.addItem(t); self.gl_items.append(t)
+
+                        # ── Consolidated origin label at the corner where X and Y meet ──
+                        origin_label = f"({xl[0]}, {yl[0]})"
+                        t = GLTextItem(pos=np.array([-5, -5, -5.8], dtype=np.float64),
+                                       text=origin_label, color=dim_label_color)
+                        self.gl_widget.addItem(t); self.gl_items.append(t)
 
                         _a2 = all_3d_results[0][4]
                         t = GLTextItem(pos=np.array([-5, 0, -7.0], dtype=np.float64),
@@ -5120,6 +5171,11 @@ class ROARGraphGrid(QWidget):
 
         layout.addWidget(self.grid_splitter)
 
+        # Now that all windows exist, initialize their attachment checkboxes
+        # so the lock controls reflect the correct enabled state.
+        for window in self.lookup_windows:
+            window.update_attachment_checkboxes()
+
     def keyPressEvent(self, event):
         """Handle keyboard events for the graph grid"""
         if event.key() == Qt.Key.Key_Escape:
@@ -5159,6 +5215,14 @@ class ROARGraphGrid(QWidget):
                         tb.startup = False
                     lookup_window.update_expression_symbols(expr_symbols)
                     lookup_window.update_combobox_items()
+                except Exception:
+                    pass
+
+            # Update attachment checkboxes on all windows now that combos
+            # are populated, so the lock controls reflect matching X axes.
+            for lookup_window in self.lookup_windows:
+                try:
+                    lookup_window.update_attachment_checkboxes()
                 except Exception:
                     pass
         except Exception:
