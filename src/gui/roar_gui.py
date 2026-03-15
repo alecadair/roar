@@ -1564,7 +1564,7 @@ class ROARApp(QMainWindow):
                     if hasattr(self, 'python_dock') else False,
                 'floating': self.python_dock.isFloating()
                     if hasattr(self, 'python_dock') else False,
-                'area': int(self.dockWidgetArea(self.python_dock))
+                'area': self.dockWidgetArea(self.python_dock).value
                     if hasattr(self, 'python_dock') else 2,  # 2 = Right
             },
 
