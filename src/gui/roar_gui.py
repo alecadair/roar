@@ -743,7 +743,8 @@ class ROARHeader(QWidget):
         layout.setSpacing(2)  # Slight spacing between buttons
 
         # Paths to images (Make sure ROAR_HOME is defined correctly)
-        self.logo_image_path = ROAR_HOME + "/images/png/ROAR_LOGO_W100_H282_px.png"
+        self.logo_image_path = ROAR_HOME + "/images/png/ROAR_LOGO.png"
+
         self.graph_calc_icon_path = ROAR_HOME + "/images/png/graph_icon_big.png"
         self.layout_icon_path = ROAR_HOME + "/images/png/layout_icon.png"
 
