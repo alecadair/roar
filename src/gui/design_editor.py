@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QMessageBox, QSplitter, QGroupBox,
-    QDialog, QRadioButton, QCheckBox, QLabel, QProgressDialog
+    QDialog, QRadioButton, QCheckBox, QLabel, QProgressDialog, QMenu
 )
+from PyQt6.QtGui import QAction
 from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon, QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 import json
@@ -37,10 +38,10 @@ class DeviceCornerSelectorWindow(QDialog):
     def setup_ui(self):
         layout = QVBoxLayout(self)
 
-        # Info label
-        info_label = QLabel(f"Select corners for device: <b>{self.device_name}</b>")
-        info_label.setStyleSheet("padding: 5px; background-color: #f0f0f0; border-radius: 3px;")
-        layout.addWidget(info_label)
+        # Info label (stored as instance attribute so switch_device can update it)
+        self.info_label = QLabel(f"Select corners for device: <b>{self.device_name}</b>")
+        self.info_label.setStyleSheet("padding: 5px; background-color: #f0f0f0; border-radius: 3px;")
+        layout.addWidget(self.info_label)
 
         # Create or reference the tech browser
         self.tech_browser = None
@@ -224,6 +225,45 @@ class DeviceCornerSelectorWindow(QDialog):
 
         return corner_info_list
 
+    def switch_device(self, device_name, current_corners=None):
+        """Switch this window to target a different device instance.
+
+        Updates the title, info label, and tech-browser check-state to reflect
+        the new device without creating a new window.
+        """
+        self.device_name = device_name
+        self.current_corners = current_corners
+        self.selected_corners = current_corners
+
+        # Update UI text
+        self.setWindowTitle(f"Select Corners for {device_name}")
+        if hasattr(self, 'info_label') and self.info_label:
+            self.info_label.setText(f"Select corners for device: <b>{device_name}</b>")
+
+        # Update tech browser check-state
+        if self.tech_browser:
+            # First uncheck everything
+            try:
+                if hasattr(self.tech_browser, 'tree'):
+                    tree = self.tech_browser.tree
+                    root = tree.invisibleRootItem()
+
+                    def _uncheck_all(parent_item):
+                        for i in range(parent_item.childCount()):
+                            child = parent_item.child(i)
+                            if child.childCount() == 0:
+                                child.setCheckState(0, Qt.CheckState.Unchecked)
+                            else:
+                                _uncheck_all(child)
+
+                    _uncheck_all(root)
+            except Exception:
+                pass
+
+            # Then apply the new corners if any
+            if current_corners:
+                self.apply_corner_selection_to_browser(current_corners)
+
     def apply_selection(self):
         """Apply the current corner selection."""
         # Get checked corners from tech browser (now returns list of dicts with path info)
@@ -376,7 +416,7 @@ class BaseEditor(QWidget):
         # Set initial column widths for better fit
         if "Instance" in columns:
             idx = columns.index("Instance")
-            self.tree.header().resizeSection(idx, 55)  # Very narrow - just fits "Instance"
+            self.tree.header().resizeSection(idx, 70)  # Wide enough to show full "Instance" header
         if "kgm" in columns:
             idx = columns.index("kgm")
             self.tree.header().resizeSection(idx, 45)  # Compact for kgm
@@ -448,6 +488,12 @@ class BaseEditor(QWidget):
         # Connect itemClicked signal for corner selection
         if self.corners_column_index >= 0:
             self.tree.itemClicked.connect(self.on_tree_item_clicked)
+
+        # Enable right-click context menu for copy/paste corners
+        if self.corners_column_index >= 0:
+            self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            self.tree.customContextMenuRequested.connect(self._on_tree_context_menu)
+            self._copied_corners_data = None  # Clipboard for corners copy/paste
 
         container_layout.addWidget(self.tree)
 
@@ -589,6 +635,46 @@ class BaseEditor(QWidget):
         if column == self.corners_column_index and self.enable_corners:
             self.edit_device_corners(item)
 
+    def _on_tree_context_menu(self, pos):
+        """Show right-click context menu with Copy/Paste Corners when clicking the Corners column."""
+        item = self.tree.itemAt(pos)
+        if item is None:
+            return
+
+        # Determine which column was clicked
+        header = self.tree.header()
+        x = pos.x()
+        column = header.logicalIndexAt(x)
+        if column != self.corners_column_index:
+            return
+
+        menu = QMenu(self)
+
+        copy_action = QAction("Copy Corners", self)
+        copy_action.triggered.connect(lambda: self._copy_corners(item))
+        menu.addAction(copy_action)
+
+        paste_action = QAction("Paste Corners", self)
+        paste_action.setEnabled(self._copied_corners_data is not None)
+        paste_action.triggered.connect(lambda: self._paste_corners(item))
+        menu.addAction(paste_action)
+
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _copy_corners(self, item):
+        """Copy the corners data from the given item to the internal clipboard."""
+        import copy as _copy
+        corners_data = item.data(self.corners_column_index, Qt.ItemDataRole.UserRole)
+        # Deep-copy so later mutations don't affect the clipboard
+        self._copied_corners_data = _copy.deepcopy(corners_data)
+
+    def _paste_corners(self, item):
+        """Paste the previously copied corners data onto the given item."""
+        if self._copied_corners_data is None:
+            return
+        import copy as _copy
+        self.update_corners_display(item, _copy.deepcopy(self._copied_corners_data))
+
     def get_available_corners(self):
         """Get list of available corners from tech browser."""
         tech_browser = self.tech_browser
@@ -634,7 +720,11 @@ class BaseEditor(QWidget):
         return []
 
     def edit_device_corners(self, item):
-        """Open tech browser window for selecting corners for this device."""
+        """Open tech browser window for selecting corners for this device.
+
+        Only one corner-selector window is kept open at a time.  If the window
+        is already visible it is reused for the newly-clicked device.
+        """
         device_name = item.text(0)  # Get device name from first column
 
         if not device_name:
@@ -667,20 +757,39 @@ class BaseEditor(QWidget):
         # Get current corners for this item
         current_corners = item.data(self.corners_column_index, Qt.ItemDataRole.UserRole)
 
-        # Check if we already have a window open for this device
-        window_key = f"corner_selector_{device_name}"
-        if not hasattr(self, '_corner_selector_windows'):
-            self._corner_selector_windows = {}
+        # ------------------------------------------------------------------
+        # Single shared window approach: reuse the existing window if open
+        # ------------------------------------------------------------------
+        if not hasattr(self, '_corner_selector_window'):
+            self._corner_selector_window = None
+        if not hasattr(self, '_corner_selector_connection'):
+            self._corner_selector_connection = None
 
-        if window_key in self._corner_selector_windows:
-            # Reuse existing window
-            window = self._corner_selector_windows[window_key]
-            if window and window.isVisible():
-                window.raise_()
-                window.activateWindow()
-                return
+        window = self._corner_selector_window
 
-        # Create new corner selector window
+        if window is not None and window.isVisible():
+            # Disconnect the previous Apply signal so it no longer targets the
+            # old item, then reconnect for the new item.
+            if self._corner_selector_connection is not None:
+                try:
+                    window.corners_selected.disconnect(self._corner_selector_connection)
+                except Exception:
+                    pass
+
+            window.switch_device(device_name, current_corners)
+
+            # Reconnect signal to the new item
+            def on_corners_selected(corners, _item=item):
+                self.update_corners_display(_item, corners)
+
+            self._corner_selector_connection = on_corners_selected
+            window.corners_selected.connect(on_corners_selected)
+
+            window.raise_()
+            window.activateWindow()
+            return
+
+        # Create a new corner selector window
         window = DeviceCornerSelectorWindow(
             self,
             device_name,
@@ -689,18 +798,19 @@ class BaseEditor(QWidget):
         )
 
         # Connect the signal to update the display when Apply is clicked
-        def on_corners_selected(corners):
-            self.update_corners_display(item, corners)
+        def on_corners_selected(corners, _item=item):
+            self.update_corners_display(_item, corners)
 
+        self._corner_selector_connection = on_corners_selected
         window.corners_selected.connect(on_corners_selected)
 
         # Store window reference
-        self._corner_selector_windows[window_key] = window
+        self._corner_selector_window = window
 
         # Clean up when window is closed
         def on_window_closed():
-            if window_key in self._corner_selector_windows:
-                del self._corner_selector_windows[window_key]
+            self._corner_selector_window = None
+            self._corner_selector_connection = None
 
         window.finished.connect(on_window_closed)
 
@@ -1168,9 +1278,10 @@ class ROAREditorWindow(QWidget):
         button_layout = QHBoxLayout()
         self.refresh_button = QPushButton("🔄")
         self.refresh_button.setToolTip("Refresh all Design Eqs graphs - re-evaluate equations and constraints")
-        self.refresh_button.setFixedSize(28, 24)  # Match height of other buttons
         self.refresh_button.clicked.connect(self.on_refresh_clicked)
         self.save_button = QPushButton("Save")
+        # Match refresh button size exactly to the Save button's natural size
+        self.refresh_button.setFixedSize(28, self.save_button.sizeHint().height())
         self.open_editor_button = QPushButton("Open Editor")
         self.corner_mapping_button = QPushButton("Corner Map")
         self.corner_mapping_button.setToolTip(
