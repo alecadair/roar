@@ -112,11 +112,16 @@ class DeviceCornerSelectorWindow(QDialog):
         self.clear_button.setToolTip("Use global (main tech browser) selection instead")
         self.clear_button.clicked.connect(self.apply_global)
 
+        self.clear_all_button = QPushButton("Clear All")
+        self.clear_all_button.setToolTip("Uncheck all corners in the tech browser")
+        self.clear_all_button.clicked.connect(self.clear_all_selections)
+
         self.close_button = QPushButton("Close")
         self.close_button.clicked.connect(self.close)
 
         button_layout.addWidget(self.apply_button)
         button_layout.addWidget(self.clear_button)
+        button_layout.addWidget(self.clear_all_button)
         button_layout.addStretch()
         button_layout.addWidget(self.close_button)
 
@@ -224,6 +229,32 @@ class DeviceCornerSelectorWindow(QDialog):
             traceback.print_exc()
 
         return corner_info_list
+
+    def clear_all_selections(self):
+        """Uncheck all items in the tech browser tree."""
+        if not self.tech_browser or not hasattr(self.tech_browser, 'tree'):
+            return
+
+        tree = self.tech_browser.tree
+        # Block signals to avoid triggering callbacks for every item change
+        tree.blockSignals(True)
+        try:
+            root = tree.invisibleRootItem()
+
+            def _uncheck_all(parent_item):
+                for i in range(parent_item.childCount()):
+                    child = parent_item.child(i)
+                    child.setCheckState(0, Qt.CheckState.Unchecked)
+                    if child.childCount() > 0:
+                        _uncheck_all(child)
+
+            _uncheck_all(root)
+        finally:
+            tree.blockSignals(False)
+            try:
+                tree.viewport().update()
+            except Exception:
+                pass
 
     def switch_device(self, device_name, current_corners=None):
         """Switch this window to target a different device instance.
