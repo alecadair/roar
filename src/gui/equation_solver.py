@@ -311,13 +311,224 @@ class ROAREquationSolver:
             return None
         # Topological sort
         sorted_equations = self.topological_sort(dependency_graph)
-        symbols_to_add_strings = []
-        for sym in symbols_to_add:
-            symbols_to_add_strings.append(sym)
         if sorted_equations is None:
             return None
         sorted_equations.reverse()  # Process from the bottom up
-        results = {}
+        return self._evaluate_pass(sorted_equations, symbols_to_add, corner_dfs)
+
+    # ------------------------------------------------------------------
+    # Iterative convergence solver
+    # ------------------------------------------------------------------
+
+    def find_cycle_variables(self):
+        """Return the set of variable names that participate in dependency cycles.
+
+        Uses Tarjan's algorithm to find strongly-connected components (SCCs)
+        of size > 1.  Variables in those SCCs are the ones that need initial
+        guesses for iterative solving.
+        """
+        graph = self.build_dependency_graph()
+        # Only consider edges to nodes that have equations defined
+        eq_names = set(self.equations.keys())
+
+        index_counter = [0]
+        stack = []
+        on_stack = set()
+        index_map = {}
+        lowlink = {}
+        sccs = []
+
+        def strongconnect(v):
+            index_map[v] = index_counter[0]
+            lowlink[v] = index_counter[0]
+            index_counter[0] += 1
+            stack.append(v)
+            on_stack.add(v)
+
+            for w in graph.get(v, set()):
+                if w not in eq_names:
+                    continue
+                if w not in index_map:
+                    strongconnect(w)
+                    lowlink[v] = min(lowlink[v], lowlink[w])
+                elif w in on_stack:
+                    lowlink[v] = min(lowlink[v], index_map[w])
+
+            if lowlink[v] == index_map[v]:
+                scc = []
+                while True:
+                    w = stack.pop()
+                    on_stack.discard(w)
+                    scc.append(w)
+                    if w == v:
+                        break
+                if len(scc) > 1:
+                    sccs.append(scc)
+
+        for node in eq_names:
+            if node not in index_map:
+                strongconnect(node)
+
+        cycle_vars = set()
+        for scc in sccs:
+            cycle_vars.update(scc)
+        return cycle_vars
+
+    def evaluate_equations_iterative(self, symbols_to_add, corner_dfs=None,
+                                     initial_guesses=None, max_iterations=50,
+                                     tolerance=1e-6, damping=1.0):
+        """Iteratively evaluate equations that contain dependency cycles.
+
+        For each iteration the cycle variables are seeded with their previous
+        values (or initial guesses on the first pass) and the remaining DAG is
+        evaluated normally.  Iteration continues until the maximum relative
+        change in all cycle variables falls below *tolerance*, or
+        *max_iterations* is reached.
+
+        Args:
+            symbols_to_add: list of symbol names to include in the output.
+            corner_dfs: corner DataFrames (dict or list).
+            initial_guesses: dict mapping cycle-variable names to scalar or
+                array initial values.  Variables not listed default to 0.
+            max_iterations: upper bound on iterations.
+            tolerance: convergence threshold (max relative change).
+            damping: relaxation factor in (0, 1].  1.0 = no damping (pure
+                fixed-point).  Lower values blend old and new:
+                ``x = damping * x_new + (1 - damping) * x_old``.
+
+        Returns:
+            tuple: ``(results_dict, info_dict)`` where *info_dict* contains
+            ``{'converged': bool, 'iterations': int,
+               'max_rel_change': float, 'cycle_variables': set}``.
+            Returns ``(None, info_dict)`` on failure.
+        """
+        dependency_graph = self.build_dependency_graph()
+        cycle_vars = self.find_cycle_variables()
+
+        if not cycle_vars:
+            # No cycles — fall back to single-pass
+            result = self.evaluate_equations(symbols_to_add, corner_dfs)
+            info = {'converged': True, 'iterations': 1,
+                    'max_rel_change': 0.0, 'cycle_variables': set()}
+            return result, info
+
+        debug_print(f"[ITER SOLVER] Cycle variables detected: {cycle_vars}")
+        debug_print(f"[ITER SOLVER] Max iterations={max_iterations}, tol={tolerance}, damping={damping}")
+
+        # Build a modified graph with cycle back-edges removed so topo-sort
+        # succeeds.  The cycle variables will be seeded from previous results.
+        acyclic_graph = defaultdict(set)
+        for node, deps in dependency_graph.items():
+            for dep in deps:
+                # Keep the edge unless it closes a cycle
+                if dep in cycle_vars and node in cycle_vars:
+                    continue  # break back-edge
+                acyclic_graph[node].add(dep)
+        # Ensure all equation nodes appear in the graph even if they have no
+        # remaining edges
+        for name in self.equations:
+            if name not in acyclic_graph:
+                acyclic_graph[name] = set()
+
+        sorted_equations = self.topological_sort(acyclic_graph)
+        if sorted_equations is None:
+            info = {'converged': False, 'iterations': 0,
+                    'max_rel_change': float('inf'), 'cycle_variables': cycle_vars}
+            return None, info
+        sorted_equations.reverse()
+
+        # Seed initial guesses
+        if initial_guesses is None:
+            initial_guesses = {}
+        prev_values = {}
+        for var in cycle_vars:
+            if var in initial_guesses:
+                prev_values[var] = np.atleast_1d(np.asarray(initial_guesses[var], dtype=float))
+            else:
+                prev_values[var] = np.float64(0.0)
+
+        converged = False
+        max_rel_change = float('inf')
+        iteration = 0
+
+        for iteration in range(1, max_iterations + 1):
+            # Inject previous values as seeds
+            seeded_results = dict(prev_values)
+            results = self._evaluate_pass(sorted_equations, symbols_to_add,
+                                          corner_dfs, seeded_results=seeded_results)
+            if results is None:
+                info = {'converged': False, 'iterations': iteration,
+                        'max_rel_change': float('inf'),
+                        'cycle_variables': cycle_vars}
+                return None, info
+
+            # Check convergence on cycle variables
+            max_rel_change = 0.0
+            new_values = {}
+            for var in cycle_vars:
+                new_val = results.get(var)
+                old_val = prev_values.get(var)
+                if new_val is None:
+                    continue
+
+                new_arr = np.atleast_1d(np.asarray(new_val, dtype=float)).ravel()
+                old_arr = np.atleast_1d(np.asarray(old_val, dtype=float)).ravel()
+
+                # Broadcast to same size if needed (scalar vs array)
+                if old_arr.size == 1 and new_arr.size > 1:
+                    old_arr = np.full_like(new_arr, old_arr[0])
+                elif new_arr.size == 1 and old_arr.size > 1:
+                    new_arr = np.full_like(old_arr, new_arr[0])
+
+                # Apply damping
+                if damping < 1.0 and old_arr.shape == new_arr.shape:
+                    new_arr = damping * new_arr + (1.0 - damping) * old_arr
+
+                # Relative change
+                denom = np.maximum(np.abs(old_arr), 1e-30)
+                rel_change = np.max(np.abs(new_arr - old_arr) / denom)
+                max_rel_change = max(max_rel_change, rel_change)
+                new_values[var] = new_arr
+
+                # Write damped value back into results for downstream use
+                if damping < 1.0:
+                    results[var] = new_arr
+
+            debug_print(f"[ITER SOLVER] Iteration {iteration}: max_rel_change={max_rel_change:.3e}")
+
+            prev_values.update(new_values)
+
+            if max_rel_change < tolerance:
+                converged = True
+                debug_print(f"[ITER SOLVER] Converged after {iteration} iteration(s)")
+                break
+
+        info = {'converged': converged, 'iterations': iteration,
+                'max_rel_change': max_rel_change, 'cycle_variables': cycle_vars}
+        return results, info
+
+    # ------------------------------------------------------------------
+    # Core single-pass evaluation (shared by evaluate_equations and
+    # evaluate_equations_iterative)
+    # ------------------------------------------------------------------
+
+    def _evaluate_pass(self, sorted_equations, symbols_to_add, corner_dfs=None,
+                       seeded_results=None):
+        """Execute one evaluation pass over *sorted_equations*.
+
+        This is the inner loop extracted from the original
+        ``evaluate_equations`` so that both single-pass and iterative modes
+        share the same logic.
+
+        Args:
+            sorted_equations: list of equation names in evaluation order.
+            symbols_to_add: list of symbol names to write back into corner DFs.
+            corner_dfs: corner DataFrames (dict or list).
+            seeded_results: optional dict of pre-seeded variable values (used
+                by the iterative solver to inject previous-iteration results).
+        """
+        symbols_to_add_strings = list(symbols_to_add)
+        results = dict(seeded_results) if seeded_results else {}
         for equation in sorted_equations:
             # Check if this is a lookup by examining the equation value
             equation_value = self.equations.get(equation)

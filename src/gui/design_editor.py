@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QMessageBox, QSplitter, QGroupBox,
-    QDialog, QRadioButton, QCheckBox, QLabel, QProgressDialog, QMenu
+    QDialog, QRadioButton, QCheckBox, QLabel, QProgressDialog, QMenu,
+    QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem
 )
 from PyQt6.QtGui import QAction
 from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon, QFont
@@ -345,6 +346,233 @@ class DeviceCornerSelectorWindow(QDialog):
                 pass
 
         print(msg)
+
+
+class IterativeSolverDialog(QDialog):
+    """Standalone dialog for configuring the iterative equation solver.
+
+    Opened from the Solver menu.  Settings are persisted via
+    ``get_settings()`` / ``set_settings()`` and survive across
+    open/close cycles (the dialog is hidden, not destroyed).
+    """
+
+    def __init__(self, parent=None, top_level_app=None):
+        super().__init__(parent)
+        self.top_level_app = top_level_app
+        self.setWindowTitle("Iterative Solver Settings")
+        self.setMinimumSize(420, 340)
+        self.setModal(False)
+
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+
+        # ── Enable checkbox ───────────────────────────────────────────
+        self.enable_checkbox = QCheckBox("Enable Iterative Solver")
+        self.enable_checkbox.setToolTip(
+            "When enabled, the equation solver will iterate to resolve\n"
+            "dependency cycles (e.g. inter-stage loading in multi-stage designs)."
+        )
+        layout.addWidget(self.enable_checkbox)
+
+        # ── Parameters row ────────────────────────────────────────────
+        params_group = QGroupBox("Parameters")
+        params_layout = QHBoxLayout()
+
+        params_layout.addWidget(QLabel("Max Iter:"))
+        self.iter_max_spin = QSpinBox()
+        self.iter_max_spin.setRange(1, 10000)
+        self.iter_max_spin.setValue(50)
+        self.iter_max_spin.setToolTip("Maximum number of iterations before stopping")
+        params_layout.addWidget(self.iter_max_spin)
+
+        params_layout.addWidget(QLabel("Tol:"))
+        self.iter_tol_spin = QDoubleSpinBox()
+        self.iter_tol_spin.setRange(1e-15, 1.0)
+        self.iter_tol_spin.setDecimals(8)
+        self.iter_tol_spin.setValue(1e-6)
+        self.iter_tol_spin.setToolTip("Convergence tolerance (max relative change)")
+        params_layout.addWidget(self.iter_tol_spin)
+
+        params_layout.addWidget(QLabel("Damp:"))
+        self.iter_damp_spin = QDoubleSpinBox()
+        self.iter_damp_spin.setRange(0.01, 1.0)
+        self.iter_damp_spin.setDecimals(2)
+        self.iter_damp_spin.setSingleStep(0.05)
+        self.iter_damp_spin.setValue(1.0)
+        self.iter_damp_spin.setToolTip(
+            "Damping/relaxation factor (1.0 = no damping).\n"
+            "Lower values blend old and new results for stability:\n"
+            "  x = damp * x_new + (1 - damp) * x_old"
+        )
+        params_layout.addWidget(self.iter_damp_spin)
+        params_group.setLayout(params_layout)
+        layout.addWidget(params_group)
+
+        # ── Detect cycles ─────────────────────────────────────────────
+        cycle_row = QHBoxLayout()
+        self.detect_cycles_button = QPushButton("Detect Cycles")
+        self.detect_cycles_button.setToolTip(
+            "Analyze expressions and auto-populate the initial-guess table\n"
+            "with variables that form dependency cycles."
+        )
+        self.detect_cycles_button.clicked.connect(self._detect_cycle_variables)
+        cycle_row.addWidget(self.detect_cycles_button)
+        self.cycle_info_label = QLabel("")
+        self.cycle_info_label.setStyleSheet("color: gray; font-style: italic;")
+        cycle_row.addWidget(self.cycle_info_label)
+        cycle_row.addStretch()
+        layout.addLayout(cycle_row)
+
+        # ── Initial-guess table ───────────────────────────────────────
+        guess_group = QGroupBox("Initial Guesses")
+        guess_layout = QVBoxLayout()
+        self.iter_guess_table = QTableWidget(0, 2)
+        self.iter_guess_table.setHorizontalHeaderLabels(["Symbol", "Initial Value"])
+        self.iter_guess_table.horizontalHeader().setStretchLastSection(True)
+        self.iter_guess_table.setToolTip(
+            "Initial guesses for cycle variables.\n"
+            "Click 'Detect Cycles' to auto-populate, then edit values."
+        )
+        guess_layout.addWidget(self.iter_guess_table)
+
+        btn_row = QHBoxLayout()
+        add_btn = QPushButton("+")
+        add_btn.setToolTip("Add a row to the initial-guess table")
+        add_btn.clicked.connect(self._add_guess_row)
+        remove_btn = QPushButton("−")
+        remove_btn.setToolTip("Remove the selected row from the initial-guess table")
+        remove_btn.clicked.connect(self._remove_guess_row)
+        btn_row.addWidget(add_btn)
+        btn_row.addWidget(remove_btn)
+        btn_row.addStretch()
+        guess_layout.addLayout(btn_row)
+        guess_group.setLayout(guess_layout)
+        layout.addWidget(guess_group)
+
+        # ── Close button ──────────────────────────────────────────────
+        close_row = QHBoxLayout()
+        close_row.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.hide)
+        close_row.addWidget(close_btn)
+        layout.addLayout(close_row)
+
+    # ── Public API ────────────────────────────────────────────────────
+
+    @property
+    def iterative_enabled(self):
+        return self.enable_checkbox.isChecked()
+
+    def get_settings(self):
+        """Return a dict with all iterative-solver settings."""
+        guesses = {}
+        for row in range(self.iter_guess_table.rowCount()):
+            sym_item = self.iter_guess_table.item(row, 0)
+            val_item = self.iter_guess_table.item(row, 1)
+            if sym_item and val_item:
+                sym = sym_item.text().strip()
+                try:
+                    val = float(val_item.text().strip())
+                except (ValueError, TypeError):
+                    val = 0.0
+                if sym:
+                    guesses[sym] = val
+        return {
+            'enabled': self.enable_checkbox.isChecked(),
+            'max_iterations': self.iter_max_spin.value(),
+            'tolerance': self.iter_tol_spin.value(),
+            'damping': self.iter_damp_spin.value(),
+            'initial_guesses': guesses,
+        }
+
+    def set_settings(self, data):
+        """Restore settings from a dict (e.g. loaded from JSON)."""
+        if not data:
+            return
+        self.enable_checkbox.setChecked(data.get('enabled', False))
+        self.iter_max_spin.setValue(data.get('max_iterations', 50))
+        self.iter_tol_spin.setValue(data.get('tolerance', 1e-6))
+        self.iter_damp_spin.setValue(data.get('damping', 1.0))
+        guesses = data.get('initial_guesses', {})
+        self.iter_guess_table.setRowCount(0)
+        for sym, val in guesses.items():
+            row = self.iter_guess_table.rowCount()
+            self.iter_guess_table.insertRow(row)
+            self.iter_guess_table.setItem(row, 0, QTableWidgetItem(str(sym)))
+            self.iter_guess_table.setItem(row, 1, QTableWidgetItem(str(val)))
+
+    # ── Private helpers ───────────────────────────────────────────────
+
+    def _detect_cycle_variables(self):
+        """Analyze current expressions, find cycle variables, and populate the guess table."""
+        try:
+            from .equation_solver import ROAREquationSolver
+        except ImportError:
+            try:
+                from equation_solver import ROAREquationSolver
+            except ImportError:
+                self.cycle_info_label.setText("Equation solver not available")
+                return
+
+        editor_window = None
+        if self.top_level_app and hasattr(self.top_level_app, 'editor_window'):
+            editor_window = self.top_level_app.editor_window
+        if not editor_window:
+            self.cycle_info_label.setText("No design editor available")
+            return
+
+        expressions, constraints = editor_window.get_expressions_and_constraints()
+        if not expressions:
+            self.cycle_info_label.setText("No expressions defined")
+            return
+
+        solver = ROAREquationSolver(top_level_app=self.top_level_app)
+        for sym, expr in expressions.items():
+            solver.add_equation(sym, expr)
+        for sym, expr in constraints.items():
+            solver.add_equation(sym, expr)
+
+        cycle_vars = solver.find_cycle_variables()
+        if not cycle_vars:
+            self.cycle_info_label.setText("No cycles detected — single-pass is sufficient")
+            return
+
+        self.cycle_info_label.setText(f"Found {len(cycle_vars)} cycle variable(s)")
+
+        # Preserve any existing guesses the user has already entered
+        existing = {}
+        for row in range(self.iter_guess_table.rowCount()):
+            sym_item = self.iter_guess_table.item(row, 0)
+            val_item = self.iter_guess_table.item(row, 1)
+            if sym_item:
+                existing[sym_item.text().strip()] = val_item.text().strip() if val_item else "0"
+
+        # Rebuild table with cycle variables
+        self.iter_guess_table.setRowCount(0)
+        for var in sorted(cycle_vars):
+            row = self.iter_guess_table.rowCount()
+            self.iter_guess_table.insertRow(row)
+            self.iter_guess_table.setItem(row, 0, QTableWidgetItem(var))
+            init_val = existing.get(var, "0")
+            self.iter_guess_table.setItem(row, 1, QTableWidgetItem(init_val))
+
+    def _add_guess_row(self):
+        row = self.iter_guess_table.rowCount()
+        self.iter_guess_table.insertRow(row)
+        self.iter_guess_table.setItem(row, 0, QTableWidgetItem(""))
+        self.iter_guess_table.setItem(row, 1, QTableWidgetItem("0"))
+
+    def _remove_guess_row(self):
+        rows = set(idx.row() for idx in self.iter_guess_table.selectedIndexes())
+        for row in sorted(rows, reverse=True):
+            self.iter_guess_table.removeRow(row)
+
+    def closeEvent(self, event):
+        """Hide instead of destroy so settings are preserved."""
+        event.ignore()
+        self.hide()
 
 
 class BaseEditor(QWidget):
@@ -1334,6 +1562,9 @@ class ROAREditorWindow(QWidget):
 
         layout.addLayout(button_layout)
 
+        # Iterative solver dialog (created on demand from the Solver menu)
+        self._iterative_solver_dialog = None
+
         # Connect signals for expression changes
         self.expression_editor.tree.itemChanged.connect(self.on_expressions_changed)
         self.expression_editor.add_button.clicked.connect(self.on_expressions_changed)
@@ -1362,6 +1593,37 @@ class ROAREditorWindow(QWidget):
     def _emit_expressions_changed(self):
         """Actually emit the expressions_changed signal after debounce delay."""
         self.expressions_changed.emit(self.get_expression_symbols())
+
+    # ── Iterative solver helpers ──────────────────────────────────────
+
+    def _get_or_create_iterative_dialog(self):
+        """Return the iterative solver dialog, creating it if needed."""
+        if self._iterative_solver_dialog is None:
+            self._iterative_solver_dialog = IterativeSolverDialog(
+                parent=None, top_level_app=self.top_level_app)
+        return self._iterative_solver_dialog
+
+    def show_iterative_solver_dialog(self):
+        """Show (or raise) the iterative solver settings dialog."""
+        dlg = self._get_or_create_iterative_dialog()
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+
+    @property
+    def iterative_enabled(self):
+        """Whether the iterative solver is enabled."""
+        if self._iterative_solver_dialog is not None:
+            return self._iterative_solver_dialog.iterative_enabled
+        return False
+
+    def get_iterative_settings(self):
+        """Return a dict with the current iterative-solver settings."""
+        if self._iterative_solver_dialog is not None:
+            return self._iterative_solver_dialog.get_settings()
+        return {'enabled': False, 'max_iterations': 50,
+                'tolerance': 1e-6, 'damping': 1.0, 'initial_guesses': {}}
+
 
     def get_expression_symbols(self):
         symbols = []
@@ -1784,7 +2046,8 @@ class ROAREditorWindow(QWidget):
             data = {
                 "expression_editor": self.expression_editor.get_table_data(),
                 "constraint_editor": self.constraint_editor.get_table_data(),
-                "instance_table": self.instance_table.get_table_data()
+                "instance_table": self.instance_table.get_table_data(),
+                "iterative_solver": self.get_iterative_settings(),
             }
             with open(file_path, "w") as file:
                 json.dump(data, file, indent=4)
@@ -1801,6 +2064,13 @@ class ROAREditorWindow(QWidget):
                 self.expression_editor.load_table_data(data.get("expression_editor", []))
                 self.constraint_editor.load_table_data(data.get("constraint_editor", []))
                 self.instance_table.load_table_data(data.get("instance_table", []))
+
+                # Restore iterative solver settings
+                iter_data = data.get("iterative_solver", {})
+                if iter_data:
+                    dlg = self._get_or_create_iterative_dialog()
+                    dlg.set_settings(iter_data)
+
                 if show_success_message:
                     QMessageBox.information(self, "Success", "Data loaded successfully!")
 

@@ -1412,6 +1412,13 @@ class ROARApp(QMainWindow):
         solver_menu.addSeparator()
         solver_menu.addAction(calculator_action)
         solver_menu.addSeparator()
+
+        iterative_solver_action = QAction("Iterative Solver...", self)
+        iterative_solver_action.setToolTip("Open the iterative solver settings dialog")
+        iterative_solver_action.triggered.connect(self._show_iterative_solver_dialog)
+        solver_menu.addAction(iterative_solver_action)
+
+        solver_menu.addSeparator()
         solver_menu.addAction(solver_prefs_action)
 
         # ----- WINDOW MENU -----
@@ -1581,11 +1588,17 @@ class ROARApp(QMainWindow):
     def _capture_design_editor_state(self):
         """Capture the design editor state."""
         try:
-            return {
+            state = {
                 'expression_editor': self.editor_window.expression_editor.get_table_data(),
                 'constraint_editor': self.editor_window.constraint_editor.get_table_data(),
                 'instance_table': self.editor_window.instance_table.get_table_data(),
             }
+            # Capture iterative solver settings if available
+            try:
+                state['iterative_solver'] = self.editor_window.get_iterative_settings()
+            except Exception:
+                pass
+            return state
         except Exception as e:
             debug_print(f"[SAVE STATE] Error capturing design editor state: {e}")
             return {}
@@ -1833,6 +1846,15 @@ class ROARApp(QMainWindow):
                 self.editor_window.constraint_editor.load_table_data(state['constraint_editor'])
             if 'instance_table' in state:
                 self.editor_window.instance_table.load_table_data(state['instance_table'])
+            # Restore iterative solver settings
+            iter_data = state.get('iterative_solver', {})
+            if iter_data:
+                try:
+                    ew = self.editor_window
+                    dlg = ew._get_or_create_iterative_dialog()
+                    dlg.set_settings(iter_data)
+                except Exception as e2:
+                    debug_print(f"[RESTORE STATE] Error restoring iterative solver settings: {e2}")
             # Don't emit signal here - let _restore_graph_grid_state handle updates
             # This prevents double-updating when restoring full app state
         except Exception as e:
@@ -2138,6 +2160,11 @@ class ROARApp(QMainWindow):
     def stop_solver(self):
         """Placeholder function for stopping solver."""
         QMessageBox.warning(self, "Stop Solver", "Solver stopped.")
+
+    def _show_iterative_solver_dialog(self):
+        """Open the iterative solver settings dialog via the design editor."""
+        if hasattr(self, 'editor_window') and self.editor_window is not None:
+            self.editor_window.show_iterative_solver_dialog()
 
     def show_calculator(self):
         """Show the Calculator dialog with available math functions."""

@@ -1030,11 +1030,16 @@ class EngSpinBox(QDoubleSpinBox):
             fm = self.fontMetrics()
             candidates = [format_eng(self.minimum()), format_eng(self.maximum()), format_eng(self.value())]
             candidates.append('-1.00e-12')
-            widest = max((fm.horizontalAdvance(str(t)) for t in candidates), default=80)
+            widest = max((fm.horizontalAdvance(str(t)) for t in candidates), default=60)
             base = super().sizeHint()
-            return QSize(max(base.width(), widest + 40), base.height())
+            # Cap at a reasonable width so the controls strip stays compact
+            return QSize(min(max(base.width(), widest + 20), 120), base.height())
         except Exception:
             return super().sizeHint()
+
+    def minimumSizeHint(self):
+        base = super().minimumSizeHint()
+        return QSize(50, base.height())
 
 
 class ROARPlotWidget(pg.PlotWidget):
@@ -2560,11 +2565,10 @@ class ROARLookupWindow(QWidget):
         # Keys: True (Device Params), False (Design Eqs)
         self._mode_state_cache = {True: None, False: None}
 
-        # Create the main layout and restore moderate margins so the rest of the app spacing is preserved
+        # Create the main layout with tight margins to keep windows compact
         self.main_layout = QVBoxLayout(self)
-        # Use comfortable default margins so other UI areas don't appear too tight
-        self.main_layout.setContentsMargins(6, 6, 6, 6)
-        self.main_layout.setSpacing(6)
+        self.main_layout.setContentsMargins(2, 2, 2, 2)
+        self.main_layout.setSpacing(2)
         self.setLayout(self.main_layout)
 
         # Create the horizontal splitter for tech browser + controls (left) and graphing window (right)
@@ -2592,36 +2596,44 @@ class ROARLookupWindow(QWidget):
         self.tech_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.tech_browser.startup = False
 
-        # Create a container for control widgets and use moderate internal spacing
-        self.controls_container = QWidget()
-        self.controls_layout = QGridLayout(self.controls_container)
-        # Restore moderate internal margins so the rest of the controls keep their original spacing
-        self.controls_layout.setContentsMargins(2, 2, 2, 2)
-        self.controls_layout.setHorizontalSpacing(6)
-        self.controls_layout.setVerticalSpacing(4)
 
-        # Radio buttons for parameter source
+        # Create a container for control widgets — single horizontal row
+        self.controls_container = QWidget()
+        self.controls_layout = QHBoxLayout(self.controls_container)
+        self.controls_layout.setContentsMargins(2, 1, 2, 1)
+        self.controls_layout.setSpacing(2)
+
+        # Radio buttons for parameter source (placed under tech browser, not in controls strip)
         self.radio_device_params = QRadioButton("Device Params")
         self.radio_design_eq = QRadioButton("Design Eqs")
         self.radio_device_params.setChecked(True)
-        # Track current mode on the instance (True = Device Params, False = Design Eqs)
         self.is_device_params_mode = self.radio_device_params.isChecked()
 
-        # store the radio layout on the instance so other methods can reference it
-        self.radio_layout = QHBoxLayout()
-        # Tighten radio layout margins so it doesn't add extra vertical padding
-        self.radio_layout.setContentsMargins(0, 0, 0, 0)
-        self.radio_layout.setSpacing(2)
+        self.radio_container = QWidget()
+        self.radio_layout = QHBoxLayout(self.radio_container)
+        self.radio_layout.setContentsMargins(2, 2, 2, 2)
+        self.radio_layout.setSpacing(4)
         self.radio_layout.addWidget(self.radio_device_params)
         self.radio_layout.addWidget(self.radio_design_eq)
         self.radio_layout.addStretch()
-        self.controls_layout.addLayout(self.radio_layout, 0, 0, 1, 4)
+        self.radio_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         # Connect toggled signal(s) to keep mode variable in sync and update UI
         self.radio_device_params.toggled.connect(self.on_mode_changed)
         self.radio_design_eq.toggled.connect(self.on_mode_changed)
 
-        # Individual Labels, ComboBoxes, and SpinBoxes for X, Y, and Z
+        # Helper: thin vertical separator line
+        self._separators = []
+        def _add_sep():
+            sep = QWidget()
+            sep.setFixedWidth(1)
+            sep.setStyleSheet("background-color: #888;")
+            sep.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+            self.controls_layout.addWidget(sep)
+            self._separators.append(sep)
+
+
+        # ── X axis widgets ──
         self.label_x = QLabel("X:")
         self.combo_x = QComboBox()
         if self.top_level_app:
@@ -2630,14 +2642,15 @@ class ROARLookupWindow(QWidget):
             except Exception:
                 pass
         self.combo_x.setCurrentText("kgm")
-        # Keep combo boxes left-aligned and do not allow them to expand horizontally
         self.combo_x.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        self.spin_x = EngSpinBox()
-        self.spin_x.setMinimumWidth(80)
-        # Make spinboxes expand horizontally to absorb extra space
-        self.spin_x.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.checkbox_logx = QCheckBox("LogX")
+        self.spin_x = EngSpinBox()  # kept for code compatibility, not shown
 
+        self.controls_layout.addWidget(self.label_x)
+        self.controls_layout.addWidget(self.combo_x, 1)
+
+        _add_sep()
+
+        # ── Y axis widgets ──
         self.label_y = QLabel("Y:")
         self.combo_y = QComboBox()
         if self.top_level_app:
@@ -2647,11 +2660,14 @@ class ROARLookupWindow(QWidget):
                 pass
         self.combo_y.setCurrentText("kcgs")
         self.combo_y.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        self.spin_y = EngSpinBox()
-        self.spin_y.setMinimumWidth(80)
-        self.spin_y.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.checkbox_logy = QCheckBox("LogY")
+        self.spin_y = EngSpinBox()  # kept for code compatibility, not shown
 
+        self.controls_layout.addWidget(self.label_y)
+        self.controls_layout.addWidget(self.combo_y, 1)
+
+        _add_sep()
+
+        # ── Z axis widgets ──
         self.label_z = QLabel("Z:")
         self.combo_z = QComboBox()
         if self.top_level_app:
@@ -2661,91 +2677,64 @@ class ROARLookupWindow(QWidget):
                 pass
         self.combo_z.setCurrentText("iden")
         self.combo_z.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        self.spin_z = EngSpinBox()
-        self.spin_z.setMinimumWidth(80)
-        self.spin_z.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.checkbox_logz = QCheckBox("LogZ")
+        self.spin_z = EngSpinBox()  # kept for code compatibility, not shown
+
+        self.controls_layout.addWidget(self.label_z)
+        self.controls_layout.addWidget(self.combo_z, 1)
+
+        # ── Log checkboxes stacked vertically in a compact column ──
+        log_style = "QCheckBox { font-size: 9px; margin: 0px; padding: 0px; spacing: 2px; }"
+        self.checkbox_logx = QCheckBox("lx")
+        self.checkbox_logy = QCheckBox("ly")
+        self.checkbox_logz = QCheckBox("lz")
+        self.checkbox_logx.setToolTip("Log X axis")
+        self.checkbox_logy.setToolTip("Log Y axis")
+        self.checkbox_logz.setToolTip("Log Z axis")
+        self.checkbox_logx.setStyleSheet(log_style)
+        self.checkbox_logy.setStyleSheet(log_style)
+        self.checkbox_logz.setStyleSheet(log_style)
+
+        log_column = QWidget()
+        log_layout = QVBoxLayout(log_column)
+        log_layout.setContentsMargins(0, 0, 0, 0)
+        log_layout.setSpacing(0)
+        log_layout.addWidget(self.checkbox_logx)
+        log_layout.addWidget(self.checkbox_logy)
+        log_layout.addWidget(self.checkbox_logz)
+        log_column.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        self.controls_layout.addWidget(log_column)
 
         # Clear markers / update graph when changing axes
         self.combo_x.currentIndexChanged.connect(self.on_axis_selection_changed)
         self.combo_y.currentIndexChanged.connect(self.on_axis_selection_changed)
         self.combo_z.currentIndexChanged.connect(self.on_axis_selection_changed)
 
-        # Create a single splitter for each row to allow adjusting combo/spin widths
-        # X row splitter
-        self.splitter_x = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter_x.setChildrenCollapsible(False)
-        self.splitter_x.addWidget(self.combo_x)
-        self.splitter_x.addWidget(self.spin_x)
-        self.splitter_x.setSizes([200, 120])  # Favor combobox with more space
+        # Splitters no longer used — keep as None so external refs don't crash
+        self.splitter_x = None
+        self.splitter_y = None
+        self.splitter_z = None
 
-        # Y row splitter
-        self.splitter_y = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter_y.setChildrenCollapsible(False)
-        self.splitter_y.addWidget(self.combo_y)
-        self.splitter_y.addWidget(self.spin_y)
-        self.splitter_y.setSizes([200, 120])  # Favor combobox with more space
+        _add_sep()
 
-        # Z row splitter
-        self.splitter_z = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter_z.setChildrenCollapsible(False)
-        self.splitter_z.addWidget(self.combo_z)
-        self.splitter_z.addWidget(self.spin_z)
-        self.splitter_z.setSizes([200, 120])  # Favor combobox with more space
-
-               # Synchronize all three splitters to move together
-        def sync_all_splitters(moved_splitter):
-            sizes = moved_splitter.sizes()
-            if moved_splitter is not self.splitter_x:
-                self.splitter_x.blockSignals(True)
-                self.splitter_x.setSizes(sizes)
-                self.splitter_x.blockSignals(False)
-            if moved_splitter is not self.splitter_y:
-                self.splitter_y.blockSignals(True)
-                self.splitter_y.setSizes(sizes)
-                self.splitter_y.blockSignals(False)
-            if moved_splitter is not self.splitter_z:
-                self.splitter_z.blockSignals(True)
-                self.splitter_z.setSizes(sizes)
-                self.splitter_z.blockSignals(False)
-
-        self.splitter_x.splitterMoved.connect(lambda: sync_all_splitters(self.splitter_x))
-        self.splitter_y.splitterMoved.connect(lambda: sync_all_splitters(self.splitter_y))
-        self.splitter_z.splitterMoved.connect(lambda: sync_all_splitters(self.splitter_z))
-
-        self.controls_layout.addWidget(self.label_x, 1, 0)
-        self.controls_layout.addWidget(self.splitter_x, 1, 1, 1, 2)  # Span columns 1 and 2
-        self.controls_layout.addWidget(self.checkbox_logx, 1, 3)
-
-        self.controls_layout.addWidget(self.label_y, 2, 0)
-        self.controls_layout.addWidget(self.splitter_y, 2, 1, 1, 2)  # Span columns 1 and 2
-        self.controls_layout.addWidget(self.checkbox_logy, 2, 3)
-
-        self.controls_layout.addWidget(self.label_z, 3, 0)
-        self.controls_layout.addWidget(self.splitter_z, 3, 1, 1, 2)  # Span columns 1 and 2
-        self.controls_layout.addWidget(self.checkbox_logz, 3, 3)
-
-        # Set column stretch factors
-        self.controls_layout.setColumnStretch(0, 0)  # Labels
-        self.controls_layout.setColumnStretch(1, 1)  # Splitters expand
-        self.controls_layout.setColumnStretch(2, 0)  # (Splitters span this column too)
-        self.controls_layout.setColumnStretch(3, 0)  # Checkboxes
-
-        # Individual Checkboxes with specific callbacks
+        # ── Checkboxes and buttons ──
         self.checkbox_3d = QCheckBox("3-D")
         self.checkbox_contour = QCheckBox("Contour")
         self.checkbox_black_bg = QCheckBox("Black BG")
 
-        self.copy_button = QPushButton("Copy")
+        self.copy_button = QPushButton("📋")
+        self.copy_button.setToolTip("Copy")
         self.copy_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.copy_button.setFixedSize(56, 22)
+        self.copy_button.setFixedSize(24, 24)
+        self.copy_button.setStyleSheet("QPushButton { border: 1px solid #888; border-radius: 2px; font-size: 14px; padding: 0px; }")
 
-        self.reset_button = QPushButton("Reset")
+        self.reset_button = QPushButton("↺")
         self.reset_button.setToolTip("Reset this window to its default state\n(does not affect the other mode's saved state)")
         self.reset_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.reset_button.setFixedSize(56, 22)
+        self.reset_button.setFixedSize(24, 24)
+        self.reset_button.setStyleSheet("QPushButton { border: 1px solid #888; border-radius: 2px; font-size: 16px; padding: 0px; }")
 
-        # Settings container
+        # Settings container (lock + 2x2 checkboxes)
         self.settings_container = QWidget()
         s_layout = QHBoxLayout(self.settings_container)
         s_layout.setContentsMargins(0, 0, 0, 0)
@@ -2801,41 +2790,29 @@ class ROARLookupWindow(QWidget):
         s_layout.addWidget(self.settings_grid)
 
         # Expand button
-        self.expand_button = QPushButton("Expand")
+        self.expand_button = QPushButton("⤢")
+        self.expand_button.setToolTip("Expand")
         self.expand_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        try:
-            self.expand_button.setFixedHeight(22)
-        except Exception:
-            pass
-        try:
-            self.expand_button.setStyleSheet("QPushButton { margin: 0px; padding: 0px; }")
-        except Exception:
-            pass
+        self.expand_button.setFixedSize(24, 24)
+        self.expand_button.setStyleSheet("QPushButton { border: 1px solid #888; border-radius: 2px; font-size: 16px; padding: 0px; }")
 
-        self.row5_layout = QHBoxLayout()
-        self.row5_layout.setContentsMargins(0, 0, 0, 0)
-        self.row5_layout.setSpacing(2)
-        self.row5_layout.addWidget(self.checkbox_3d)
-        self.row5_layout.addWidget(self.checkbox_contour)
-        self.row5_layout.addWidget(self.copy_button)
-        self.row5_layout.addWidget(self.reset_button)
-        self.row5_layout.addWidget(self.expand_button)
-        self.row5_layout.addWidget(self.settings_container)
+        self.controls_layout.addWidget(self.checkbox_3d)
+        self.controls_layout.addWidget(self.checkbox_contour)
+        self.controls_layout.addWidget(self.copy_button)
+        self.controls_layout.addWidget(self.reset_button)
+        self.controls_layout.addWidget(self.expand_button)
+        self.controls_layout.addWidget(self.settings_container)
 
-        self.controls_layout.addLayout(self.row5_layout, 5, 0, 1, 4)
+        # Keep row5_layout as None so external refs don't crash
+        self.row5_layout = None
 
-        try:
-            self.controls_layout.setRowMinimumHeight(5, lock_h)
-        except Exception:
-            pass
-
-        # Add widgets to the vertical splitter
-        self.tech_splitter.addWidget(self.tech_browser)  # Tech browser (top)
-        self.tech_splitter.addWidget(self.controls_container)  # Controls (bottom)
-
-        # Adjust stretch factors for tech splitter (tech browser gets more space than controls)
-        self.tech_splitter.setStretchFactor(0, 3)
-        self.tech_splitter.setStretchFactor(1, 1)
+        # Add tech browser and radio buttons to the left-side vertical splitter
+        self.tech_splitter.addWidget(self.tech_browser)
+        self.tech_splitter.addWidget(self.radio_container)
+        # Tech browser gets all stretch; radio buttons stay at their natural height
+        self.tech_splitter.setStretchFactor(0, 1)
+        self.tech_splitter.setStretchFactor(1, 0)
+        self.tech_splitter.setCollapsible(1, False)  # don't let radio buttons collapse
 
         self.plot_widget = ROARPlotWidget(parent_lookup_window=self, top_level_app=self.top_level_app)
 
@@ -2863,8 +2840,13 @@ class ROARLookupWindow(QWidget):
         # Add GL widget (3D) and keep it hidden until used
         if self.gl_widget is not None:
             right_layout.addWidget(self.gl_widget)
-        self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser + controls)
-        self.top_level_pane.addWidget(right_container)  # Right side (graphing window container)
+        # Controls (combos, checkboxes, buttons) live underneath the graph
+        # so they remain visible even when the tech browser is collapsed
+        self.controls_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        right_layout.addWidget(self.controls_container)
+
+        self.top_level_pane.addWidget(self.tech_splitter)  # Left side (tech browser)
+        self.top_level_pane.addWidget(right_container)  # Right side (graph + controls)
 
         # Adjust stretch factors for main splitter (tech section gets less space than graphing)
         self.top_level_pane.setStretchFactor(0, 1)
@@ -2991,22 +2973,9 @@ class ROARLookupWindow(QWidget):
         if is_device_params:
             self.checkbox_3d.hide()
             self.checkbox_contour.hide()
-            try:
-                self.expand_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-                self.expand_button.setMinimumWidth(0)
-                self.expand_button.setMaximumWidth(16777215)
-                self.expand_button.setFixedHeight(22)
-            except Exception:
-                pass
         else:
             self.checkbox_3d.show()
             self.checkbox_contour.show()
-            try:
-                self.expand_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-                self.expand_button.setFixedWidth(56)
-                self.expand_button.setFixedHeight(22)
-            except Exception:
-                pass
 
         self.settings_container.setVisible(True)
 
@@ -3353,7 +3322,7 @@ class ROARLookupWindow(QWidget):
 
     def on_copy_button_clicked(self):
         """Handle copy/paste button click"""
-        if self.copy_button.text() == "Copy":
+        if self.copy_button.text() == "📋":
             # Start copy mode
             self.start_copy_mode()
         else:
@@ -3369,7 +3338,8 @@ class ROARLookupWindow(QWidget):
         if self.graph_grid:
             for window in self.graph_grid.lookup_windows:
                 if window != self:
-                    window.copy_button.setText("Paste")
+                    window.copy_button.setText("📌")
+                    window.copy_button.setToolTip("Paste")
 
         # Set focus to enable escape key handling
         self.setFocus()
@@ -3382,7 +3352,7 @@ class ROARLookupWindow(QWidget):
         # Find the source window (the one still showing "Copy")
         source_window = None
         for window in self.graph_grid.lookup_windows:
-            if window.copy_button.text() == "Copy" and window.copied_state is not None:
+            if window.copy_button.text() == "📋" and window.copied_state is not None:
                 source_window = window
                 break
 
@@ -3397,7 +3367,8 @@ class ROARLookupWindow(QWidget):
         """Cancel copy mode and reset all buttons to 'Copy'"""
         if self.graph_grid:
             for window in self.graph_grid.lookup_windows:
-                window.copy_button.setText("Copy")
+                window.copy_button.setText("📋")
+                window.copy_button.setToolTip("Copy")
                 window.copied_state = None
 
     def capture_state(self):
@@ -3644,7 +3615,7 @@ class ROARLookupWindow(QWidget):
             if self.graph_grid:
                 in_copy_mode = False
                 for window in self.graph_grid.lookup_windows:
-                    if window.copied_state is not None or window.copy_button.text() == "Paste":
+                    if window.copied_state is not None or window.copy_button.text() == "📌":
                         in_copy_mode = True
                         break
 
@@ -3698,7 +3669,8 @@ class ROARLookupWindow(QWidget):
         grid.grid_splitter.setStretchFactor(0, 1)
 
         self.is_expanded = True
-        self.expand_button.setText("Contract")
+        self.expand_button.setText("⤡")
+        self.expand_button.setToolTip("Contract")
 
     def contract_plot(self):
         if not self.graph_grid or not self.original_state:
@@ -3716,7 +3688,8 @@ class ROARLookupWindow(QWidget):
         grid.bottom_splitter.addWidget(grid.lookup_window_4)
 
         self.is_expanded = False
-        self.expand_button.setText("Expand")
+        self.expand_button.setText("⤢")
+        self.expand_button.setToolTip("Expand")
 
     def toggle_dark_mode(self):
         self.is_dark_mode = self.dark_mode_checkbox.isChecked()
@@ -3884,6 +3857,49 @@ class ROARLookupWindow(QWidget):
         except Exception:
             pass
         return []
+
+    def _run_equation_solver(self, equation_solver, symbols_to_add, corner_dfs):
+        """Dispatch equation evaluation to iterative or single-pass mode.
+
+        Checks the design-editor's iterative-solver settings.  If iterative
+        mode is enabled, calls ``evaluate_equations_iterative`` and shows
+        convergence info in the status bar.  Otherwise falls back to the
+        normal single-pass ``evaluate_equations``.
+
+        Returns the *results* dict (or None on failure).
+        """
+        iter_settings = None
+        try:
+            if (self.top_level_app
+                    and hasattr(self.top_level_app, 'editor_window')
+                    and self.top_level_app.editor_window.iterative_enabled):
+                iter_settings = self.top_level_app.editor_window.get_iterative_settings()
+        except Exception:
+            pass
+
+        if iter_settings and iter_settings.get('enabled'):
+            results, info = equation_solver.evaluate_equations_iterative(
+                symbols_to_add=symbols_to_add,
+                corner_dfs=corner_dfs,
+                initial_guesses=iter_settings.get('initial_guesses', {}),
+                max_iterations=iter_settings.get('max_iterations', 50),
+                tolerance=iter_settings.get('tolerance', 1e-6),
+                damping=iter_settings.get('damping', 1.0),
+            )
+            # Show convergence info in status bar
+            try:
+                if self.top_level_app and hasattr(self.top_level_app, 'statusBar') and info:
+                    tag = "✓ Converged" if info.get('converged') else "✗ NOT converged"
+                    msg = (f"Iterative solver: {tag} after "
+                           f"{info.get('iterations', '?')} iteration(s), "
+                           f"max Δ = {info.get('max_rel_change', float('inf')):.3e}")
+                    self.top_level_app.statusBar().showMessage(msg, 8000)
+            except Exception:
+                pass
+            return results
+        else:
+            return equation_solver.evaluate_equations(
+                symbols_to_add=symbols_to_add, corner_dfs=corner_dfs)
 
     def update_graph_from_tech_browser(self, equation_eval=None, skip_post_processing=False):
         if self._is_updating:
@@ -4166,7 +4182,7 @@ class ROARLookupWindow(QWidget):
                         continue  # skip this corner iteration
 
                     # Pass corner_dfs_dict (with per-device namespaced keys)
-                    result_matrix = equation_solver.evaluate_equations(symbols_to_add=[param1, param2], corner_dfs=corner_dfs_dict)
+                    result_matrix = self._run_equation_solver(equation_solver, symbols_to_add=[param1, param2], corner_dfs=corner_dfs_dict)
                     if not result_matrix or not isinstance(result_matrix, dict):
                         msg = f"Design Eq solver returned no results for {param1},{param2}"
                         debug_print(msg)
@@ -4202,7 +4218,7 @@ class ROARLookupWindow(QWidget):
                         constraint_symbols = list(constraints.keys())
                         if constraint_symbols:
                             try:
-                                constraint_results = equation_solver.evaluate_equations(symbols_to_add=constraint_symbols, corner_dfs=corner_dfs_dict)
+                                constraint_results = self._run_equation_solver(equation_solver, symbols_to_add=constraint_symbols, corner_dfs=corner_dfs_dict)
                                 if constraint_results:
                                     # Determine base length safely (handle scalars)
                                     def _safe_length_for_key(key):
@@ -4353,7 +4369,8 @@ class ROARLookupWindow(QWidget):
                                 # 1) Evaluate ALL expressions so every intermediate
                                 #    result is available as a 1-D vector.
                                 all_expression_syms = list(expressions.keys())
-                                result_matrix_all = equation_solver.evaluate_equations(
+                                result_matrix_all = self._run_equation_solver(
+                                    equation_solver,
                                     symbols_to_add=all_expression_syms,
                                     corner_dfs=corner_dfs_dict
                                 )
@@ -5182,7 +5199,7 @@ class ROARGraphGrid(QWidget):
             # Check if any window is in copy mode and cancel it
             in_copy_mode = False
             for window in self.lookup_windows:
-                if window.copied_state is not None or window.copy_button.text() == "Paste":
+                if window.copied_state is not None or window.copy_button.text() == "📌":
                     in_copy_mode = True
                     break
 
