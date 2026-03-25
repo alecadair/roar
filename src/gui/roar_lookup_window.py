@@ -2642,7 +2642,8 @@ class ROARLookupWindow(QWidget):
             except Exception:
                 pass
         self.combo_x.setCurrentText("kgm")
-        self.combo_x.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.combo_x.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.combo_x.setMinimumWidth(60)
         self.spin_x = EngSpinBox()  # kept for code compatibility, not shown
 
         self.controls_layout.addWidget(self.label_x)
@@ -2659,7 +2660,8 @@ class ROARLookupWindow(QWidget):
             except Exception:
                 pass
         self.combo_y.setCurrentText("kcgs")
-        self.combo_y.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.combo_y.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.combo_y.setMinimumWidth(60)
         self.spin_y = EngSpinBox()  # kept for code compatibility, not shown
 
         self.controls_layout.addWidget(self.label_y)
@@ -2676,34 +2678,26 @@ class ROARLookupWindow(QWidget):
             except Exception:
                 pass
         self.combo_z.setCurrentText("iden")
-        self.combo_z.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.combo_z.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.combo_z.setMinimumWidth(60)
         self.spin_z = EngSpinBox()  # kept for code compatibility, not shown
 
         self.controls_layout.addWidget(self.label_z)
         self.controls_layout.addWidget(self.combo_z, 1)
 
-        # ── Log checkboxes stacked vertically in a compact column ──
-        log_style = "QCheckBox { font-size: 9px; margin: 0px; padding: 0px; spacing: 2px; }"
-        self.checkbox_logx = QCheckBox("lx")
-        self.checkbox_logy = QCheckBox("ly")
-        self.checkbox_logz = QCheckBox("lz")
+        # ── Log checkboxes — created here but placed as overlay on the graph later ──
+        log_style = "QCheckBox { font-size: 10px; margin: 0px; padding: 0px; spacing: 3px; }"
+        self.checkbox_logx = QCheckBox("Log X")
+        self.checkbox_logy = QCheckBox("Log Y")
+        self.checkbox_logz = QCheckBox("Log Z")
         self.checkbox_logx.setToolTip("Log X axis")
         self.checkbox_logy.setToolTip("Log Y axis")
         self.checkbox_logz.setToolTip("Log Z axis")
         self.checkbox_logx.setStyleSheet(log_style)
         self.checkbox_logy.setStyleSheet(log_style)
         self.checkbox_logz.setStyleSheet(log_style)
-
-        log_column = QWidget()
-        log_layout = QVBoxLayout(log_column)
-        log_layout.setContentsMargins(0, 0, 0, 0)
-        log_layout.setSpacing(0)
-        log_layout.addWidget(self.checkbox_logx)
-        log_layout.addWidget(self.checkbox_logy)
-        log_layout.addWidget(self.checkbox_logz)
-        log_column.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-        self.controls_layout.addWidget(log_column)
+        # Log Z hidden by default; shown only when 3-D mode is active
+        self.checkbox_logz.setVisible(False)
 
         # Clear markers / update graph when changing axes
         self.combo_x.currentIndexChanged.connect(self.on_axis_selection_changed)
@@ -2832,10 +2826,23 @@ class ROARLookupWindow(QWidget):
             self.gl_items = []
 
         self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        # ── Log checkbox bar — sits above the graph, right-aligned ──
+        self.log_bar = QWidget()
+        log_bar_layout = QHBoxLayout(self.log_bar)
+        log_bar_layout.setContentsMargins(0, 0, 2, 0)
+        log_bar_layout.setSpacing(6)
+        log_bar_layout.addStretch()  # push checkboxes to the right
+        log_bar_layout.addWidget(self.checkbox_logx)
+        log_bar_layout.addWidget(self.checkbox_logy)
+        log_bar_layout.addWidget(self.checkbox_logz)
+        self.log_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
         right_container = QWidget()
         right_layout = QVBoxLayout(right_container)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
+        right_layout.addWidget(self.log_bar)
         right_layout.addWidget(self.plot_widget)
         # Add GL widget (3D) and keep it hidden until used
         if self.gl_widget is not None:
@@ -2905,13 +2912,15 @@ class ROARLookupWindow(QWidget):
         self.combo_z.blockSignals(True)
 
         try:
-            # Update visibility of Z-axis and 3D controls
+            # Update visibility of Z-axis controls (only in Design Eqs / 3-D mode)
             self.label_z.setVisible(not is_device_params)
             self.combo_z.setVisible(not is_device_params)
             self.spin_z.setVisible(not is_device_params)
-            self.checkbox_logz.setVisible(not is_device_params)
-            self.checkbox_3d.setVisible(not is_device_params)
             self.checkbox_contour.setVisible(not is_device_params)
+            # 3-D checkbox only visible in Design Eqs mode
+            self.checkbox_3d.setVisible(not is_device_params)
+            # Log Z visibility is governed by the 3-D checkbox, not by mode
+            self._update_z_controls_state()
 
 
             if is_device_params:
@@ -2937,7 +2946,12 @@ class ROARLookupWindow(QWidget):
                 else:
                     self.combo_z.setCurrentText("iden")
             else:
-                items = list(self.expression_symbols) if self.expression_symbols else []
+                # Design Eqs mode: include both expression symbols AND device
+                # param lookups so the combo boxes always have selectable items
+                expr_items = list(self.expression_symbols) if self.expression_symbols else []
+                lookup_items = list(self.top_level_app.lookups) if self.top_level_app else []
+                items = expr_items + [x for x in lookup_items if x not in expr_items]
+
                 self.combo_x.clear()
                 self.combo_y.clear()
                 self.combo_z.clear()
@@ -2964,17 +2978,10 @@ class ROARLookupWindow(QWidget):
             self.combo_y.blockSignals(False)
             self.combo_z.blockSignals(False)
 
-        try:
-            self.controls_layout.removeWidget(self.checkbox_3d)
-            self.controls_layout.removeWidget(self.checkbox_contour)
-        except Exception:
-            pass
-
+        # Contour checkbox: hide in device params, show in design eqs
         if is_device_params:
-            self.checkbox_3d.hide()
             self.checkbox_contour.hide()
         else:
-            self.checkbox_3d.show()
             self.checkbox_contour.show()
 
         self.settings_container.setVisible(True)
@@ -3004,6 +3011,17 @@ class ROARLookupWindow(QWidget):
 
         # ── Switch the mode flag ──
         self.is_device_params_mode = new_mode
+
+        # ── When entering Design Eqs mode, refresh expression symbols ──
+        if not new_mode and self.top_level_app:
+            try:
+                editor = getattr(self.top_level_app, 'editor_window', None)
+                if editor is not None and hasattr(editor, 'get_expression_symbols'):
+                    symbols = editor.get_expression_symbols()
+                    if symbols:
+                        self.expression_symbols = symbols
+            except Exception:
+                pass
 
         # ── Restore incoming mode state (if we have one) ──
         saved = self._mode_state_cache.get(new_mode)
@@ -3165,6 +3183,7 @@ class ROARLookupWindow(QWidget):
         self.label_z.setEnabled(is_3d)
         self.combo_z.setEnabled(is_3d)
         self.spin_z.setEnabled(is_3d)
+        self.checkbox_logz.setVisible(is_3d)
         self.checkbox_logz.setEnabled(is_3d)
         self.checkbox_contour.setEnabled(is_3d)
 
