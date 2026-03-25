@@ -2616,6 +2616,20 @@ class ROARLookupWindow(QWidget):
         self.radio_layout.addWidget(self.radio_device_params)
         self.radio_layout.addWidget(self.radio_design_eq)
         self.radio_layout.addStretch()
+
+        # Global / Local toggle for the tech browser
+        self._is_global_browser = False
+        self._is_local_browser = False  # local = immune to global sync
+        self.global_toggle_button = QPushButton("🌐")
+        self.global_toggle_button.setToolTip("Set this tech browser as the Global master.\n"
+                                              "When Global, check/uncheck here updates\n"
+                                              "all non-Local browsers in Device Params mode.")
+        self.global_toggle_button.setFixedSize(24, 24)
+        self.global_toggle_button.setStyleSheet(
+            "QPushButton { border: 1px solid #888; border-radius: 2px; font-size: 14px; padding: 0px; }")
+        self.global_toggle_button.clicked.connect(self._toggle_global_browser)
+        self.radio_layout.addWidget(self.global_toggle_button)
+
         self.radio_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         # Connect toggled signal(s) to keep mode variable in sync and update UI
@@ -2712,9 +2726,22 @@ class ROARLookupWindow(QWidget):
         _add_sep()
 
         # ── Checkboxes and buttons ──
+        _3d_cb_style = "QCheckBox { font-size: 9px; margin: 0px; padding: 0px; spacing: 2px; }"
         self.checkbox_3d = QCheckBox("3-D")
-        self.checkbox_contour = QCheckBox("Contour")
+        self.checkbox_3d.setStyleSheet(_3d_cb_style)
+        self.checkbox_contour = QCheckBox("Ctr")
+        self.checkbox_contour.setStyleSheet(_3d_cb_style)
+        self.checkbox_contour.setToolTip("Contour")
         self.checkbox_black_bg = QCheckBox("Black BG")
+
+        # Stack 3-D and Contour vertically so they fit in the same height as buttons
+        self._3d_contour_container = QWidget()
+        _3d_ctr_layout = QVBoxLayout(self._3d_contour_container)
+        _3d_ctr_layout.setContentsMargins(0, 0, 0, 0)
+        _3d_ctr_layout.setSpacing(0)
+        _3d_ctr_layout.addWidget(self.checkbox_3d)
+        _3d_ctr_layout.addWidget(self.checkbox_contour)
+        self._3d_contour_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self.copy_button = QPushButton("📋")
         self.copy_button.setToolTip("Copy")
@@ -2728,15 +2755,15 @@ class ROARLookupWindow(QWidget):
         self.reset_button.setFixedSize(24, 24)
         self.reset_button.setStyleSheet("QPushButton { border: 1px solid #888; border-radius: 2px; font-size: 16px; padding: 0px; }")
 
-        # Settings container (lock + 2x2 checkboxes)
+        # Settings container (lock + 2x2 checkboxes) — compact, placed above graph
         self.settings_container = QWidget()
         s_layout = QHBoxLayout(self.settings_container)
         s_layout.setContentsMargins(0, 0, 0, 0)
         s_layout.setSpacing(0)
         s_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        indicator_size = 12
-        cb_widget_size = 14
+        indicator_size = 10
+        cb_widget_size = 12
 
         self.settings_lock_button = QPushButton("🔒")
         lock_h = cb_widget_size * 2
@@ -2745,7 +2772,7 @@ class ROARLookupWindow(QWidget):
         self.settings_lock_button.setToolTip("Lock / Settings")
         self.settings_lock_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         try:
-            self.settings_lock_button.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 18px; }")
+            self.settings_lock_button.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 14px; padding: 0px; }")
         except Exception:
             pass
         s_layout.addWidget(self.settings_lock_button)
@@ -2782,6 +2809,7 @@ class ROARLookupWindow(QWidget):
         self.settings_grid.setFixedSize(grid_w, grid_h)
 
         s_layout.addWidget(self.settings_grid)
+        self.settings_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         # Expand button
         self.expand_button = QPushButton("⤢")
@@ -2790,12 +2818,10 @@ class ROARLookupWindow(QWidget):
         self.expand_button.setFixedSize(24, 24)
         self.expand_button.setStyleSheet("QPushButton { border: 1px solid #888; border-radius: 2px; font-size: 16px; padding: 0px; }")
 
-        self.controls_layout.addWidget(self.checkbox_3d)
-        self.controls_layout.addWidget(self.checkbox_contour)
+        self.controls_layout.addWidget(self._3d_contour_container)
         self.controls_layout.addWidget(self.copy_button)
         self.controls_layout.addWidget(self.reset_button)
         self.controls_layout.addWidget(self.expand_button)
-        self.controls_layout.addWidget(self.settings_container)
 
         # Keep row5_layout as None so external refs don't crash
         self.row5_layout = None
@@ -2827,12 +2853,13 @@ class ROARLookupWindow(QWidget):
 
         self.plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # ── Log checkbox bar — sits above the graph, right-aligned ──
+        # ── Bar above graph: lock/checkboxes at left, log checkboxes at right ──
         self.log_bar = QWidget()
         log_bar_layout = QHBoxLayout(self.log_bar)
         log_bar_layout.setContentsMargins(0, 0, 2, 0)
-        log_bar_layout.setSpacing(6)
-        log_bar_layout.addStretch()  # push checkboxes to the right
+        log_bar_layout.setSpacing(4)
+        log_bar_layout.addWidget(self.settings_container)
+        log_bar_layout.addStretch()  # push log checkboxes to the right
         log_bar_layout.addWidget(self.checkbox_logx)
         log_bar_layout.addWidget(self.checkbox_logy)
         log_bar_layout.addWidget(self.checkbox_logz)
@@ -2917,8 +2944,8 @@ class ROARLookupWindow(QWidget):
             self.combo_z.setVisible(not is_device_params)
             self.spin_z.setVisible(not is_device_params)
             self.checkbox_contour.setVisible(not is_device_params)
-            # 3-D checkbox only visible in Design Eqs mode
-            self.checkbox_3d.setVisible(not is_device_params)
+            # 3-D and Contour container only visible in Design Eqs mode
+            self._3d_contour_container.setVisible(not is_device_params)
             # Log Z visibility is governed by the 3-D checkbox, not by mode
             self._update_z_controls_state()
 
@@ -2978,13 +3005,6 @@ class ROARLookupWindow(QWidget):
             self.combo_y.blockSignals(False)
             self.combo_z.blockSignals(False)
 
-        # Contour checkbox: hide in device params, show in design eqs
-        if is_device_params:
-            self.checkbox_contour.hide()
-        else:
-            self.checkbox_contour.show()
-
-        self.settings_container.setVisible(True)
 
         try:
             self.controls_layout.update()
@@ -3045,6 +3065,115 @@ class ROARLookupWindow(QWidget):
             self.update_attachment_checkboxes()
             # Trigger a graph update so the new mode renders immediately
             self.update_graph_from_tech_browser()
+
+    # ── Global / Local tech browser management ──
+
+    def _toggle_global_browser(self):
+        """Cycle through: default → Global → Local → default."""
+        if self._is_global_browser:
+            # Currently Global → go to Local
+            self._set_global(False)
+            self._set_local(True)
+        elif self._is_local_browser:
+            # Currently Local → go to default (follower)
+            self._set_local(False)
+        else:
+            # Currently default (follower) → go to Global
+            self._set_global(True)
+
+    def _set_global(self, on):
+        """Mark this window as the Global tech browser master."""
+        if on:
+            # Release any other global window in the same grid
+            if self.graph_grid:
+                for w in self.graph_grid.lookup_windows:
+                    if w is not self and w._is_global_browser:
+                        w._set_global(False)
+            self._is_global_browser = True
+            self._is_local_browser = False
+        else:
+            self._is_global_browser = False
+        self._update_global_button_style()
+
+    def _set_local(self, on):
+        """Mark this window as Local (immune to Global sync)."""
+        self._is_local_browser = on
+        if on:
+            self._is_global_browser = False
+        self._update_global_button_style()
+
+    def _update_global_button_style(self):
+        """Update the toggle button icon/style to reflect state."""
+        if self._is_global_browser:
+            self.global_toggle_button.setText("🌐")
+            self.global_toggle_button.setStyleSheet(
+                "QPushButton { border: 2px solid #1C8091; border-radius: 2px;"
+                " font-size: 14px; padding: 0px; background: #d0f0f8; }")
+            self.global_toggle_button.setToolTip("GLOBAL — this tech browser controls all\n"
+                                                  "non-Local browsers in Device Params mode.\n"
+                                                  "Click to switch to Local.")
+        elif self._is_local_browser:
+            self.global_toggle_button.setText("📌")
+            self.global_toggle_button.setStyleSheet(
+                "QPushButton { border: 2px solid #c08020; border-radius: 2px;"
+                " font-size: 14px; padding: 0px; background: #fff0d0; }")
+            self.global_toggle_button.setToolTip("LOCAL — this tech browser is independent;\n"
+                                                  "not affected by the Global browser.\n"
+                                                  "Click to return to follower mode.")
+        else:
+            self.global_toggle_button.setText("🌐")
+            self.global_toggle_button.setStyleSheet(
+                "QPushButton { border: 1px solid #888; border-radius: 2px;"
+                " font-size: 14px; padding: 0px; }")
+            self.global_toggle_button.setToolTip("Follower — this browser follows the Global master.\n"
+                                                  "Click to become the Global master.")
+
+    def sync_from_global(self, checked_paths, color_map=None):
+        """Mirror the Global tech browser's checked state into this window.
+
+        Only applies in Device Params mode and only if this window is not
+        Local and not itself the Global master.
+        """
+        if self._is_global_browser or self._is_local_browser:
+            return
+        if not self.is_device_params_mode:
+            return
+
+        # Block signals on the follower's tree for the entire operation so
+        # that setCheckState / setIcon calls do not trigger handle_item_changed
+        # (which would cause expensive re-entrant graph updates or freezes).
+        old_startup = getattr(self.tech_browser, 'startup', False)
+        try:
+            self.tech_browser.tree.blockSignals(True)
+            self.tech_browser.startup = True
+
+            self.restore_tech_browser_checks(checked_paths)
+            # restore_tech_browser_checks unblocks signals internally;
+            # re-block them for the icon updates that follow.
+            self.tech_browser.tree.blockSignals(True)
+            # restore_tech_browser_checks sets _is_updating=True and leaves it;
+            # we must reset it so update_graph_from_tech_browser will execute.
+            self._is_updating = False
+
+            if color_map is not None:
+                self.tech_browser.color_map = dict(color_map)
+                for path, color in self.tech_browser.color_map.items():
+                    if path in self.tech_browser.path_to_item:
+                        item = self.tech_browser.path_to_item[path]
+                        if item.childCount() == 0:
+                            self.tech_browser.set_item_icon(item, color)
+        except Exception:
+            pass
+        finally:
+            self.tech_browser.tree.blockSignals(False)
+            self.tech_browser.startup = old_startup
+            self._is_updating = False
+
+        # Now do a single graph update with signals unblocked
+        try:
+            self.update_graph_from_tech_browser()
+        except Exception:
+            self._is_updating = False
 
     def reset_window(self):
         """Reset this window to its default state.

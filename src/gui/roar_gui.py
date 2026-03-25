@@ -439,6 +439,20 @@ class ROARTechBrowser(QWidget):
         if self.lookup_window is not None:
             self.lookup_window.update_graph_from_tech_browser()
 
+            # ── Global tech browser sync ──
+            # If this tech browser belongs to the Global master window, push
+            # the checked paths to all follower (non-local) windows.
+            try:
+                lw = self.lookup_window
+                if getattr(lw, '_is_global_browser', False) and lw.graph_grid:
+                    checked_paths = self.get_checked_item_paths()
+                    color_map = dict(self.color_map) if self.color_map else None
+                    for other in lw.graph_grid.lookup_windows:
+                        if other is not lw:
+                            other.sync_from_global(checked_paths, color_map)
+            except Exception:
+                pass
+
     def _set_children_check_state(self, item, check_state):
         """Recursively set check state on all children."""
         for i in range(item.childCount()):
