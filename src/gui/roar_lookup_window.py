@@ -3110,6 +3110,8 @@ class ROARLookupWindow(QWidget):
         else:
             self._is_global_browser = False
         self._update_global_button_style()
+        # Update tech browser collapse state for all windows in the grid
+        self._update_grid_tech_browser_visibility()
 
     def _set_local(self, on):
         """Mark this window as Local (immune to Global sync)."""
@@ -3117,6 +3119,63 @@ class ROARLookupWindow(QWidget):
         if on:
             self._is_global_browser = False
         self._update_global_button_style()
+        # Update tech browser collapse state for all windows in the grid
+        self._update_grid_tech_browser_visibility()
+
+    def _update_grid_tech_browser_visibility(self):
+        """Collapse or restore tech browsers across the grid based on global/local state.
+
+        When any window in the grid is Global:
+          - The Global window keeps its tech browser visible.
+          - Local windows keep their tech browser visible.
+          - Follower windows (neither global nor local) collapse their tech browser.
+        When no window is Global:
+          - All windows restore their tech browser.
+        """
+        if not self.graph_grid:
+            return
+        any_global = any(w._is_global_browser for w in self.graph_grid.lookup_windows)
+        for w in self.graph_grid.lookup_windows:
+            if any_global:
+                if w._is_global_browser or w._is_local_browser:
+                    w._restore_tech_browser_pane()
+                else:
+                    w._collapse_tech_browser_pane()
+            else:
+                w._restore_tech_browser_pane()
+
+    def _collapse_tech_browser_pane(self):
+        """Collapse the tech browser (left side of top_level_pane) to give the graph full width."""
+        try:
+            sizes = self.top_level_pane.sizes()
+            total = sum(sizes)
+            if total <= 0:
+                return
+            # Save current sizes so we can restore later
+            if sizes[0] > 0:
+                self._saved_splitter_sizes = list(sizes)
+            self.top_level_pane.setSizes([0, total])
+        except Exception:
+            pass
+
+    def _restore_tech_browser_pane(self):
+        """Restore the tech browser pane to its previous width."""
+        try:
+            saved = getattr(self, '_saved_splitter_sizes', None)
+            if saved and saved[0] > 0:
+                self.top_level_pane.setSizes(saved)
+                self._saved_splitter_sizes = None
+            else:
+                # If no saved sizes, only restore if currently collapsed
+                sizes = self.top_level_pane.sizes()
+                if sizes[0] == 0:
+                    total = sum(sizes)
+                    if total > 0:
+                        # Restore to roughly 1:2 ratio
+                        left = total // 3
+                        self.top_level_pane.setSizes([left, total - left])
+        except Exception:
+            pass
 
     def _update_global_button_style(self):
         """Update the toggle button icon/style to reflect state."""
@@ -3833,8 +3892,8 @@ class ROARLookupWindow(QWidget):
         grid.grid_splitter.setStretchFactor(0, 1)
 
         self.is_expanded = True
-        self.expand_button.setText("⤡")
-        self.expand_button.setToolTip("Contract")
+        self.expand_button.setText("⊞")
+        self.expand_button.setToolTip("Restore to grid")
 
     def contract_plot(self):
         if not self.graph_grid or not self.original_state:
