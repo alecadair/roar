@@ -1278,6 +1278,22 @@ class ROARPlotWidget(pg.PlotWidget):
                             self.plotItem.removeItem(marker_info.get("marker"))
                             self.plotItem.removeItem(marker_info.get("text"))
                             self.markers.remove(marker_info)
+
+                            # Sync deletion to attached (locked) windows
+                            plw = getattr(self, "parent_lookup_window", None)
+                            if plw:
+                                removed_x = marker_info.get("pos", (None,))[0]
+                                if removed_x is not None:
+                                    for attached_window in plw.get_attached_windows():
+                                        for m in list(attached_window.plot_widget.markers):
+                                            if m.get("pos", (None,))[0] == removed_x:
+                                                try:
+                                                    attached_window.plot_widget.plotItem.removeItem(m.get("marker"))
+                                                    attached_window.plot_widget.plotItem.removeItem(m.get("text"))
+                                                except Exception:
+                                                    pass
+                                                attached_window.plot_widget.markers.remove(m)
+                                                break
                             return
                     except Exception:
                         pass
