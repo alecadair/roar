@@ -194,7 +194,7 @@ ihp130_luts = ROAR_CHARACTERIZATION + "/ihp130/LUTs_IHP130"
 
 # Check environment variable and command line for debug flag
 ROAR_DEBUG_MODE = os.environ.get("ROAR_DEBUG", "0").lower() in ("1", "true", "yes", "on")
-ROAR_DEBUG_MODE = 1
+ROAR_DEBUG_MODE = 0
 if "--debug" in sys.argv:
     ROAR_DEBUG_MODE = True
     sys.argv.remove("--debug")  # Remove so Qt doesn't see it

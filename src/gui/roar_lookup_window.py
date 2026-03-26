@@ -2658,7 +2658,8 @@ class ROARLookupWindow(QWidget):
         self.combo_x.setCurrentText("kgm")
         self.combo_x.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.combo_x.setMinimumWidth(60)
-        self.spin_x = EngSpinBox()  # kept for code compatibility, not shown
+        self.spin_x = EngSpinBox(self)  # kept for code compatibility, not shown
+        self.spin_x.setVisible(False)
 
         self.controls_layout.addWidget(self.label_x)
         self.controls_layout.addWidget(self.combo_x, 1)
@@ -2676,7 +2677,8 @@ class ROARLookupWindow(QWidget):
         self.combo_y.setCurrentText("kcgs")
         self.combo_y.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.combo_y.setMinimumWidth(60)
-        self.spin_y = EngSpinBox()  # kept for code compatibility, not shown
+        self.spin_y = EngSpinBox(self)  # kept for code compatibility, not shown
+        self.spin_y.setVisible(False)
 
         self.controls_layout.addWidget(self.label_y)
         self.controls_layout.addWidget(self.combo_y, 1)
@@ -2694,7 +2696,8 @@ class ROARLookupWindow(QWidget):
         self.combo_z.setCurrentText("iden")
         self.combo_z.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.combo_z.setMinimumWidth(60)
-        self.spin_z = EngSpinBox()  # kept for code compatibility, not shown
+        self.spin_z = EngSpinBox(self)  # kept for code compatibility, not shown
+        self.spin_z.setVisible(False)
 
         self.controls_layout.addWidget(self.label_z)
         self.controls_layout.addWidget(self.combo_z, 1)
@@ -2732,7 +2735,8 @@ class ROARLookupWindow(QWidget):
         self.checkbox_contour = QCheckBox("Ctr")
         self.checkbox_contour.setStyleSheet(_3d_cb_style)
         self.checkbox_contour.setToolTip("Contour")
-        self.checkbox_black_bg = QCheckBox("Black BG")
+        self.checkbox_black_bg = QCheckBox("Black BG", self)
+        self.checkbox_black_bg.setVisible(False)  # not shown in GUI, kept for compatibility
 
         # Stack 3-D and Contour vertically so they fit in the same height as buttons
         self._3d_contour_container = QWidget()
@@ -2942,7 +2946,6 @@ class ROARLookupWindow(QWidget):
             # Update visibility of Z-axis controls (only in Design Eqs / 3-D mode)
             self.label_z.setVisible(not is_device_params)
             self.combo_z.setVisible(not is_device_params)
-            self.spin_z.setVisible(not is_device_params)
             self.checkbox_contour.setVisible(not is_device_params)
             # 3-D and Contour container only visible in Design Eqs mode
             self._3d_contour_container.setVisible(not is_device_params)
@@ -2973,11 +2976,8 @@ class ROARLookupWindow(QWidget):
                 else:
                     self.combo_z.setCurrentText("iden")
             else:
-                # Design Eqs mode: include both expression symbols AND device
-                # param lookups so the combo boxes always have selectable items
-                expr_items = list(self.expression_symbols) if self.expression_symbols else []
-                lookup_items = list(self.top_level_app.lookups) if self.top_level_app else []
-                items = expr_items + [x for x in lookup_items if x not in expr_items]
+                # Design Eqs mode: only show expression symbols from the editor
+                items = list(self.expression_symbols) if self.expression_symbols else []
 
                 self.combo_x.clear()
                 self.combo_y.clear()
