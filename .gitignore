@@ -54,5 +54,8 @@ wheels/
 .installed.cfg
 *.egg
 
+# Jupyter Notebook Demo Directory
+.ipynb_checkpoints/
+
 # ROAR Environment file
 roar_env.csh

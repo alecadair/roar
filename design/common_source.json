@@ -2,7 +2,7 @@
     "expression_editor": [
         {
             "Symbol": "cload",
-            "Expression": "100e-12",
+            "Expression": "100e-15",
             "disabled": false,
             "plot": false
         },
@@ -14,13 +14,13 @@
         },
         {
             "Symbol": "wu",
-            "Expression": "2*pi*fu",
+            "Expression": "2*pi*fu*av_total",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "av_total",
-            "Expression": "50",
+            "Expression": "5",
             "disabled": false,
             "plot": false
         },
@@ -55,14 +55,14 @@
             "plot": false
         },
         {
-            "Symbol": "kcs1",
-            "Expression": "kcgs1 + kcgd1*(1 + av_total) + kcds1",
+            "Symbol": "kgds1",
+            "Expression": "kgds:M1",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgds1",
-            "Expression": "kgds:M1",
+            "Symbol": "kcs1",
+            "Expression": "kcgs1 + kcgd1*(1 + av_total) + kcds1",
             "disabled": false,
             "plot": false
         },
@@ -98,7 +98,7 @@
         },
         {
             "Symbol": "m1_width",
-            "Expression": "idensity1/i_total",
+            "Expression": "i_total/idensity1",
             "disabled": false,
             "plot": false
         },
@@ -111,12 +111,6 @@
         {
             "Symbol": "cout",
             "Expression": "cload + cs1",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "k",
-            "Expression": "1.38e-23",
             "disabled": false,
             "plot": false
         },
@@ -134,7 +128,7 @@
         },
         {
             "Symbol": "rload",
-            "Expression": "av_total/gm1",
+            "Expression": "av1/gm1",
             "disabled": false,
             "plot": false
         }
@@ -165,5 +159,12 @@
             "plot": false,
             "_corners_data": null
         }
-    ]
+    ],
+    "iterative_solver": {
+        "enabled": false,
+        "max_iterations": 50,
+        "tolerance": 1e-06,
+        "damping": 1.0,
+        "initial_guesses": {}
+    }
 }

@@ -1,0 +1,300 @@
+{
+    "expression_editor": [
+        {
+            "Symbol": "GBW",
+            "Expression": "100e6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "CL",
+            "Expression": "1e-12",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm1",
+            "Expression": "kgm:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm3",
+            "Expression": "kgm:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm5",
+            "Expression": "kgm:M5",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm7",
+            "Expression": "kgm:M7",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cgs5",
+            "Expression": "cgs:M5",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cdd3",
+            "Expression": "cdd:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cgd3",
+            "Expression": "cgd:M3",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cdd5",
+            "Expression": "cdd:M5",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cdd7",
+            "Expression": "cdd:M7",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Cload1",
+            "Expression": "abs(cgs5) + abs(cdd3) + abs(cgd3)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Cload2",
+            "Expression": "abs(cdd5) + abs(cdd7) + CL",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "gm1",
+            "Expression": "2 * 3.14159265 * GBW * Cload1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Id1",
+            "Expression": "gm1 / kgm1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "gm5",
+            "Expression": "2 * 3.14159265 * GBW * 3 * Cload2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Id5",
+            "Expression": "gm5 / kgm5",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Itotal",
+            "Expression": "Id1 + Id5",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Av1",
+            "Expression": "kgm1 / (kgds:M1 + kgds:M3)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Av2",
+            "Expression": "kgm5 / (kgds:M5 + kgds:M7)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Av_total",
+            "Expression": "Av1 * Av2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "Cc",
+            "Expression": "Cload2 * gm1 / gm5",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "constraint_editor": [
+        {
+            "Symbol": "power_ok",
+            "Constraint Expression": "Itotal < 500e-6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "gain_ok",
+            "Constraint Expression": "Av_total > 1000",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "instance_table": [
+        {
+            "Instance": "M1",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[nfettt27, nfettt-25, nfettt75]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": [
+                {
+                    "length": "150",
+                    "model": "n_01v8",
+                    "name": "nfettt27",
+                    "path": "PDK>SKY130A>n_01v8>150>nfettt27",
+                    "pdk": "SKY130A"
+                },
+                {
+                    "length": "150",
+                    "model": "n_01v8",
+                    "name": "nfettt-25",
+                    "path": "PDK>SKY130A>n_01v8>150>nfettt-25",
+                    "pdk": "SKY130A"
+                },
+                {
+                    "length": "150",
+                    "model": "n_01v8",
+                    "name": "nfettt75",
+                    "path": "PDK>SKY130A>n_01v8>150>nfettt75",
+                    "pdk": "SKY130A"
+                }
+            ]
+        },
+        {
+            "Instance": "M3",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[pfettt27, pfettt-25, pfettt75]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": [
+                {
+                    "length": "150",
+                    "model": "p_01v8",
+                    "name": "pfettt27",
+                    "path": "PDK>SKY130A>p_01v8>150>pfettt27",
+                    "pdk": "SKY130A"
+                },
+                {
+                    "length": "150",
+                    "model": "p_01v8",
+                    "name": "pfettt-25",
+                    "path": "PDK>SKY130A>p_01v8>150>pfettt-25",
+                    "pdk": "SKY130A"
+                },
+                {
+                    "length": "150",
+                    "model": "p_01v8",
+                    "name": "pfettt75",
+                    "path": "PDK>SKY130A>p_01v8>150>pfettt75",
+                    "pdk": "SKY130A"
+                }
+            ]
+        },
+        {
+            "Instance": "M5",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[nfettt27, nfettt-25, nfettt75]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": [
+                {
+                    "length": "150",
+                    "model": "n_01v8",
+                    "name": "nfettt27",
+                    "path": "PDK>SKY130A>n_01v8>150>nfettt27",
+                    "pdk": "SKY130A"
+                },
+                {
+                    "length": "150",
+                    "model": "n_01v8",
+                    "name": "nfettt-25",
+                    "path": "PDK>SKY130A>n_01v8>150>nfettt-25",
+                    "pdk": "SKY130A"
+                },
+                {
+                    "length": "150",
+                    "model": "n_01v8",
+                    "name": "nfettt75",
+                    "path": "PDK>SKY130A>n_01v8>150>nfettt75",
+                    "pdk": "SKY130A"
+                }
+            ]
+        },
+        {
+            "Instance": "M7",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[pfettt27, pfettt-25, pfettt75]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": [
+                {
+                    "length": "150",
+                    "model": "p_01v8",
+                    "name": "pfettt27",
+                    "path": "PDK>SKY130A>p_01v8>150>pfettt27",
+                    "pdk": "SKY130A"
+                },
+                {
+                    "length": "150",
+                    "model": "p_01v8",
+                    "name": "pfettt-25",
+                    "path": "PDK>SKY130A>p_01v8>150>pfettt-25",
+                    "pdk": "SKY130A"
+                },
+                {
+                    "length": "150",
+                    "model": "p_01v8",
+                    "name": "pfettt75",
+                    "path": "PDK>SKY130A>p_01v8>150>pfettt75",
+                    "pdk": "SKY130A"
+                }
+            ]
+        }
+    ],
+    "iterative_solver": {
+        "enabled": true,
+        "max_iterations": 50,
+        "tolerance": 1e-6,
+        "damping": 1.0,
+        "initial_guesses": {
+            "Cload1": 1e-13,
+            "Cload2": 1e-12,
+            "cgs5": 5e-14,
+            "cdd3": 2e-14,
+            "cgd3": 1e-14,
+            "cdd5": 2e-14,
+            "cdd7": 2e-14
+        }
+    }
+}
+

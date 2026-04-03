@@ -8,13 +8,13 @@
         },
         {
             "Symbol": "cload",
-            "Expression": "0.00000000001",
+            "Expression": "100e-15",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "fu",
-            "Expression": "100000000",
+            "Expression": "100e6",
             "disabled": false,
             "plot": false
         },
@@ -45,12 +45,6 @@
         {
             "Symbol": "kgm5_6",
             "Expression": "kgm1_2",
-            "disabled": false,
-            "plot": false
-        },
-        {
-            "Symbol": "av",
-            "Expression": "kgm1_2/(kgds5_6 + kgds7_8)",
             "disabled": false,
             "plot": false
         },
@@ -103,13 +97,25 @@
             "plot": false
         },
         {
-            "Symbol": "kcs4",
+            "Symbol": "kgds5_6",
+            "Expression": "kgds:M1_2",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgds7_8",
+            "Expression": "kgds:M3_4",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcs3_4",
             "Expression": "kcgd3_4 + kcgs3_4",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kcs8",
+            "Symbol": "kcs7_8",
             "Expression": "kcgd7_8 + kcgs7_8",
             "disabled": false,
             "plot": false
@@ -117,6 +123,12 @@
         {
             "Symbol": "kco",
             "Expression": "kcgd7_8 + kcgd5_6",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "av",
+            "Expression": "kgm1_2/(kgds5_6 + kgds7_8)",
             "disabled": false,
             "plot": false
         },
@@ -134,7 +146,7 @@
         },
         {
             "Symbol": "beta_denominator",
-            "Expression": "alpha*wu*kcs8",
+            "Expression": "alpha*wu*kcs7_8",
             "disabled": false,
             "plot": false
         },
@@ -163,14 +175,20 @@
             "plot": false
         },
         {
-            "Symbol": "kgds5_6",
-            "Expression": "kgds:M1_2",
+            "Symbol": "iden1_2",
+            "Expression": "iden:M1_2",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kgds7_8",
-            "Expression": "kgds:M3_4",
+            "Symbol": "iden3_4",
+            "Expression": "iden:M3_4",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "w1_2",
+            "Expression": "i1_2/iden1_2",
             "disabled": false,
             "plot": false
         }
@@ -309,5 +327,12 @@
                 }
             ]
         }
-    ]
+    ],
+    "iterative_solver": {
+        "enabled": false,
+        "max_iterations": 50,
+        "tolerance": 1e-06,
+        "damping": 1.0,
+        "initial_guesses": {}
+    }
 }
