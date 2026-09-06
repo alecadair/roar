@@ -1562,7 +1562,7 @@ class ROARApp(QMainWindow):
         import datetime
 
         state = {
-            'version': '1.0',
+            'version': '1.0.2',
             'saved_at': datetime.datetime.now().isoformat(),
             'app_name': 'ROAR',
 
