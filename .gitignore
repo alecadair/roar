@@ -1,6 +1,6 @@
 .idea/
 
-bin/
+#bin/
 # get rid of sim data
 *.raw
 
