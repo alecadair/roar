@@ -2,6 +2,7 @@ matplotlib
 pandas
 sympy
 PyQt6==6.6.1
+PyQt6-Qt6==6.6.1
 PyQt6-QScintilla
 jedi
 pyqtgraph>=0.13

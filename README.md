@@ -50,6 +50,17 @@ Prerequisite: Python 3.8 or newer must be available on your system PATH.
 
    **Important:** Even when launching with `./bin/roar` (or a packaged binary that calls it), you must activate the Python virtual environment first.
 
+   If startup fails with a Qt/PyQt symbol error (for example `undefined symbol: ...Qt_6`), rebuild the environment:
+
+   ```tcsh
+   cd /path/to/roar
+   rm -rf .venv
+   ./bin/setup_roar.csh
+   source .venv/bin/activate.csh
+   source roar_env.csh
+   ./bin/roar
+   ```
+
 ## Purpose
 
 ROAR is designed to enable and optimize gm/id and c/id based analog circuit design. The primary goal of this software is to streamline the process of analog circuit design, making it easier to optimize and reuse existing designs through an efficient and automated workflow.

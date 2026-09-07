@@ -17,6 +17,24 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
     exit 1
 fi
 
+PYTHON_BIN="$VIRTUAL_ENV/bin/python3"
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "Missing Python interpreter in virtual environment: $PYTHON_BIN" >&2
+    exit 1
+fi
+
+# Force Qt runtime resolution to the venv's PyQt6 wheel before any system Qt.
+PYQT6_QT_LIB_DIR=$(
+    "$PYTHON_BIN" -c 'import pathlib, PyQt6; print(pathlib.Path(PyQt6.__file__).resolve().parent / "Qt6" / "lib")' 2>/dev/null || true
+)
+if [ -n "${PYQT6_QT_LIB_DIR:-}" ] && [ -d "$PYQT6_QT_LIB_DIR" ]; then
+    if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+        export LD_LIBRARY_PATH="$PYQT6_QT_LIB_DIR:$LD_LIBRARY_PATH"
+    else
+        export LD_LIBRARY_PATH="$PYQT6_QT_LIB_DIR"
+    fi
+fi
+
 # Ensure ROAR has a discoverable desktop entry/icon for dash/taskbar matching.
 XDG_DATA_HOME_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 APP_DIR="$XDG_DATA_HOME_DIR/applications"
@@ -45,5 +63,5 @@ if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
 fi
 
-exec python3 "$ROAR_HOME/src/roar.py" "$@"
+exec "$PYTHON_BIN" "$ROAR_HOME/src/roar.py" "$@"
 

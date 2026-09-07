@@ -43,12 +43,7 @@ generate_roar_env:
 	@echo 'setenv ROAR_CHARACTERIZATION "$$ROAR_HOME/characterization"' >> $(OUTPUT_FILE)
 	@echo "" >> $(OUTPUT_FILE)
 
-	@echo 'if ( ! $$?LD_LIBRARY_PATH ) then' >> $(OUTPUT_FILE)
-	@echo '    setenv LD_LIBRARY_PATH "$$ROAR_HOME/lib64"' >> $(OUTPUT_FILE)
-	@echo 'else' >> $(OUTPUT_FILE)
-	@echo '    setenv LD_LIBRARY_PATH "$$ROAR_HOME/lib64:$$LD_LIBRARY_PATH"' >> $(OUTPUT_FILE)
-	@echo 'endif' >> $(OUTPUT_FILE)
-	@echo 'setenv LD_LIBRARY_PATH "$$ROAR_HOME/lib:$$LD_LIBRARY_PATH"' >> $(OUTPUT_FILE)
+	@echo '# Note: LD_LIBRARY_PATH is intentionally not modified here to avoid Qt runtime conflicts.' >> $(OUTPUT_FILE)
 	@echo "" >> $(OUTPUT_FILE)
 
 	@echo 'echo "ROAR environment variables set."' >> $(OUTPUT_FILE)
@@ -76,12 +71,7 @@ generate_roar_env_bash:
 	@echo 'setenv ROAR_CHARACTERIZATION "$$ROAR_HOME/characterization"' >> $(OUTPUT_FILE)
 	@echo "" >> $(OUTPUT_FILE)
 
-	@echo 'if ( ! $$?LD_LIBRARY_PATH ) then' >> $(OUTPUT_FILE)
-	@echo '    setenv LD_LIBRARY_PATH "$$ROAR_HOME/lib64"' >> $(OUTPUT_FILE)
-	@echo 'else' >> $(OUTPUT_FILE)
-	@echo '    setenv LD_LIBRARY_PATH "$$ROAR_HOME/lib64:$$LD_LIBRARY_PATH"' >> $(OUTPUT_FILE)
-	@echo 'endif' >> $(OUTPUT_FILE)
-	@echo 'setenv LD_LIBRARY_PATH "$$ROAR_HOME/lib:$$LD_LIBRARY_PATH"' >> $(OUTPUT_FILE)
+	@echo '# Note: LD_LIBRARY_PATH is intentionally not modified here to avoid Qt runtime conflicts.' >> $(OUTPUT_FILE)
 	@echo "" >> $(OUTPUT_FILE)
 
 	@echo 'echo "ROAR environment variables set."' >> $(OUTPUT_FILE)
