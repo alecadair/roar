@@ -1,0 +1,49 @@
+#!/usr/bin/env sh
+# Launch ROAR from the repository checkout.
+
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+# Allow launching without pre-sourcing by inferring ROAR_HOME from bin/.
+if [ -z "${ROAR_HOME:-}" ]; then
+    ROAR_HOME=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+    export ROAR_HOME
+fi
+
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    echo "ROAR requires an active Python virtual environment." >&2
+    echo "Run: source \"$ROAR_HOME/.venv/bin/activate.csh\"" >&2
+    exit 1
+fi
+
+# Ensure ROAR has a discoverable desktop entry/icon for dash/taskbar matching.
+XDG_DATA_HOME_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
+APP_DIR="$XDG_DATA_HOME_DIR/applications"
+ICON_DIR="$XDG_DATA_HOME_DIR/icons/hicolor/256x256/apps"
+DESKTOP_FILE="$APP_DIR/roar.desktop"
+ICON_FILE="$ICON_DIR/roar.png"
+
+mkdir -p "$APP_DIR" "$ICON_DIR"
+cp "$ROAR_HOME/images/png/ROAR_ICON.png" "$ICON_FILE"
+
+cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ROAR
+Comment=Launch the ROAR analog design GUI
+Exec=$ROAR_HOME/bin/roar
+Icon=roar
+Terminal=false
+Categories=Development;Electronics;
+StartupNotify=true
+StartupWMClass=ROAR
+EOF
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
+fi
+
+exec python3 "$ROAR_HOME/src/roar.py" "$@"
+

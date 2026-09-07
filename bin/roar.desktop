@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ROAR
+Comment=Launch the ROAR analog design GUI
+Exec=/home/adair/Documents/CAD/roar/bin/roar
+Icon=roar
+Terminal=false
+Categories=Development;Electronics;
+StartupNotify=true
+StartupWMClass=ROAR
+
