@@ -10,14 +10,51 @@ if ( ! -d "$roar_home" ) then
     exit 1
 endif
 
+set python_cmd=""
+foreach candidate (python3.12 python3.11 python3.10 python3.9 python3.8 python3)
+    which "$candidate" >& /dev/null
+    if ( $status != 0 ) then
+        continue
+    endif
+
+    "$candidate" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)" >& /dev/null
+    if ( $status == 0 ) then
+        set python_cmd="$candidate"
+        break
+    endif
+end
+
+if ( "$python_cmd" == "" ) then
+    echo "ROAR setup requires Python 3.8 or newer (PyQt6 dependency)." >&2
+    echo "Install Python 3.8+ and rerun ./bin/setup_roar.csh" >&2
+    exit 1
+endif
+
+set python_version=`$python_cmd --version`
+echo "Using $python_version"
+
 set venv_dir="$roar_home/.venv"
 if ( ! -d "$venv_dir" ) then
     echo "Creating Python virtual environment at $venv_dir"
-    python3 -m venv "$venv_dir"
+    "$python_cmd" -m venv "$venv_dir"
     if ( $status != 0 ) then
         echo "Failed to create virtual environment." >&2
         exit 1
     endif
+endif
+
+if ( ! -x "$venv_dir/bin/python3" ) then
+    echo "Missing $venv_dir/bin/python3" >&2
+    echo "Delete $venv_dir and rerun setup." >&2
+    exit 1
+endif
+
+"$venv_dir/bin/python3" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)" >& /dev/null
+if ( $status != 0 ) then
+    echo "Existing virtual environment uses unsupported Python (<3.8)." >&2
+    echo "Run: rm -rf $venv_dir" >&2
+    echo "Then rerun: ./bin/setup_roar.csh" >&2
+    exit 1
 endif
 
 if ( ! -f "$venv_dir/bin/activate.csh" ) then
@@ -27,15 +64,16 @@ endif
 
 source "$venv_dir/bin/activate.csh"
 
-python3 -m pip install --upgrade pip
+"$venv_dir/bin/python3" -m pip install --upgrade pip
 if ( $status != 0 ) then
     echo "Failed to upgrade pip inside virtual environment." >&2
     exit 1
 endif
 
-python3 -m pip install -r "$roar_home/requirements.txt"
+"$venv_dir/bin/python3" -m pip install -r "$roar_home/requirements.txt"
 if ( $status != 0 ) then
-    echo "Failed to install Python dependencies." >&2
+    echo "Failed to install Python dependencies from requirements.txt." >&2
+    echo "ROAR requires Python 3.8+ for PyQt6." >&2
     exit 1
 endif
 

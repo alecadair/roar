@@ -6,16 +6,26 @@ The Robust and Optimal Analog Reuse (ROAR) flow/tool is developed to enable a GU
 
 To set up the ROAR environment, follow these steps (Linux/tcsh):
 
+Prerequisite: Python 3.8 or newer must be available on your system PATH.
+
 1. **One-time setup script (recommended)**
 
-   ```bash
+   ```tcsh
    cd /path/to/roar
+   ./bin/setup_roar.csh
+   ```
+
+   If you previously created `.venv` with an older Python (for example 3.6), recreate it first:
+
+   ```tcsh
+   cd /path/to/roar
+   rm -rf .venv
    ./bin/setup_roar.csh
    ```
 
 2. **Manual setup (equivalent)**
 
-   ```bash
+   ```tcsh
    cd /path/to/roar
    python3 -m venv .venv
    source .venv/bin/activate.csh
@@ -25,7 +35,7 @@ To set up the ROAR environment, follow these steps (Linux/tcsh):
 
 3. **Run ROAR**
 
-   ```bash
+   ```tcsh
    cd /path/to/roar
    source .venv/bin/activate.csh
    source roar_env.csh
@@ -34,7 +44,7 @@ To set up the ROAR environment, follow these steps (Linux/tcsh):
 
    You can also use:
 
-   ```bash
+   ```tcsh
    ./bin/run_roar.csh
    ```
 
