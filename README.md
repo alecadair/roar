@@ -4,32 +4,47 @@ The Robust and Optimal Analog Reuse (ROAR) flow/tool is developed to enable a GU
 
 ## Installation
 
-To set up the ROAR environment, follow these steps:
+To set up the ROAR environment, follow these steps (Linux/tcsh):
 
-1. **Install dependencies**  
-   First, install the required Python dependencies using pip. Run the following command:
+1. **One-time setup script (recommended)**
 
    ```bash
-   pip install -r requirements.txt
+   cd /path/to/roar
+   ./bin/setup_roar.csh
    ```
 
-2. **Run make to create environment**  
-   Second, run make in the top level of your local copy of this repository:
+2. **Manual setup (equivalent)**
 
    ```bash
+   cd /path/to/roar
+   python3 -m venv .venv
+   source .venv/bin/activate.csh
+   pip install -r requirements.txt
    make
    ```
-   This generates a file called roar_env.csh
 
-3. **Set environmental variables**  
-   After installing the dependencies and running make, you need to source the environment configuration file generated from make. To do this, run:
+3. **Run ROAR**
 
    ```bash
+   cd /path/to/roar
+   source .venv/bin/activate.csh
    source roar_env.csh
+   ./bin/roar
    ```
 
-   This will configure the environment variables needed for ROAR to function properly.
+   You can also use:
+
+   ```bash
+   ./bin/run_roar.csh
+   ```
+
+   **Important:** Even when launching with `./bin/roar` (or a packaged binary that calls it), you must activate the Python virtual environment first.
 
 ## Purpose
 
 ROAR is designed to enable and optimize gm/id and c/id based analog circuit design. The primary goal of this software is to streamline the process of analog circuit design, making it easier to optimize and reuse existing designs through an efficient and automated workflow.
+
+## Disclaimer
+
+Some parts of this codebase were generated with assistance from an LLM. All generated code and resulting behavior are reviewed, verified, and tested by a human before release.
+

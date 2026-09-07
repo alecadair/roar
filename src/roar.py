@@ -2,7 +2,6 @@
 """Top-level launcher for the ROAR GUI application."""
 
 import os
-import subprocess
 import sys
 
 
@@ -38,8 +37,14 @@ def main() -> int:
         print(f"ROAR GUI launcher not found: {gui_script}", file=sys.stderr)
         return 1
 
-    result = subprocess.run([sys.executable, gui_script], check=False)
-    return result.returncode
+    # Preserve user args and give Qt a stable app name for WM_CLASS matching.
+    child_argv = [sys.executable, gui_script]
+    if "-name" not in sys.argv[1:]:
+        child_argv.extend(["-name", "ROAR"])
+    child_argv.extend(sys.argv[1:])
+
+    os.execv(sys.executable, child_argv)
+    return 1
 
 
 if __name__ == "__main__":

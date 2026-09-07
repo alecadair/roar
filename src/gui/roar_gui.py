@@ -3006,10 +3006,29 @@ class ROARApp(QMainWindow):
 
 
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
+
+    app = QApplication(argv)
+
+    # Keep desktop/taskbar identity stable across Wayland/X11 sessions.
+    app.setApplicationName("ROAR")
+    app.setApplicationDisplayName("ROAR")
+    if hasattr(app, "setDesktopFileName"):
+        app.setDesktopFileName("roar")
+
+    _roar_home = ROAR_HOME or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    _icon_path = os.path.join(_roar_home, "images", "png", "ROAR_ICON.png")
+    window_icon = QIcon(_icon_path)
+    app.setWindowIcon(window_icon)
+
     window = ROARApp()
-    window_icon = QIcon(ROAR_HOME + "/images/png/ROAR_ICON_256x256.png")
     window.setWindowIcon(window_icon)
+    window.setObjectName("ROAR")
     window.show()
-    sys.exit(app.exec())
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
