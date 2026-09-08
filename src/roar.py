@@ -3,6 +3,13 @@
 
 import os
 import sys
+import signal
+
+
+def _signal_handler(signum, frame) -> None:
+    """Handle Ctrl-C gracefully by exiting cleanly."""
+    print("\nROAR interrupted by user. Exiting...", file=sys.stderr)
+    sys.exit(0)
 
 
 def _show_env_error() -> None:
@@ -27,6 +34,9 @@ def _show_env_error() -> None:
 
 
 def main() -> int:
+    # Set up Ctrl-C signal handler for graceful exit
+    signal.signal(signal.SIGINT, _signal_handler)
+
     roar_home = os.environ.get("ROAR_HOME")
     if not roar_home:
         _show_env_error()

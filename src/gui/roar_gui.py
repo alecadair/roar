@@ -1,6 +1,15 @@
 import sys
 import os
 import json
+import signal
+
+# Set up Ctrl-C signal handler early to allow graceful exit
+def _sigint_handler(signum, frame):
+    """Handle Ctrl-C gracefully."""
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, _sigint_handler)
+
 os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
 import numpy as np
 #import pyqtgraph.opengl as gl
