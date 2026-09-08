@@ -8,7 +8,6 @@ The Robust and Optimal Analog Reuse (ROAR) flow/tool is developed to enable a GU
 
 - **Python 3.9** or newer
 - **tcsh** or **csh** shell
-- **git** for cloning the repository
 - Linux/Unix environment (tested on Rocky Linux, CentOS, Ubuntu)
 
 ## Install
