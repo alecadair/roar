@@ -24,6 +24,10 @@ OUTPUT_FILE_SH := roar_env.sh
 all: generate_roar_env
 
 install: generate_roar_env
+	@if [ ! -d ".venv" ]; then \
+		echo "Setting up Python virtual environment..."; \
+		./bin/setup_roar.csh; \
+	fi
 	@echo "ROAR installed and ready to use."
 	@echo "Run the following in each new terminal:"
 	@echo "  cd $(CURRENT_DIRECTORY)"
