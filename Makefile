@@ -23,6 +23,14 @@ OUTPUT_FILE_SH := roar_env.sh
 
 all: generate_roar_env
 
+install: generate_roar_env
+	@echo "ROAR installed and ready to use."
+	@echo "Run the following in each new terminal:"
+	@echo "  cd $(CURRENT_DIRECTORY)"
+	@echo "  source .venv/bin/activate.csh"
+	@echo "  source roar_env.csh"
+	@echo "  ./bin/roar"
+
 generate_roar_env:
 	@echo "Generating ROAR Environment File: roar_env.csh"
 	@echo "Source it before using ROAR: source roar_env.csh"
@@ -83,3 +91,8 @@ generate_roar_env_bash:
 clean:
 	@rm -f $(OUTPUT_FILE)
 	@echo "Cleaned: $(OUTPUT_FILE)"
+
+distclean: clean
+	rm -rf .venv .appimage-build bin/ROAR-*.AppImage
+	@echo "Cleaned: .venv, .appimage-build, AppImage artifacts"
+

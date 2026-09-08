@@ -23,15 +23,18 @@ if [ ! -x "$PYTHON_BIN" ]; then
     exit 1
 fi
 
-# Force Qt runtime resolution to the venv's PyQt6 wheel before any system Qt.
-PYQT6_QT_LIB_DIR=$(
-    "$PYTHON_BIN" -c 'import pathlib, PyQt6; print(pathlib.Path(PyQt6.__file__).resolve().parent / "Qt6" / "lib")' 2>/dev/null || true
-)
-if [ -n "${PYQT6_QT_LIB_DIR:-}" ] && [ -d "$PYQT6_QT_LIB_DIR" ]; then
-    if [ -n "${LD_LIBRARY_PATH:-}" ]; then
-        export LD_LIBRARY_PATH="$PYQT6_QT_LIB_DIR:$LD_LIBRARY_PATH"
-    else
-        export LD_LIBRARY_PATH="$PYQT6_QT_LIB_DIR"
+# Optional fallback for systems that hit Qt symbol-mismatch errors.
+# Enable only when needed: setenv ROAR_FORCE_VENV_QT 1
+if [ "${ROAR_FORCE_VENV_QT:-0}" = "1" ]; then
+    PYQT6_QT_LIB_DIR=$(
+        "$PYTHON_BIN" -c 'import pathlib, PyQt6; print(pathlib.Path(PyQt6.__file__).resolve().parent / "Qt6" / "lib")' 2>/dev/null || true
+    )
+    if [ -n "${PYQT6_QT_LIB_DIR:-}" ] && [ -d "$PYQT6_QT_LIB_DIR" ]; then
+        if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+            export LD_LIBRARY_PATH="$PYQT6_QT_LIB_DIR:$LD_LIBRARY_PATH"
+        else
+            export LD_LIBRARY_PATH="$PYQT6_QT_LIB_DIR"
+        fi
     fi
 fi
 

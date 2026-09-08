@@ -2,11 +2,23 @@
 # ROAR
 The Robust and Optimal Analog Reuse (ROAR) flow/tool is developed to enable a GUI based approach to the C/ID and gm/ID (I like to say Inverse ID) analog circuit design methodologies. This software enables the the ability to design, optimize, and generate process/technology agnostic design scripts in a graphical yet automated fashion.
 
+## Quick Start (one line)
+
+```tcsh
+curl -fsSL https://raw.githubusercontent.com/alecadair/roar/main/bin/install.sh | sh
+```
+
+Or if you already have the repo cloned:
+
+```tcsh
+cd /path/to/roar && make install
+```
+
 ## Installation
 
 To set up the ROAR environment, follow these steps (Linux/tcsh):
 
-Prerequisite: Python 3.8 or newer must be available on your system PATH.
+Prerequisite: Python 3.9 or newer must be available on your system PATH.
 
 1. **One-time setup script (recommended)**
 
@@ -59,6 +71,36 @@ Prerequisite: Python 3.8 or newer must be available on your system PATH.
    source .venv/bin/activate.csh
    source roar_env.csh
    ./bin/roar
+   ```
+
+   If the GUI flickers or flashes, test software OpenGL for this session:
+
+   ```tcsh
+   setenv QT_OPENGL software
+   ./bin/roar
+   ```
+
+   If you hit a Qt symbol mismatch on a specific machine, enable ROAR's fallback Qt library path for that session:
+
+   ```tcsh
+   setenv ROAR_FORCE_VENV_QT 1
+   ./bin/roar
+   ```
+
+4. **Build an AppImage (optional)**
+
+   The AppImage builder requires `appimagetool` to be installed, or you can point to it explicitly:
+
+   ```tcsh
+   cd /path/to/roar
+   setenv APPIMAGETOOL /full/path/to/appimagetool
+   ./bin/build_appimage.sh
+   ```
+
+   For a clean rebuild of the local environment before packaging, use:
+
+   ```tcsh
+   ./bin/rebuild_roar.csh --appimage
    ```
 
 ## Purpose

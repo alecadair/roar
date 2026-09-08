@@ -9,9 +9,19 @@ ROAR_HOME=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 APPDIR="$ROAR_HOME/.appimage-build/AppDir"
 OUTPUT="$ROAR_HOME/bin/ROAR-$(uname -m).AppImage"
 
-if ! command -v appimagetool >/dev/null 2>&1; then
+APPIMAGETOOL_BIN="${APPIMAGETOOL:-}"
+if [ -n "$APPIMAGETOOL_BIN" ]; then
+    if [ ! -x "$APPIMAGETOOL_BIN" ]; then
+        echo "APPIMAGETOOL is set but is not executable: $APPIMAGETOOL_BIN" >&2
+        exit 1
+    fi
+else
+    APPIMAGETOOL_BIN=$(command -v appimagetool || true)
+fi
+
+if [ -z "$APPIMAGETOOL_BIN" ]; then
     echo "appimagetool is required but was not found in PATH." >&2
-    echo "Install it, then rerun: $0" >&2
+    echo "Either install it or run: APPIMAGETOOL=/path/to/appimagetool $0" >&2
     exit 1
 fi
 
@@ -50,7 +60,7 @@ cp "$ROAR_HOME/images/png/ROAR_ICON.png" "$APPDIR/.DirIcon"
 cp "$ROAR_HOME/images/png/ROAR_ICON.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/roar.png"
 cp "$APPDIR/roar.desktop" "$APPDIR/usr/share/applications/roar.desktop"
 
-appimagetool "$APPDIR" "$OUTPUT"
+"$APPIMAGETOOL_BIN" "$APPDIR" "$OUTPUT"
 chmod +x "$OUTPUT"
 
 echo "Created: $OUTPUT"
