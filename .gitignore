@@ -12,6 +12,11 @@
 venv/
 ENV/
 
+# VS Code
+.vscode/
+
+
+
 
 
 # Installer logs
