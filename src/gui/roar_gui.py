@@ -305,7 +305,8 @@ class ROARTechBrowser(QWidget):
         layout = QVBoxLayout(self)
 
         self.tree = QTreeWidget(self)
-        self.tree.setHeaderHidden(True)
+        # Header acts as a one-time legend for the tree levels
+        self.tree.setHeaderLabel("PDK ▸ Device ▸ Length ▸ Corner")
         self.tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         # self.tree.itemClicked.connect(self.select_item)
@@ -331,10 +332,27 @@ class ROARTechBrowser(QWidget):
         self.color_map = {}
         self.path_to_item = {}
 
-        self.pdk_item = QTreeWidgetItem(self.tree, ["PDK"])
-        self.pdk_item.setFlags(self.pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        self.pdk_item.setCheckState(0, Qt.CheckState.Unchecked)
-        self.tree.addTopLevelItem(self.pdk_item)
+    @staticmethod
+    def _make_item(name, display=None):
+        """Create a checkable tree item, keeping the raw name in UserRole for path building."""
+        item = QTreeWidgetItem([display if display is not None else name])
+        item.setData(0, Qt.ItemDataRole.UserRole, name)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(0, Qt.CheckState.Unchecked)
+        return item
+
+    @staticmethod
+    def _length_display(pdk_name, length):
+        """IHP LUT directories are suffixed 'u' but the values are actually nanometers."""
+        if "ihp" in pdk_name.lower() and length.endswith("u"):
+            return length[:-1] + "n"
+        return length
+
+    @staticmethod
+    def item_name(item):
+        """Return the raw (unlabeled) name of a tree item."""
+        name = item.data(0, Qt.ItemDataRole.UserRole)
+        return name if name is not None else item.text(0)
 
     @staticmethod
     def format_tech_name(name):
@@ -376,9 +394,10 @@ class ROARTechBrowser(QWidget):
         def build_path(item):
             path = []
             while item:
-                path.insert(0, item.text(0))
+                path.insert(0, ROARTechBrowser.item_name(item))
                 item = item.parent()
-            return ">".join(path)
+            # Legacy "PDK" prefix kept so existing path parsers/saved states still work
+            return ">".join(["PDK"] + path)
 
         def recurse(parent_item):
             parent_child_count = parent_item.childCount()
@@ -408,9 +427,10 @@ class ROARTechBrowser(QWidget):
     def build_full_path(self, item):
         path = []
         while item:
-            path.insert(0, item.text(0))
+            path.insert(0, ROARTechBrowser.item_name(item))
             item = item.parent()
-        return ">".join(path)
+        # Legacy "PDK" prefix kept so existing path parsers/saved states still work
+        return ">".join(["PDK"] + path)
 
     def select_item(self, item, column):
         if self.lookup_window is not None:
@@ -524,29 +544,21 @@ class ROARTechBrowser(QWidget):
             pdk_dict = ROARTechBrowser.create_tech_dict_from_dir(dirname, pdk_name)
 
         # Create top-level PDK item for the tree
-        pdk_item = QTreeWidgetItem([pdk_name])
-        pdk_item.setFlags(pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        pdk_item.setCheckState(0, Qt.CheckState.Unchecked)
-        self.pdk_item.addChild(pdk_item)
+        pdk_item = self._make_item(pdk_name)
+        self.tree.addTopLevelItem(pdk_item)
 
         # Only iterate the models inside this single PDK
         models = pdk_dict.get(pdk_name, {})
         for model, model_dict in models.items():
-            model_item = QTreeWidgetItem([model])
-            model_item.setFlags(model_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            model_item.setCheckState(0, Qt.CheckState.Unchecked)
+            model_item = self._make_item(model)
             pdk_item.addChild(model_item)
 
             for length, length_dict in model_dict.items():
-                length_item = QTreeWidgetItem([length])
-                length_item.setFlags(length_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                length_item.setCheckState(0, Qt.CheckState.Unchecked)
+                length_item = self._make_item(length, self._length_display(pdk_name, length))
                 model_item.addChild(length_item)
 
                 for corner_name, corner_obj in length_dict.get("corners", {}).items():
-                    corner_item = QTreeWidgetItem([corner_name])
-                    corner_item.setFlags(corner_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                    corner_item.setCheckState(0, Qt.CheckState.Unchecked)
+                    corner_item = self._make_item(corner_name)
                     length_item.addChild(corner_item)
                     full_path = self.build_full_path(corner_item)
                     self.path_to_item[full_path] = corner_item
@@ -579,9 +591,11 @@ class ROARTechBrowser(QWidget):
         if path in self.color_map:
             return self.color_map[path]
         else:
-            # assign a default color
-            import random
-            color = QColor.fromHsv(random.randint(0, 255), 200, 200)
+            # Default color derived from the path so every tech browser
+            # initially assigns the same color to the same corner.
+            import zlib
+            hue = zlib.crc32(path.encode('utf-8')) % 256
+            color = QColor.fromHsv(hue, 200, 200)
             self.color_map[path] = color
             return color
 
@@ -650,15 +664,34 @@ class ROARTechBrowser(QWidget):
                         continue
 
                     bold = path in bold_paths
-                    if self.lookup_window and hasattr(self.lookup_window, 'set_corner_boldness'):
+                    for lw in self._boldness_target_windows():
                         try:
-                            self.lookup_window.set_corner_boldness(path, bold)
+                            lw.set_corner_boldness(path, bold)
                         except Exception:
                             pass
                 except Exception:
                     pass
         except Exception:
             pass
+
+    def _boldness_target_windows(self):
+        """Windows whose traces should follow this browser's selection boldness.
+
+        Normally just the owning window; when it is the Global master, also all
+        follower (non-Local) windows in the grid.
+        """
+        lw = self.lookup_window
+        if lw is None or not hasattr(lw, 'set_corner_boldness'):
+            return []
+        targets = [lw]
+        try:
+            if getattr(lw, '_is_global_browser', False) and lw.graph_grid:
+                for other in lw.graph_grid.lookup_windows:
+                    if other is not lw and not getattr(other, '_is_local_browser', False):
+                        targets.append(other)
+        except Exception:
+            pass
+        return targets
     # --------------------------------------------------------------------------------------
 
     def populate_from_tech_dict(self):
@@ -669,37 +702,24 @@ class ROARTechBrowser(QWidget):
         """
         try:
             self.tree.clear()
-            # Recreate a root PDK container to match previous behavior
-            self.pdk_item = QTreeWidgetItem(self.tree, ["PDK"])
-            self.pdk_item.setFlags(self.pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            self.pdk_item.setCheckState(0, Qt.CheckState.Unchecked)
-            self.tree.addTopLevelItem(self.pdk_item)
 
             if not self.tech_dict:
                 return
 
             for pdk_name, models in self.tech_dict.items():
-                pdk_item = QTreeWidgetItem([pdk_name])
-                pdk_item.setFlags(pdk_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                pdk_item.setCheckState(0, Qt.CheckState.Unchecked)
-                self.pdk_item.addChild(pdk_item)
+                pdk_item = self._make_item(pdk_name)
+                self.tree.addTopLevelItem(pdk_item)
 
                 for model, model_dict in models.items():
-                    model_item = QTreeWidgetItem([model])
-                    model_item.setFlags(model_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                    model_item.setCheckState(0, Qt.CheckState.Unchecked)
+                    model_item = self._make_item(model)
                     pdk_item.addChild(model_item)
 
                     for length, length_dict in model_dict.items():
-                        length_item = QTreeWidgetItem([length])
-                        length_item.setFlags(length_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                        length_item.setCheckState(0, Qt.CheckState.Unchecked)
+                        length_item = self._make_item(length, self._length_display(pdk_name, length))
                         model_item.addChild(length_item)
 
                         for corner_name in length_dict.get("corners", {}).keys():
-                            corner_item = QTreeWidgetItem([corner_name])
-                            corner_item.setFlags(corner_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                            corner_item.setCheckState(0, Qt.CheckState.Unchecked)
+                            corner_item = self._make_item(corner_name)
                             length_item.addChild(corner_item)
                             full_path = self.build_full_path(corner_item)
                             self.path_to_item[full_path] = corner_item
@@ -1105,6 +1125,7 @@ class ROARApp(QMainWindow):
 
         # Create a horizontal splitter
         splitter_h = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter_h = splitter_h
         #splitter_h.setHandleWidth(1)
         self.editor_window = ROAREditorWindow(top_level_app=self)
         splitter_h.addWidget(self.editor_window)
@@ -1216,6 +1237,7 @@ class ROARApp(QMainWindow):
 
         # Give the editor ~60% and the console ~40% of the dock height
         dock_splitter.setSizes([300, 200])
+        self._dock_splitter = dock_splitter
 
         self.python_dock.setWidget(dock_splitter)
         self.python_dock.setMinimumSize(300, 200)
@@ -1450,10 +1472,15 @@ class ROARApp(QMainWindow):
         maximize_action = QAction("Maximize", self)
         maximize_action.triggered.connect(self.showMaximized)
 
+        restore_layout_action = QAction("Restore Default Layout", self)
+        restore_layout_action.setToolTip("Reset all panel sizes to their fresh-start defaults")
+        restore_layout_action.triggered.connect(self.restore_default_layout)
+
         window_prefs_action = QAction("Preferences", self)
         window_prefs_action.triggered.connect(self.open_window_preferences)
 
         window_menu.addAction(maximize_action)
+        window_menu.addAction(restore_layout_action)
         window_menu.addAction(window_prefs_action)
 
         # Theme submenu: choose between Dark and Light themes
@@ -1519,6 +1546,81 @@ class ROARApp(QMainWindow):
         about_action = QAction("About", self)
         about_action.triggered.connect(self.show_about_dialog)
         help_menu.addAction(about_action)
+
+        hotkeys_action = QAction("Hotkeys", self)
+        hotkeys_action.triggered.connect(self.show_hotkeys_dialog)
+        help_menu.addAction(hotkeys_action)
+
+        calc_funcs_action = QAction("Calculator Functions", self)
+        calc_funcs_action.setToolTip("Show all functions available in the Expression Editor")
+        calc_funcs_action.triggered.connect(self.show_calculator)
+        help_menu.addAction(calc_funcs_action)
+
+    # ---- DEFAULT LAYOUT CAPTURE / RESTORE ----
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Snapshot the fresh-start layout once the first show has been laid out
+        if not getattr(self, '_default_layout_fractions', None):
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self._capture_default_layout)
+
+    @staticmethod
+    def _splitter_fractions(splitter):
+        try:
+            sizes = splitter.sizes()
+            total = sum(sizes)
+            return [s / total for s in sizes] if total > 0 else None
+        except Exception:
+            return None
+
+    def _capture_default_layout(self):
+        """Record default splitter proportions from a freshly opened application."""
+        if getattr(self, '_default_layout_fractions', None):
+            return
+        d = {}
+        d['main_h'] = self._splitter_fractions(self.splitter_h)
+        d['dock'] = self._splitter_fractions(self._dock_splitter)
+        grid = self.graph_grid
+        if grid is not None and hasattr(grid, 'grid_splitter'):
+            d['grid'] = self._splitter_fractions(grid.grid_splitter)
+            d['grid_row'] = self._splitter_fractions(grid.top_splitter)
+            lws = getattr(grid, 'lookup_windows', None)
+            if lws:
+                d['lw_pane'] = self._splitter_fractions(lws[0].top_level_pane)
+                d['lw_tech'] = self._splitter_fractions(lws[0].tech_splitter)
+        self._default_layout_fractions = d
+
+    def restore_default_layout(self):
+        """Reset all splitter sizings to fresh-start defaults, leaving widget states and window size untouched."""
+        d = getattr(self, '_default_layout_fractions', None)
+        if not d:
+            return
+
+        def apply(splitter, fracs):
+            if splitter is None or not fracs:
+                return
+            try:
+                sizes = splitter.sizes()
+                total = sum(sizes)
+                if total <= 0 or len(sizes) != len(fracs):
+                    return
+                splitter.setSizes([max(1, round(f * total)) for f in fracs])
+            except Exception:
+                pass
+
+        apply(self.splitter_h, d.get('main_h'))
+        apply(self._dock_splitter, d.get('dock'))
+
+        for i in range(self.graph_tabs.count()):
+            grid = self.graph_tabs.widget(i)
+            if grid is None or not hasattr(grid, 'grid_splitter'):
+                continue  # skip the '+' placeholder tab
+            apply(grid.grid_splitter, d.get('grid'))
+            apply(grid.top_splitter, d.get('grid_row'))
+            apply(grid.bottom_splitter, d.get('grid_row'))
+            for lw in getattr(grid, 'lookup_windows', None) or []:
+                apply(getattr(lw, 'top_level_pane', None), d.get('lw_pane'))
+                apply(getattr(lw, 'tech_splitter', None), d.get('lw_tech'))
 
     # ---- MENU ACTION CALLBACKS ----
     def new_file(self):
@@ -2085,10 +2187,7 @@ class ROARApp(QMainWindow):
                         item = window.tech_browser.path_to_item[path]
                         if item.childCount() == 0:
                             try:
-                                from PyQt6.QtGui import QPixmap, QIcon
-                                pixmap = QPixmap(16, 16)
-                                pixmap.fill(QColor(color))
-                                item.setIcon(0, QIcon(pixmap))
+                                window.tech_browser.set_item_icon(item, QColor(color))
                             except Exception:
                                 pass
 
@@ -2311,6 +2410,46 @@ class ROARApp(QMainWindow):
     def show_about_dialog(self):
         """Displays an About dialog."""
         QMessageBox.about(self, "About ROAR", "ROAR - Robust Optimal Analog Reuse\nVersion 1.0\n© 2026 ROAR Inc.")
+
+    def show_hotkeys_dialog(self):
+        """Displays a dialog listing all available hotkeys with short descriptions."""
+        hotkeys = [
+            ("Application", [
+                ("Ctrl+O", "Open a saved application state"),
+                ("Ctrl+S", "Save the current application state"),
+                ("Ctrl+`", "Toggle the Python Editor && Console panel"),
+                ("Ctrl+Shift+E", "Export the design to a Python script file"),
+            ]),
+            ("Graphs", [
+                ("L", "Toggle log scale on both axes of the active graph"),
+                ("X", "Toggle log scale on the X axis"),
+                ("Y", "Toggle log scale on the Y axis"),
+                ("F", "Auto-fit the active graph to its data"),
+                ("V", "Add a vertical marker to the active graph"),
+                ("H", "Add a horizontal marker to the active graph"),
+                ("Delete", "Delete currently selected marker (3-D view)"),
+                ("Escape", "Clear 3-D markers / dismiss"),
+            ]),
+        ]
+
+        rows = []
+        for section, items in hotkeys:
+            rows.append(
+                f"<tr><td colspan='2' style='padding-top:8px;'><b>{section}</b></td></tr>"
+            )
+            for key, desc in items:
+                rows.append(
+                    f"<tr><td style='padding-right:16px;'><code>{key}</code></td>"
+                    f"<td>{desc}</td></tr>"
+                )
+        html = "<table>" + "".join(rows) + "</table>"
+
+        box = QMessageBox(self)
+        box.setWindowTitle("ROAR Hotkeys")
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText(html)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.exec()
 
     def set_theme(self, theme_name: str):
         """Apply 'dark' or 'light' theme to the application.

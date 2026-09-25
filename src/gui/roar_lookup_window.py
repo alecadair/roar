@@ -2733,9 +2733,9 @@ class ROARLookupWindow(QWidget):
         self.checkbox_logz.setVisible(False)
 
         # Clear markers / update graph when changing axes
-        self.combo_x.currentIndexChanged.connect(self.on_axis_selection_changed)
-        self.combo_y.currentIndexChanged.connect(self.on_axis_selection_changed)
-        self.combo_z.currentIndexChanged.connect(self.on_axis_selection_changed)
+        self.combo_x.currentIndexChanged.connect(lambda _i: self.on_axis_selection_changed(axis='x'))
+        self.combo_y.currentIndexChanged.connect(lambda _i: self.on_axis_selection_changed(axis='y'))
+        self.combo_z.currentIndexChanged.connect(lambda _i: self.on_axis_selection_changed(axis='z'))
 
         # Splitters no longer used — keep as None so external refs don't crash
         self.splitter_x = None
@@ -2817,6 +2817,7 @@ class ROARLookupWindow(QWidget):
                 pass
             cb.setFixedSize(cb_widget_size, cb_widget_size)
             cb.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            cb.toggled.connect(lambda checked, idx=i: self._on_attachment_toggled(idx, checked))
             self.setting_checkboxes.append(cb)
 
         g_layout.addWidget(self.setting_checkboxes[0], 0, 0)
@@ -3185,7 +3186,8 @@ class ROARLookupWindow(QWidget):
                 "QPushButton { border: 2px solid #1C8091; border-radius: 2px;"
                 " font-size: 14px; padding: 0px; background: #d0f0f8; }")
             self.global_toggle_button.setToolTip("GLOBAL — this tech browser controls all\n"
-                                                  "non-Local browsers in Device Params mode.\n"
+                                                  "non-Local browsers (instances with explicit\n"
+                                                  "corners keep their own corner list).\n"
                                                   "Click to switch to Local.")
         elif self._is_local_browser:
             self.global_toggle_button.setText("📌")
@@ -3206,13 +3208,24 @@ class ROARLookupWindow(QWidget):
     def sync_from_global(self, checked_paths, color_map=None):
         """Mirror the Global tech browser's checked state into this window.
 
-        Only applies in Device Params mode and only if this window is not
-        Local and not itself the Global master.
+        Applies in Device Params mode and in Design Eqs mode, but only if this
+        window is not Local and not itself the Global master.  In Design Eqs
+        mode, instances with explicit corners always keep their own corner
+        list; when EVERY instance has explicit corners the sync is skipped
+        entirely so the synthesized all-custom plot remains untouched.
         """
         if self._is_global_browser or self._is_local_browser:
             return
         if not self.is_device_params_mode:
-            return
+            try:
+                device_corners = self.top_level_app.editor_window.get_device_corners()
+                if device_corners and all(
+                    dc.get('corners') is not None
+                    for dc in device_corners.values()
+                ):
+                    return
+            except Exception:
+                pass
 
         # Block signals on the follower's tree for the entire operation so
         # that setCheckState / setIcon calls do not trigger handle_item_changed
@@ -3454,7 +3467,7 @@ class ROARLookupWindow(QWidget):
         except Exception:
             pass
 
-    def clear_markers(self):
+    def clear_markers(self, keep_vertical=False):
         pw = getattr(self, "plot_widget", None)
         if not pw:
             return
@@ -3468,12 +3481,16 @@ class ROARLookupWindow(QWidget):
                 pass
         pw.markers.clear()
         for marker in pw.line_markers[:]:
+            if keep_vertical and marker['vertical']:
+                continue
             pw.plotItem.removeItem(marker['line'])
             for text in marker['texts']:
                 pw.plotItem.removeItem(text)
             if 'summary_text' in marker:
                 pw.plotItem.removeItem(marker['summary_text'])
-        pw.line_markers.clear()
+            pw.line_markers.remove(marker)
+        if not keep_vertical:
+            pw.line_markers.clear()
         for item in pw.difference_items:
             if isinstance(item, dict):
                 pw.plotItem.removeItem(item['line'])
@@ -3851,9 +3868,10 @@ class ROARLookupWindow(QWidget):
         # Pass to parent class for default handling
         super().keyPressEvent(event)
 
-    def on_axis_selection_changed(self, _idx=None):
+    def on_axis_selection_changed(self, _idx=None, axis=None):
         try:
-            self.clear_markers()
+            # Y-axis change: x positions stay meaningful, so keep vertical markers
+            self.clear_markers(keep_vertical=(axis == 'y'))
         except Exception:
             pass
         try:
@@ -5366,6 +5384,43 @@ class ROARLookupWindow(QWidget):
                 attached.append(other)
                 attached.extend(other.get_attached_windows(visited))
         return list(set(attached))
+
+    def _on_attachment_toggled(self, index, checked):
+        """When another window is newly locked to this one, hand it our vertical markers."""
+        if not checked or not self.graph_grid:
+            return
+        windows = self.graph_grid.lookup_windows
+        if self not in windows or index >= len(windows):
+            return
+        target = windows[index]
+        if target is self:
+            return
+        self._copy_vertical_markers_to(target)
+
+    def _copy_vertical_markers_to(self, target, visited=None):
+        """Copy this window's vertical markers to target, cascading down target's own attachment chain."""
+        if visited is None:
+            visited = {self}
+        if target in visited:
+            return
+        visited.add(target)
+        try:
+            positions = [m['linear_pos'] for m in self.plot_widget.line_markers if m['vertical']]
+            existing = [m['linear_pos'] for m in target.plot_widget.line_markers if m['vertical']]
+            for pos in positions:
+                if not any(abs(pos - e) <= 1e-9 * max(1.0, abs(pos)) for e in existing):
+                    target.plot_widget.add_vertical_marker(linear_pos=pos, sync=False)
+        except Exception:
+            return
+        # Windows locked to the target inherit the chain (A -> B -> C)
+        try:
+            windows = self.graph_grid.lookup_windows
+            t_index = windows.index(target)
+        except (ValueError, AttributeError):
+            return
+        for i, cb in enumerate(target.setting_checkboxes):
+            if i != t_index and cb.isChecked() and i < len(windows):
+                target._copy_vertical_markers_to(windows[i], visited)
 
 
 class ROARGraphGrid(QWidget):

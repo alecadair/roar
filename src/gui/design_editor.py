@@ -171,8 +171,8 @@ class DeviceCornerSelectorWindow(QDialog):
                     for i in range(item.childCount()):
                         child = item.child(i)
                         if child.childCount() == 0:
-                            # Leaf = corner item
-                            name = child.text(0)
+                            # Leaf = corner item (raw name stored in UserRole; text may be labeled)
+                            name = child.data(0, Qt.ItemDataRole.UserRole) or child.text(0)
                             if name in target_names:
                                 child.setCheckState(0, Qt.CheckState.Checked)
                             else:

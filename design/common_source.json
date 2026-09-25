@@ -1,20 +1,20 @@
 {
     "expression_editor": [
         {
-            "Symbol": "cload",
-            "Expression": "100e-15",
-            "disabled": false,
-            "plot": false
-        },
-        {
             "Symbol": "fu",
-            "Expression": "100e6",
+            "Expression": "1e9",
             "disabled": false,
             "plot": false
         },
         {
             "Symbol": "wu",
-            "Expression": "2*pi*fu*av_total",
+            "Expression": "fu*(pi/180)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cload",
+            "Expression": "5e-12",
             "disabled": false,
             "plot": false
         },
@@ -55,14 +55,14 @@
             "plot": false
         },
         {
-            "Symbol": "kgds1",
-            "Expression": "kgds:M1",
+            "Symbol": "kcs1",
+            "Expression": "kcgs1 + kcgd1*(1 + av_total) + kcds1",
             "disabled": false,
             "plot": false
         },
         {
-            "Symbol": "kcs1",
-            "Expression": "kcgs1 + kcgd1*(1 + av_total) + kcds1",
+            "Symbol": "kgds1",
+            "Expression": "kgds:M1",
             "disabled": false,
             "plot": false
         },
@@ -115,6 +115,12 @@
             "plot": false
         },
         {
+            "Symbol": "k",
+            "Expression": "1.38e-23",
+            "disabled": false,
+            "plot": false
+        },
+        {
             "Symbol": "gm1",
             "Expression": "kgm1*i_total",
             "disabled": false,
@@ -128,7 +134,43 @@
         },
         {
             "Symbol": "rload",
-            "Expression": "av1/gm1",
+            "Expression": "av_total/gm1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "vgs1",
+            "Expression": "vgs:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "vout_bias",
+            "Expression": "vdd - rload*i_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "vdd",
+            "Expression": "1.8",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "rload_vdrop",
+            "Expression": "rload*i_total",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "vth1",
+            "Expression": "vth:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "M1_overdrive",
+            "Expression": "vgs1 - vth1",
             "disabled": false,
             "plot": false
         }

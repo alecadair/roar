@@ -160,7 +160,8 @@ class _ConsoleScintilla(QsciScintilla):
 
     def current_input(self) -> str:
         """Return text the user has typed after the last prompt."""
-        return self.text()[self._input_start:]
+        # _input_start is a Scintilla byte offset (UTF-8), so slice in bytes
+        return self.text().encode("utf-8")[self._input_start:].decode("utf-8", errors="replace")
 
     # -- key handling -------------------------------------------------------
 

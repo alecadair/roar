@@ -1,19 +1,19 @@
 {
   "version": "1.0.2",
-  "saved_at": "2026-09-24T22:02:46.418620",
+  "saved_at": "2026-09-24T22:14:59.386755",
   "app_name": "ROAR",
   "window": {
     "geometry": {
       "x": 2527,
       "y": -209,
       "width": 2560,
-      "height": 1375
+      "height": 1402
     },
     "maximized": true
   },
   "theme": "dark",
   "console_panel": {
-    "visible": false,
+    "visible": true,
     "floating": false,
     "area": 2
   },
@@ -3523,7 +3523,7 @@
               "PDK>SKY130A>n_01v8>200>nfetss-25": "#b3c82b",
               "PDK>SKY130A>n_01v8>200>nfetss75": "#2b52c8",
               "PDK>SKY130A>n_01v8>200>nfettt-25": "#c85d2b",
-              "PDK>SKY130A>n_01v8>150>nfettt27": "#a9c82b",
+              "PDK>SKY130A>n_01v8>150>nfettt27": "#3465a4",
               "PDK>SKY130A>n_01v8>150>nfettt75": "#432bc8",
               "PDK>SKY130A>n_01v8>150>nfetff-25": "#2bc8a3",
               "PDK>SKY130A>n_01v8>150>nfetff27": "#bbc82b",
@@ -3914,7 +3914,7 @@
               "PDK>SKY130A>n_01v8>200>nfetss-25": "#b3c82b",
               "PDK>SKY130A>n_01v8>200>nfetss75": "#2b52c8",
               "PDK>SKY130A>n_01v8>200>nfettt-25": "#c85d2b",
-              "PDK>SKY130A>n_01v8>150>nfettt27": "#a9c82b",
+              "PDK>SKY130A>n_01v8>150>nfettt27": "#3465a4",
               "PDK>SKY130A>n_01v8>150>nfettt75": "#432bc8",
               "PDK>SKY130A>n_01v8>150>nfetff-25": "#2bc8a3",
               "PDK>SKY130A>n_01v8>150>nfetff27": "#bbc82b",
@@ -4305,7 +4305,7 @@
               "PDK>SKY130A>n_01v8>200>nfetss-25": "#b3c82b",
               "PDK>SKY130A>n_01v8>200>nfetss75": "#2b52c8",
               "PDK>SKY130A>n_01v8>200>nfettt-25": "#c85d2b",
-              "PDK>SKY130A>n_01v8>150>nfettt27": "#a9c82b",
+              "PDK>SKY130A>n_01v8>150>nfettt27": "#3465a4",
               "PDK>SKY130A>n_01v8>150>nfettt75": "#432bc8",
               "PDK>SKY130A>n_01v8>150>nfetff-25": "#2bc8a3",
               "PDK>SKY130A>n_01v8>150>nfetff27": "#bbc82b",
@@ -4578,7 +4578,7 @@
           {
             "is_device_params_mode": false,
             "combo_x_text": "kgm1",
-            "combo_y_text": "av_calc_vperv",
+            "combo_y_text": "av1",
             "combo_z_text": "cload",
             "spin_x_value": 0.0,
             "spin_y_value": 0.0,
@@ -4696,7 +4696,7 @@
               "PDK>SKY130A>n_01v8>200>nfetss-25": "#b3c82b",
               "PDK>SKY130A>n_01v8>200>nfetss75": "#2b52c8",
               "PDK>SKY130A>n_01v8>200>nfettt-25": "#c85d2b",
-              "PDK>SKY130A>n_01v8>150>nfettt27": "#a9c82b",
+              "PDK>SKY130A>n_01v8>150>nfettt27": "#3465a4",
               "PDK>SKY130A>n_01v8>150>nfettt75": "#432bc8",
               "PDK>SKY130A>n_01v8>150>nfetff-25": "#2bc8a3",
               "PDK>SKY130A>n_01v8>150>nfetff27": "#bbc82b",
