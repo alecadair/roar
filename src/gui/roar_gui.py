@@ -1563,6 +1563,11 @@ class ROARApp(QMainWindow):
         export_py_editor_action.triggered.connect(self.export_design_to_python_editor)
         python_script_menu.addAction(export_py_editor_action)
 
+        export_spice_action = QAction("Export SPICE Parameters…", self)
+        export_spice_action.setToolTip("Write assigned instance values as .param statements")
+        export_spice_action.triggered.connect(self.export_design_to_spice_params)
+        export_menu.addAction(export_spice_action)
+
         # ----- HELP MENU -----
         help_menu = menubar.addMenu("Help")
         about_action = QAction("About", self)
@@ -2428,6 +2433,96 @@ class ROARApp(QMainWindow):
         self.python_editor.set_text(script)
         # Make sure the panel is visible and switched to the Editor tab
         self.show_console_panel(tab_name="Editor")
+
+    # ---- SPICE parameter export ----
+
+    @staticmethod
+    def _spice_param_name(instance, attr):
+        raw = f"{instance}_{attr}".lower()
+        cleaned = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in raw)
+        if cleaned and cleaned[0].isdigit():
+            cleaned = f"p_{cleaned}"
+        return cleaned
+
+    def _generate_spice_params(self):
+        """Build the .param file body, or None when there is nothing to export."""
+        try:
+            from design_editor import format_param_value
+        except Exception:
+            from gui.design_editor import format_param_value
+
+        try:
+            parameters = self.editor_window.get_instance_parameters()
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "Export Error",
+                f"Failed to read the instance table:\n{exc}")
+            return None
+
+        if not parameters:
+            QMessageBox.information(
+                self, "Export SPICE Parameters",
+                "No instance values to export.\n\n"
+                "Add instances to the instance table, or right-click a marker "
+                "and choose “Assign to Instance…”.")
+            return None
+
+        from datetime import datetime
+
+        lines = [
+            "* ROAR design parameter export",
+            f"* Generated: {datetime.now().isoformat(timespec='seconds')}",
+            "",
+        ]
+
+        for instance, attrs in parameters.items():
+            lines.append(f"* ---- Instance {instance} ----")
+            for attr, info in attrs.items():
+                value = format_param_value(info.get("value"))
+                if not value:
+                    continue
+                source = info.get("source")
+                reduce_mode = info.get("reduce")
+                note = f"* {attr}: {source}" if source else f"* {attr}"
+                if reduce_mode and reduce_mode != "pinned":
+                    note += f", across corners: {reduce_mode}"
+                lines.append(note)
+
+                per_corner = info.get("per_corner") or {}
+                if len(per_corner) > 1:
+                    spread = ", ".join(
+                        f"{name}={format_param_value(val)}"
+                        for name, val in per_corner.items())
+                    lines.append(f"*   per-corner: {spread}")
+
+                lines.append(
+                    f".param {self._spice_param_name(instance, attr)} = {value}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def export_design_to_spice_params(self):
+        """Export assigned instance values as a SPICE .param file."""
+        content = self._generate_spice_params()
+        if content is None:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save SPICE Parameters", "",
+            "SPICE Files (*.spice *.cir *.sp);;All Files (*)")
+        if not path:
+            return
+
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            QMessageBox.information(
+                self, "Export Successful",
+                f"SPICE parameters written to:\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "Export Error",
+                f"Failed to write file:\n{exc}")
 
     def show_about_dialog(self):
         """Displays an About dialog."""

@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QMessageBox, QSplitter, QGroupBox,
     QDialog, QRadioButton, QCheckBox, QLabel, QProgressDialog, QMenu,
-    QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem
+    QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem, QAbstractItemView
 )
 from PyQt6.QtGui import QAction
 from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon, QFont
@@ -14,6 +14,26 @@ import os
 
 # Get ROAR_HOME from environment
 ROAR_HOME = os.environ.get("ROAR_HOME", "")
+
+# Per-item role holding the assigned-attribute dict (column 0).
+_INSTANCE_ATTR_ROLE = Qt.ItemDataRole.UserRole + 2
+
+
+def format_param_value(value):
+    """Format a numeric (or passthrough string) parameter value for display/export."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (int, float)):
+        return f"{float(value):.6g}"
+    text = str(value).strip()
+    if not text:
+        return ""
+    try:
+        return f"{float(text):.6g}"
+    except ValueError:
+        return text
 
 
 class DeviceCornerSelectorWindow(QDialog):
@@ -665,10 +685,7 @@ class BaseEditor(QWidget):
         # Set header text alignment
         header_item = self.tree.headerItem()
         for col, col_name in enumerate(columns):
-            if col_name in ["Instance", "kgm", "ID", "W", "L", "Corners"]:
-                header_item.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-            else:
-                header_item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            header_item.setTextAlignment(col, self._column_alignment(col_name))
 
         # Set resize mode to Interactive so columns can be manually resized by dragging
         self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -678,19 +695,37 @@ class BaseEditor(QWidget):
             self.tree.header().resizeSection(idx, 70)  # Wide enough to show full "Instance" header
         if "kgm" in columns:
             idx = columns.index("kgm")
-            self.tree.header().resizeSection(idx, 45)  # Compact for kgm
+            self.tree.header().resizeSection(idx, 38)  # Compact for kgm
         if "ID" in columns:
             idx = columns.index("ID")
-            self.tree.header().resizeSection(idx, 45)  # Smaller for ID
+            self.tree.header().resizeSection(idx, 38)  # Smaller for ID
         if "W" in columns:
             idx = columns.index("W")
-            self.tree.header().resizeSection(idx, 45)  # Smaller for W
+            self.tree.header().resizeSection(idx, 38)  # Smaller for W
         if "L" in columns:
             idx = columns.index("L")
-            self.tree.header().resizeSection(idx, 45)  # Smaller for L
+            self.tree.header().resizeSection(idx, 38)  # Smaller for L
         if "Corners" in columns:
             idx = columns.index("Corners")
-            self.tree.header().resizeSection(idx, 50)  # Compact width for Corners
+            self.tree.header().resizeSection(idx, 88)  # Roomier so corner names stay readable
+        # Corners takes up the slack instead of the last column, so kgm/ID/W/L
+        # keep equal widths and no empty header strip is left over.
+        if self.corners_column_index >= 0:
+            try:
+                self.tree.header().setStretchLastSection(False)
+                self.tree.header().setSectionResizeMode(
+                    self.corners_column_index, QHeaderView.ResizeMode.Stretch)
+            except Exception:
+                pass
+        # Overflow into a horizontal scrollbar rather than forcing the editor
+        # panel wider as attribute columns are added. The last section still
+        # stretches, so no empty header strip is left when columns are narrow.
+        try:
+            self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.tree.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+            self.tree.header().setMinimumSectionSize(30)
+        except Exception:
+            pass
         self.tree.setTabKeyNavigation(False)  # Disable default row-wise tab behavior
         # Allow multiple selection and enable drag & drop. We handle moves in
         # dropEvent and use startDrag to ensure external drops don't remove
@@ -830,6 +865,13 @@ class BaseEditor(QWidget):
         except Exception:
             pass
 
+    def _column_alignment(self, col_name):
+        """Instance-table columns are centered; free-text editors stay left aligned."""
+        if self.corners_column_index >= 0 or col_name in (
+                "Instance", "kgm", "ID", "W", "L", "Corners"):
+            return Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+
     def add_row(self):
         item = QTreeWidgetItem(["" for _ in self.columns])
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)  # Make editable
@@ -842,11 +884,7 @@ class BaseEditor(QWidget):
         # Ensure text is aligned properly in each column and vertically centered
         for col in range(len(self.columns)):
             try:
-                col_name = self.columns[col]
-                if col_name in ["Instance", "kgm", "ID", "W", "L", "Corners"]:
-                    item.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-                else:
-                    item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                item.setTextAlignment(col, self._column_alignment(self.columns[col]))
             except Exception:
                 pass
 
@@ -1394,6 +1432,131 @@ class BaseEditor(QWidget):
         except Exception:
             pass
 
+    # ------------------------------------------------------------------
+    # Assigned instance attributes
+    # ------------------------------------------------------------------
+
+    def get_instance_names(self):
+        names = []
+        for i in range(self.tree.topLevelItemCount()):
+            name = self.tree.topLevelItem(i).text(0).strip()
+            if name:
+                names.append(name)
+        return names
+
+    def add_column(self, name, width=55):
+        """Append an attribute column, preserving existing row data."""
+        name = (name or "").strip()
+        if not name or name in self.columns:
+            return False
+
+        new_index = len(self.columns)
+        self.columns.append(name)
+        self.tree.setColumnCount(len(self.columns))
+        self.tree.setHeaderLabels(self.columns)
+
+        # setHeaderLabels rebuilds the header item, so realign every column.
+        header_item = self.tree.headerItem()
+        for col, col_name in enumerate(self.columns):
+            header_item.setTextAlignment(col, self._column_alignment(col_name))
+
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            item.setTextAlignment(new_index, self._column_alignment(name))
+
+        try:
+            self.tree.header().resizeSection(new_index, width)
+        except Exception:
+            pass
+
+        # setHeaderLabels can reset per-section resize modes.
+        if self.corners_column_index >= 0:
+            try:
+                self.tree.header().setStretchLastSection(False)
+                self.tree.header().setSectionResizeMode(
+                    self.corners_column_index, QHeaderView.ResizeMode.Stretch)
+            except Exception:
+                pass
+
+        return True
+
+    def find_instance_item(self, instance_name):
+        target = (instance_name or "").strip()
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            if item.text(0).strip() == target:
+                return item
+        return None
+
+    def get_instance_attributes(self, item):
+        """Return the assigned-attribute dict for *item* ({} when none)."""
+        try:
+            stored = item.data(0, _INSTANCE_ATTR_ROLE)
+        except Exception:
+            stored = None
+        return dict(stored) if isinstance(stored, dict) else {}
+
+    def set_instance_attribute(self, item, attr, spec):
+        """Assign *attr* on *item*; spec carries the value plus its provenance."""
+        if item is None or not attr:
+            return
+        attrs = self.get_instance_attributes(item)
+        attrs[attr] = spec
+        try:
+            item.setData(0, _INSTANCE_ATTR_ROLE, attrs)
+        except Exception:
+            return
+        self._refresh_attribute_display(item, attr, spec)
+
+    def clear_instance_attribute(self, item, attr):
+        attrs = self.get_instance_attributes(item)
+        if attr in attrs:
+            del attrs[attr]
+            item.setData(0, _INSTANCE_ATTR_ROLE, attrs)
+            if attr in self.columns:
+                col = self.columns.index(attr)
+                item.setText(col, "")
+                item.setToolTip(col, "")
+            self._refresh_extra_attr_tooltip(item)
+
+    @staticmethod
+    def build_attribute_tooltip(attr, spec):
+        lines = [f"{attr} = {format_param_value(spec.get('resolved'))}"]
+        source_label = spec.get("source_label")
+        if source_label:
+            lines.append(f"Source: {source_label}")
+        reduce_mode = spec.get("reduce")
+        if reduce_mode:
+            lines.append(f"Across corners: {reduce_mode}")
+        per_corner = spec.get("per_corner") or {}
+        if per_corner:
+            lines.append("")
+            lines.append("Per corner:")
+            for corner_name, corner_value in per_corner.items():
+                lines.append(f"  {corner_name}: {format_param_value(corner_value)}")
+        return "\n".join(lines)
+
+    def _refresh_attribute_display(self, item, attr, spec):
+        text = format_param_value(spec.get("resolved"))
+        if attr in self.columns:
+            col = self.columns.index(attr)
+            item.setText(col, text)
+            item.setToolTip(col, self.build_attribute_tooltip(attr, spec))
+        else:
+            self._refresh_extra_attr_tooltip(item)
+
+    def _refresh_extra_attr_tooltip(self, item):
+        """Attributes without a matching column are surfaced on the Instance cell."""
+        extras = {a: s for a, s in self.get_instance_attributes(item).items()
+                  if a not in self.columns}
+        if not extras:
+            item.setToolTip(0, "")
+            return
+        lines = ["Assigned attributes:"]
+        for attr, spec in extras.items():
+            lines.append(f"  {attr} = {format_param_value(spec.get('resolved'))}")
+        item.setToolTip(0, "\n".join(lines))
+
     def get_table_data(self):
         data = []
         for i in range(self.tree.topLevelItemCount()):
@@ -1414,11 +1577,23 @@ class BaseEditor(QWidget):
                     row_data["_corners_data"] = corners_data  # Use special key to store corner data
                 except Exception:
                     row_data["_corners_data"] = None
+            attrs = self.get_instance_attributes(item)
+            if attrs:
+                row_data["_attributes"] = attrs
             data.append(row_data)
         return data
 
     def load_table_data(self, data):
         self.tree.clear()
+        # Attribute columns assigned in a previous session must exist before rows
+        # are built, since row text is read positionally from self.columns.
+        for row_data in data:
+            saved_attrs = row_data.get("_attributes") or {}
+            if isinstance(saved_attrs, dict):
+                for attr, spec in saved_attrs.items():
+                    if (isinstance(spec, dict) and spec.get("as_column")
+                            and attr not in self.columns):
+                        self.add_column(attr)
         #self.disabled_rows.clear()
         #self.enabled_plot_rows.clear()
         for row_data in data:
@@ -1439,11 +1614,7 @@ class BaseEditor(QWidget):
             # Ensure text alignment is proper for each column
             for col in range(len(self.columns)):
                 try:
-                    col_name = self.columns[col]
-                    if col_name in ["Instance", "kgm", "ID", "W", "L", "Corners"]:
-                        item.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-                    else:
-                        item.setTextAlignment(col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                    item.setTextAlignment(col, self._column_alignment(self.columns[col]))
                 except Exception:
                     pass
             # Restore corner data if available
@@ -1453,6 +1624,12 @@ class BaseEditor(QWidget):
             elif self.corners_column_index >= 0:
                 # Initialize to global if no data
                 self.update_corners_display(item, None)
+            stored_attrs = row_data.get("_attributes")
+            if isinstance(stored_attrs, dict) and stored_attrs:
+                item.setData(0, _INSTANCE_ATTR_ROLE, dict(stored_attrs))
+                for attr, spec in stored_attrs.items():
+                    if isinstance(spec, dict):
+                        self._refresh_attribute_display(item, attr, spec)
             self.tree.addTopLevelItem(item)
 
         self.update_row_colors()  # Apply correct colors after loading data
@@ -1519,7 +1696,7 @@ class ROAREditorWindow(QWidget):
         # We'll set the tech_browser reference later when it's available
         self.instance_table = BaseEditor(
             "Instance Table",
-            ["Instance", "kgm", "ID", "W", "L", "Corners"],  # Corners column stores both names and full paths
+            ["Instance", "Corners", "kgm", "ID", "W", "L"],  # Corners column stores both names and full paths
             plot_button_text=None,
             tech_browser=None,  # Will be set dynamically via get_tech_browser()
             enable_corners=True  # Enable corner selection for Design Eqs mode
@@ -1758,6 +1935,45 @@ class ROAREditorWindow(QWidget):
                     }
 
         return device_corners
+
+    def get_instance_parameters(self):
+        """Collect every instance attribute worth exporting.
+
+        Returns ``{instance: {attr: {"value": ..., "source": ..., ...}}}`` where
+        assigned attributes override plain table text for the same name.
+        """
+        table = self.instance_table
+        results = {}
+        for i in range(table.tree.topLevelItemCount()):
+            item = table.tree.topLevelItem(i)
+            name = item.text(0).strip()
+            if not name:
+                continue
+
+            attrs = {}
+            for j, col in enumerate(table.columns):
+                if col in ("Instance", "Corners"):
+                    continue
+                text = item.text(j).strip()
+                if text:
+                    attrs[col] = {"value": text, "source": "instance table"}
+
+            for attr, spec in table.get_instance_attributes(item).items():
+                if not isinstance(spec, dict):
+                    continue
+                resolved = spec.get("resolved")
+                if resolved is None or resolved == "":
+                    continue
+                attrs[attr] = {
+                    "value": resolved,
+                    "source": spec.get("source_label", "assigned"),
+                    "reduce": spec.get("reduce"),
+                    "per_corner": spec.get("per_corner") or {},
+                }
+
+            if attrs:
+                results[name] = attrs
+        return results
 
     # ------------------------------------------------------------------
     # Expression / constraint validation

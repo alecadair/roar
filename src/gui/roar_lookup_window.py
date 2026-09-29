@@ -1796,6 +1796,7 @@ class ROARPlotWidget(pg.PlotWidget):
         # Signal doesn't pass arguments, so use a proper lambda closure
         line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker, sync=True))
         line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
+        self._attach_marker_context_menu(marker)
         self.update_marker_labels(marker, sync=False)  # Don't sync on initial creation
 
         # Place marker on attached graphs only if sync=True
@@ -1826,6 +1827,7 @@ class ROARPlotWidget(pg.PlotWidget):
         # Signal doesn't pass arguments, so use a proper lambda closure
         line.sigPositionChanged.connect(lambda: self.update_marker_labels(marker, sync=True))
         line.mouseReleaseEvent = lambda event, m=marker: self.select_marker(m)
+        self._attach_marker_context_menu(marker)
         self.update_marker_labels(marker, sync=False)  # Don't sync on initial creation
 
         # Place marker on attached graphs only if sync=True
@@ -1834,6 +1836,148 @@ class ROARPlotWidget(pg.PlotWidget):
             if plw:
                 for attached_window in plw.get_attached_windows():
                     attached_window.plot_widget.add_horizontal_marker(linear_pos=linear_pos, sync=False)
+
+    def get_marker_curve_values(self, marker):
+        """Return the per-curve readout at *marker* as linear (non-log) values.
+
+        Each entry is ``{curve_idx, corner_path, corner_name, x, y}``.
+        """
+        line = marker.get('line') if isinstance(marker, dict) else None
+        if line is None:
+            return []
+
+        vertical = marker.get('vertical', True)
+        pos = line.value()
+        x_log = self.plotItem.getAxis('bottom').logMode
+        y_log = self.plotItem.getAxis('left').logMode
+
+        readouts = []
+        for curve_idx, curve in enumerate(getattr(self.plotItem, 'curves', [])):
+            try:
+                xdata, ydata = curve.getData()
+                if xdata is None or ydata is None or len(xdata) == 0 or len(ydata) == 0:
+                    continue
+                if vertical:
+                    idx = int(np.argmin(np.abs(xdata - pos)))
+                    lin_x = 10 ** pos if x_log else pos
+                    lin_y = 10 ** ydata[idx] if y_log else ydata[idx]
+                else:
+                    idx = int(np.argmin(np.abs(ydata - pos)))
+                    lin_x = 10 ** xdata[idx] if x_log else xdata[idx]
+                    lin_y = 10 ** pos if y_log else pos
+
+                corner_name = curve.property('corner_name') or ''
+                readouts.append({
+                    'curve_idx': curve_idx,
+                    'corner_path': curve.property('corner_path') or '',
+                    'corner_name': corner_name or f'curve {curve_idx}',
+                    'x': float(lin_x),
+                    'y': float(lin_y),
+                })
+            except Exception:
+                pass
+        return readouts
+
+    def _attach_marker_context_menu(self, marker):
+        line = marker.get('line')
+        if line is None:
+            return
+
+        # pyqtgraph offers a right-click to whichever item claimed it during hover
+        # (GraphicsScene.sendClickEvent); InfiniteLine only ever claims left-drags,
+        # so claim it here or the ViewBox menu wins.
+        original_hover = getattr(line, 'hoverEvent', None)
+
+        def hover_handler(event, orig=original_hover):
+            try:
+                if not event.isExit():
+                    event.acceptClicks(Qt.MouseButton.RightButton)
+            except Exception:
+                pass
+            if orig is not None:
+                orig(event)
+
+        line.hoverEvent = hover_handler
+
+        original_click = getattr(line, 'mouseClickEvent', None)
+
+        def handler(event, m=marker, orig=original_click):
+            try:
+                if event.button() == Qt.MouseButton.RightButton:
+                    event.accept()
+                    self._show_marker_context_menu(m, event.screenPos())
+                    return
+            except Exception:
+                pass
+            if orig is not None:
+                orig(event)
+
+        line.mouseClickEvent = handler
+
+    def _show_marker_context_menu(self, marker, screen_pos):
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu()
+        assign_action = menu.addAction("Assign to Instance…")
+        menu.addSeparator()
+        delete_action = menu.addAction("Delete Marker")
+
+        try:
+            point = screen_pos.toPoint()
+        except Exception:
+            point = QCursor.pos()
+        chosen = menu.exec(point)
+
+        if chosen == assign_action:
+            self._open_assign_dialog(marker)
+        elif chosen == delete_action:
+            self._delete_line_marker(marker)
+
+    def _delete_line_marker(self, marker):
+        try:
+            self.plotItem.removeItem(marker['line'])
+            for text in marker.get('texts', []):
+                self.plotItem.removeItem(text)
+            if 'summary_text' in marker:
+                self.plotItem.removeItem(marker['summary_text'])
+            if marker in self.line_markers:
+                self.line_markers.remove(marker)
+        except Exception:
+            pass
+
+    def _open_assign_dialog(self, marker):
+        try:
+            from .assign_value_dialog import AssignValueDialog
+        except Exception:
+            try:
+                from assign_value_dialog import AssignValueDialog
+            except Exception as exc:
+                debug_print(f"[ASSIGN] Could not load assign dialog: {exc}")
+                return
+
+        editor_window = getattr(self.top_level_app, 'editor_window', None)
+        if editor_window is None:
+            return
+
+        readouts = self.get_marker_curve_values(marker)
+        if not readouts:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Assign to Instance",
+                                    "This marker does not intersect any plotted curve.")
+            return
+
+        plot_item = self.plotItem
+        axis_names = {
+            'x': plot_item.getAxis('bottom').labelText or 'X',
+            'y': plot_item.getAxis('left').labelText or 'Y',
+        }
+        dialog = AssignValueDialog(
+            parent=self,
+            instance_table=editor_window.instance_table,
+            readouts=readouts,
+            vertical=marker.get('vertical', True),
+            axis_names=axis_names,
+        )
+        dialog.exec()
 
     def update_marker_labels(self, marker, sync=True):
         line = marker['line']
@@ -4287,7 +4431,8 @@ class ROARLookupWindow(QWidget):
                                                                       show_plot=True, new_plot=new_plot,
                                                                       roar_plot_widget=self.plot_widget,
                                                                       color=color, legend_str=legend_str, enable_3d=False,
-                                                                      pen=graph_pen, unit1=unit1, unit2=unit2)
+                                                                      pen=graph_pen, unit1=unit1, unit2=unit2,
+                                                                      corner_path=f"{pdk}>{model_name}>{length}>{corner}")
                 else:
                     unit1 = ""
                     unit2 = ""
@@ -4877,6 +5022,11 @@ class ROARLookupWindow(QWidget):
                             # Create legend string for curve identification (used for boldening when selected)
                             legend_str = f"PDK: {pdk}, L: {length}, corner: {corner}"
                             curve = self.plot_widget.plot(params1, params2, pen=graph_pen, name=legend_str)
+                            try:
+                                curve.setProperty('corner_path', f"{pdk}>{model_name}>{length}>{corner}")
+                                curve.setProperty('corner_name', corner)
+                            except Exception:
+                                pass
                             xlabel = param1 + "  [" + unit1 + "]"
                             ylabel = param2 + "  [" + unit2 + "]"
                             self.plot_widget.setLabel('bottom', xlabel)
@@ -5331,6 +5481,7 @@ class ROARLookupWindow(QWidget):
                 # Use closure to capture marker, ignore any signal arguments with *args
                 line.sigPositionChanged.connect(lambda *args, m=marker: self.plot_widget.update_marker_labels(m))
                 line.mouseReleaseEvent = lambda event, m=marker: self.plot_widget.select_marker(m)
+                self.plot_widget._attach_marker_context_menu(marker)
                 self.plot_widget.update_marker_labels(marker)
                 if selected:
                     self.plot_widget.select_marker(marker)

@@ -874,7 +874,8 @@ class CIDCorner():
 
     def plot_processes_params_roar_plot_widget(self, param1, param2, param3=None, norm_type="",
                                                show_plot=True, new_plot=True, roar_plot_widget=None,
-                                               color=None, legend_str=None, enable_3d=False, pen=None, unit1="", unit2="", eq_data1=None, eq_data2=None):
+                                               color=None, legend_str=None, enable_3d=False, pen=None, unit1="", unit2="", eq_data1=None, eq_data2=None,
+                                               corner_path=None):
         color_list = ['r', 'b', 'g', 'c', 'm', 'y', 'k']
         color_index = 0
 
@@ -924,6 +925,11 @@ class CIDCorner():
             # Plot on pg.PlotWidget
         # Use name parameter to identify curve for boldness matching, but don't add to legend
         curve = roar_plot_widget.plot(params1, params2, pen=pen, name=legend_str)
+        try:
+            curve.setProperty('corner_path', corner_path or '')
+            curve.setProperty('corner_name', self.corner_name or '')
+        except Exception:
+            pass
 
         # NOTE: Legend functionality removed - curves are named for identification only
         # The name is used by set_corner_boldness to match curves to tech browser selections
