@@ -1,0 +1,104 @@
+{
+    "expression_editor": [
+        {
+            "Symbol": "wp",
+            "Expression": "2e9",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "cload",
+            "Expression": "1e-12",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kgm1",
+            "Expression": "kgm:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgd1",
+            "Expression": "kcgd:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcdb1",
+            "Expression": "kcdb:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcgs1",
+            "Expression": "kcgs:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "kcs",
+            "Expression": "4*kcgd1 + kcdb1 + kcgs1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "ids0",
+            "Expression": "0.5*wp*cload/kgm1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "i_sl",
+            "Expression": "1/(2 - kgm1*wp*pi*0.5*kcs)",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "i_latch",
+            "Expression": "ids0*i_sl",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "iden1",
+            "Expression": "iden:M1",
+            "disabled": false,
+            "plot": false
+        },
+        {
+            "Symbol": "w1",
+            "Expression": "i_latch/iden1",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "constraint_editor": [
+        {
+            "Symbol": "pos_current",
+            "Constraint Expression": "i_total > 0",
+            "disabled": false,
+            "plot": false
+        }
+    ],
+    "instance_table": [
+        {
+            "Instance": "M1",
+            "kgm": "",
+            "ID": "",
+            "W": "",
+            "L": "",
+            "Corners": "[*Global*]",
+            "disabled": false,
+            "plot": false,
+            "_corners_data": null
+        }
+    ],
+    "iterative_solver": {
+        "enabled": false,
+        "max_iterations": 50,
+        "tolerance": 1e-06,
+        "damping": 1.0,
+        "initial_guesses": {}
+    }
+}

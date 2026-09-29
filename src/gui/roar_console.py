@@ -129,6 +129,31 @@ class _ConsoleScintilla(QsciScintilla):
         self._history: list[str] = []
         self._history_idx: int = 0
 
+    def _handle_edit_shortcuts(self, event: QKeyEvent) -> bool:
+        """Handle standard copy/paste/cut/select-all ourselves for QScintilla."""
+        key = event.key()
+        mod = event.modifiers()
+        if mod & Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_C:
+                if self.hasSelectedText():
+                    self.copy()
+                    event.accept()
+                    return True
+            elif key == Qt.Key.Key_X:
+                if self.hasSelectedText():
+                    self.cut()
+                    event.accept()
+                    return True
+            elif key == Qt.Key.Key_V:
+                self.paste()
+                event.accept()
+                return True
+            elif key == Qt.Key.Key_A:
+                self.selectAll()
+                event.accept()
+                return True
+        return False
+
     # -- public helpers -----------------------------------------------------
 
     @property
@@ -166,6 +191,9 @@ class _ConsoleScintilla(QsciScintilla):
     # -- key handling -------------------------------------------------------
 
     def keyPressEvent(self, event: QKeyEvent):
+        if self._handle_edit_shortcuts(event):
+            return
+
         key = event.key()
         mod = event.modifiers()
         cur_pos = self.SendScintilla(QsciScintilla.SCI_GETCURRENTPOS)
@@ -387,6 +415,36 @@ class _EditorScintilla(QsciScintilla):
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
+
+    def _handle_edit_shortcuts(self, event: QKeyEvent) -> bool:
+        """Handle common editing shortcuts explicitly."""
+        key = event.key()
+        mod = event.modifiers()
+        if mod & Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_C:
+                if self.hasSelectedText():
+                    self.copy()
+                    event.accept()
+                    return True
+            elif key == Qt.Key.Key_X:
+                if self.hasSelectedText():
+                    self.cut()
+                    event.accept()
+                    return True
+            elif key == Qt.Key.Key_V:
+                self.paste()
+                event.accept()
+                return True
+            elif key == Qt.Key.Key_A:
+                self.selectAll()
+                event.accept()
+                return True
+        return False
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if self._handle_edit_shortcuts(event):
+            return
+        super().keyPressEvent(event)
 
     def setup(self, font: QFont):
         _base_editor_setup(self, font)
@@ -773,13 +831,32 @@ def export_design_to_python(
         _a("def lookup_param(device_obj, param, corner_filter=None):")
         _a('    """Extract *param* from every corner of *device_obj* → 2-D array."""')
         _a("    cols = []")
-        _a("    for corner in device_obj.corners:")
-        _a("        if corner_filter and corner.corner_name not in corner_filter:")
+        _a("    candidate_corners = list(device_obj.corners)")
+        _a("    if corner_filter is not None:")
+        _a("        filtered = []")
+        _a("        for corner in candidate_corners:")
+        _a("            name = getattr(corner, 'corner_name', '')")
+        _a("            if name in corner_filter:")
+        _a("                filtered.append(corner)")
+        _a("        if filtered:")
+        _a("            candidate_corners = filtered")
+        _a("    for corner in candidate_corners:")
+        _a("        if not hasattr(corner, 'df') or corner.df is None:")
         _a("            continue")
         _a("        if param in corner.df.columns:")
         _a("            cols.append(corner.df[param].values)")
+        _a("    if not cols and corner_filter is not None:")
+        _a("        # Fallback for mismatched filter names (for example, a user-selected")
+        _a("        # global corner label such as 'tt' that does not equal the actual LUT")
+        _a("        # corner name in the CSV directory).")
+        _a("        for corner in device_obj.corners:")
+        _a("            if not hasattr(corner, 'df') or corner.df is None:")
+        _a("                continue")
+        _a("            if param in corner.df.columns:")
+        _a("                cols.append(corner.df[param].values)")
         _a("    if not cols:")
-        _a(f'        raise KeyError(f"Parameter \'{{param}}\' not found in any corner")')
+        _a('        available = sorted({c for c in [getattr(corner, "corner_name", "") for corner in getattr(device_obj, "corners", [])] if c})')
+        _a('        raise KeyError(f"Parameter \'{{param}}\' not found in any corner for {{device_obj.device_name}}. Available corners: {{available}}")')
         _a("    return np.column_stack(cols)")
         _a("")
 

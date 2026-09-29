@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import re
 import signal
 
 # Set up Ctrl-C signal handler early to allow graceful exit
@@ -342,6 +343,20 @@ class ROARTechBrowser(QWidget):
         return item
 
     @staticmethod
+    def _natural_key(name):
+        """Case-insensitive sort key that orders embedded numbers numerically (150 < 1000)."""
+        return [(0, int(tok), "") if tok.isdigit() else (1, 0, tok.lower())
+                for tok in re.split(r"(\d+)", str(name)) if tok]
+
+    def _insert_top_level_sorted(self, item):
+        key = self._natural_key(self.item_name(item))
+        for i in range(self.tree.topLevelItemCount()):
+            if key < self._natural_key(self.item_name(self.tree.topLevelItem(i))):
+                self.tree.insertTopLevelItem(i, item)
+                return
+        self.tree.addTopLevelItem(item)
+
+    @staticmethod
     def _length_display(pdk_name, length):
         """IHP LUT directories are suffixed 'u' but the values are actually nanometers."""
         if "ihp" in pdk_name.lower() and length.endswith("u"):
@@ -545,19 +560,22 @@ class ROARTechBrowser(QWidget):
 
         # Create top-level PDK item for the tree
         pdk_item = self._make_item(pdk_name)
-        self.tree.addTopLevelItem(pdk_item)
+        self._insert_top_level_sorted(pdk_item)
 
         # Only iterate the models inside this single PDK
         models = pdk_dict.get(pdk_name, {})
-        for model, model_dict in models.items():
+        nk = self._natural_key
+        for model in sorted(models, key=nk):
+            model_dict = models[model]
             model_item = self._make_item(model)
             pdk_item.addChild(model_item)
 
-            for length, length_dict in model_dict.items():
+            for length in sorted(model_dict, key=nk):
+                length_dict = model_dict[length]
                 length_item = self._make_item(length, self._length_display(pdk_name, length))
                 model_item.addChild(length_item)
 
-                for corner_name, corner_obj in length_dict.get("corners", {}).items():
+                for corner_name in sorted(length_dict.get("corners", {}), key=nk):
                     corner_item = self._make_item(corner_name)
                     length_item.addChild(corner_item)
                     full_path = self.build_full_path(corner_item)
@@ -706,19 +724,23 @@ class ROARTechBrowser(QWidget):
             if not self.tech_dict:
                 return
 
-            for pdk_name, models in self.tech_dict.items():
+            nk = self._natural_key
+            for pdk_name in sorted(self.tech_dict, key=nk):
+                models = self.tech_dict[pdk_name]
                 pdk_item = self._make_item(pdk_name)
                 self.tree.addTopLevelItem(pdk_item)
 
-                for model, model_dict in models.items():
+                for model in sorted(models, key=nk):
+                    model_dict = models[model]
                     model_item = self._make_item(model)
                     pdk_item.addChild(model_item)
 
-                    for length, length_dict in model_dict.items():
+                    for length in sorted(model_dict, key=nk):
+                        length_dict = model_dict[length]
                         length_item = self._make_item(length, self._length_display(pdk_name, length))
                         model_item.addChild(length_item)
 
-                        for corner_name in length_dict.get("corners", {}).keys():
+                        for corner_name in sorted(length_dict.get("corners", {}), key=nk):
                             corner_item = self._make_item(corner_name)
                             length_item.addChild(corner_item)
                             full_path = self.build_full_path(corner_item)
