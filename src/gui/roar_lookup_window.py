@@ -2788,7 +2788,9 @@ class ROARLookupWindow(QWidget):
         self.global_toggle_button.setStyleSheet(
             "QPushButton { border: 1px solid #888; border-radius: 2px; font-size: 14px; padding: 0px; }")
         self.global_toggle_button.clicked.connect(self._toggle_global_browser)
-        self.radio_layout.addWidget(self.global_toggle_button)
+        # Added to the controls row (right pane) rather than here: a follower's
+        # left pane is collapsed while another browser is Global, which would
+        # hide the only control able to switch it back to Local.
 
         self.radio_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
@@ -2983,6 +2985,7 @@ class ROARLookupWindow(QWidget):
         self.expand_button.setFixedSize(24, 24)
         self.expand_button.setStyleSheet("QPushButton { border: 1px solid #888; border-radius: 2px; font-size: 16px; padding: 0px; }")
 
+        self.controls_layout.addWidget(self.global_toggle_button)
         self.controls_layout.addWidget(self._3d_contour_container)
         self.controls_layout.addWidget(self.copy_button)
         self.controls_layout.addWidget(self.reset_button)
@@ -2992,7 +2995,14 @@ class ROARLookupWindow(QWidget):
         self.row5_layout = None
 
         # Add tech browser and radio buttons to the left-side vertical splitter
-        self.tech_splitter.addWidget(self.tech_browser)
+        try:
+            from .instance_browser_tabs import InstanceBrowserTabs
+        except Exception:
+            from instance_browser_tabs import InstanceBrowserTabs
+        self.browser_tabs = InstanceBrowserTabs(self)
+        self.browser_tabs.set_global_browser(self.tech_browser)
+        self.browser_tabs.tabBar().setVisible(False)  # Device Params is the startup mode
+        self.tech_splitter.addWidget(self.browser_tabs)
         self.tech_splitter.addWidget(self.radio_container)
         # Tech browser gets all stretch; radio buttons stay at their natural height
         self.tech_splitter.setStretchFactor(0, 1)
@@ -3172,6 +3182,46 @@ class ROARLookupWindow(QWidget):
         except Exception:
             pass
 
+    def _sync_instance_browser_tabs(self):
+        """Show per-instance corner tabs in Design Eqs mode only."""
+        tabs = getattr(self, 'browser_tabs', None)
+        if tabs is None:
+            return
+        try:
+            self._connect_instance_table_signals()
+            tabs.set_instance_tabs_enabled(not self.is_device_params_mode)
+        except Exception:
+            pass
+
+    def _connect_instance_table_signals(self):
+        """Rebuild instance tabs when the instance table gains/loses/renames rows."""
+        if getattr(self, '_instance_table_connected', False):
+            return
+        try:
+            table = self.top_level_app.editor_window.instance_table
+        except Exception:
+            return
+        if table is None:
+            return
+
+        def rebuild(*_args):
+            tabs = getattr(self, 'browser_tabs', None)
+            if tabs is None or self.is_device_params_mode:
+                return
+            # Writing corners back into the table re-emits itemChanged; ignore it.
+            if getattr(tabs, '_syncing', False):
+                return
+            tabs.rebuild_instance_tabs()
+
+        try:
+            model = table.tree.model()
+            model.rowsInserted.connect(rebuild)
+            model.rowsRemoved.connect(rebuild)
+            table.tree.itemChanged.connect(rebuild)
+            self._instance_table_connected = True
+        except Exception:
+            pass
+
     def on_mode_changed(self, _checked):
         new_mode = self.radio_device_params.isChecked()
 
@@ -3192,6 +3242,7 @@ class ROARLookupWindow(QWidget):
 
         # ── Switch the mode flag ──
         self.is_device_params_mode = new_mode
+        self._sync_instance_browser_tabs()
 
         # ── When entering Design Eqs mode, refresh expression symbols ──
         if not new_mode and self.top_level_app:
@@ -3229,17 +3280,26 @@ class ROARLookupWindow(QWidget):
 
     # ── Global / Local tech browser management ──
 
+    def _other_global_window(self):
+        """Return another window in this grid acting as Global master, if any."""
+        if not self.graph_grid:
+            return None
+        for w in self.graph_grid.lookup_windows:
+            if w is not self and getattr(w, '_is_global_browser', False):
+                return w
+        return None
+
     def _toggle_global_browser(self):
-        """Cycle through: default → Global → Local → default."""
+        """Global → Local → follower. A follower opts out to Local while another
+        window is Global, instead of seizing the master role."""
         if self._is_global_browser:
-            # Currently Global → go to Local
             self._set_global(False)
             self._set_local(True)
         elif self._is_local_browser:
-            # Currently Local → go to default (follower)
             self._set_local(False)
+        elif self._other_global_window() is not None:
+            self._set_local(True)
         else:
-            # Currently default (follower) → go to Global
             self._set_global(True)
 
     def _set_global(self, on):
@@ -3288,6 +3348,11 @@ class ROARLookupWindow(QWidget):
                     w._collapse_tech_browser_pane()
             else:
                 w._restore_tech_browser_pane()
+            # The follower tooltip depends on whether a master exists elsewhere.
+            try:
+                w._update_global_button_style()
+            except Exception:
+                pass
 
     def _collapse_tech_browser_pane(self):
         """Collapse the tech browser (left side of top_level_pane) to give the graph full width."""
@@ -3346,8 +3411,14 @@ class ROARLookupWindow(QWidget):
             self.global_toggle_button.setStyleSheet(
                 "QPushButton { border: 1px solid #888; border-radius: 2px;"
                 " font-size: 14px; padding: 0px; }")
-            self.global_toggle_button.setToolTip("Follower — this browser follows the Global master.\n"
-                                                  "Click to become the Global master.")
+            if self._other_global_window() is not None:
+                self.global_toggle_button.setToolTip(
+                    "Follower — this browser follows the Global master.\n"
+                    "Click to become Local (independent).")
+            else:
+                self.global_toggle_button.setToolTip(
+                    "Follower — this browser follows the Global master.\n"
+                    "Click to become the Global master.")
 
     def sync_from_global(self, checked_paths, color_map=None):
         """Mirror the Global tech browser's checked state into this window.
@@ -3820,6 +3891,7 @@ class ROARLookupWindow(QWidget):
 
             self.radio_device_params.blockSignals(False)
             self.radio_design_eq.blockSignals(False)
+            self._sync_instance_browser_tabs()
 
             # When restoring Device Params mode, hide any 3D GL widget
             if self.is_device_params_mode:
