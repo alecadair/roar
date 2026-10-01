@@ -14,7 +14,7 @@ ENV/
 
 # VS Code
 .vscode/
-
+verify_roar.py
 
 
 

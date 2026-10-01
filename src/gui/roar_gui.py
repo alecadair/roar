@@ -1946,6 +1946,10 @@ class ROARApp(QMainWindow):
             if tabs_state:
                 self._restore_graph_tabs_state(tabs_state, progress)
 
+            # Instance tabs depend on the design editor, which is restored above;
+            # re-sync now that both exist.
+            self._sync_all_instance_browser_tabs()
+
             # Step 4: Restore window geometry (95%)
             progress.setLabelText("Restoring window layout...")
             progress.setValue(95)
@@ -2094,6 +2098,19 @@ class ROARApp(QMainWindow):
         # Ensure '+' tab exists
         self.ensure_plus_tab()
 
+    def _sync_all_instance_browser_tabs(self):
+        """Refresh per-instance corner tabs across every graph tab."""
+        try:
+            for i in range(self.graph_tabs.count()):
+                widget = self.graph_tabs.widget(i)
+                for lw in getattr(widget, 'lookup_windows', []) or []:
+                    try:
+                        lw._sync_instance_browser_tabs()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     def _restore_graph_grid_state(self, graph_grid, windows_state, progress=None, tab_index=0, total_tabs=1, progress_start=20, progress_range=70):
         """Restore the state of a ROARGraphGrid."""
         num_windows = len(windows_state)
@@ -2173,6 +2190,9 @@ class ROARApp(QMainWindow):
             else:
                 window.radio_design_eq.setChecked(True)
                 window.is_device_params_mode = False
+
+            # Signals are blocked above, so on_mode_changed never runs here.
+            window._sync_instance_browser_tabs()
 
             # Update combo box items to match the mode (before restoring selections)
             window.update_combobox_items()

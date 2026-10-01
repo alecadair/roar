@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QAction
 from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon, QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect
 import json
 import sys
 import os
@@ -595,6 +595,30 @@ class IterativeSolverDialog(QDialog):
         self.hide()
 
 
+class CompactHeaderView(QHeaderView):
+    """Keep unused header space visually continuous with the table body."""
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        count = self.count()
+        if count <= 0:
+            return
+
+        last = count - 1
+        fill_from = max(0, self.sectionViewportPosition(last) + self.sectionSize(last))
+        viewport_width = self.viewport().width()
+        if fill_from >= viewport_width:
+            return
+
+        painter = QPainter(self.viewport())
+        fill_rect = QRect(fill_from, 0, viewport_width - fill_from, self.viewport().height())
+        painter.fillRect(fill_rect, self.parentWidget().palette().brush(QPalette.ColorRole.Base))
+        painter.setPen(self.palette().color(QPalette.ColorRole.Mid))
+        painter.drawLine(fill_from, self.viewport().height() - 1,
+                         viewport_width - 1, self.viewport().height() - 1)
+        painter.end()
+
+
 class BaseEditor(QWidget):
     def __init__(self, title, columns, plot_button_text="Add LUT", plot_command=None, add_command=None, tech_browser=None, enable_corners=False):
         super().__init__()
@@ -680,6 +704,7 @@ class BaseEditor(QWidget):
                     pass
 
         self.tree = ReorderableTreeWidget()
+        self.tree.setHeader(CompactHeaderView(Qt.Orientation.Horizontal, self.tree))
         self.tree.setColumnCount(len(columns))
         self.tree.setHeaderLabels(columns)
         # Set header text alignment
@@ -708,22 +733,24 @@ class BaseEditor(QWidget):
         if "Corners" in columns:
             idx = columns.index("Corners")
             self.tree.header().resizeSection(idx, 88)  # Roomier so corner names stay readable
-        # Corners takes up the slack instead of the last column, so kgm/ID/W/L
-        # keep equal widths and no empty header strip is left over.
-        if self.corners_column_index >= 0:
-            try:
-                self.tree.header().setStretchLastSection(False)
-                self.tree.header().setSectionResizeMode(
-                    self.corners_column_index, QHeaderView.ResizeMode.Stretch)
-            except Exception:
-                pass
-        # Overflow into a horizontal scrollbar rather than forcing the editor
-        # panel wider as attribute columns are added. The last section still
-        # stretches, so no empty header strip is left when columns are narrow.
+        if "Symbol" in columns:
+            idx = columns.index("Symbol")
+            self.tree.header().resizeSection(idx, 90)
+        if "Expression" in columns:
+            idx = columns.index("Expression")
+            self.tree.header().resizeSection(idx, 240)
+        if "Constraint Expression" in columns:
+            idx = columns.index("Constraint Expression")
+            self.tree.header().resizeSection(idx, 240)
+        # Every section stays Interactive so dragging one edge resizes only that
+        # column and shifts the ones to its right, overflowing into a scrollbar.
+        # Keep unused viewport space empty rather than inflating the final column.
         try:
+            header = self.tree.header()
+            header.setStretchLastSection(False)
+            header.setMinimumSectionSize(30)
             self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self.tree.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-            self.tree.header().setMinimumSectionSize(30)
         except Exception:
             pass
         self.tree.setTabKeyNavigation(False)  # Disable default row-wise tab behavior
@@ -1469,14 +1496,11 @@ class BaseEditor(QWidget):
         except Exception:
             pass
 
-        # setHeaderLabels can reset per-section resize modes.
-        if self.corners_column_index >= 0:
-            try:
-                self.tree.header().setStretchLastSection(False)
-                self.tree.header().setSectionResizeMode(
-                    self.corners_column_index, QHeaderView.ResizeMode.Stretch)
-            except Exception:
-                pass
+        # setHeaderLabels can reset the header configuration.
+        try:
+            self.tree.header().setStretchLastSection(False)
+        except Exception:
+            pass
 
         return True
 

@@ -123,6 +123,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         self._all_norm_points = []   # list of Nx3 float64 arrays (GL coords)
         self._all_orig_points = []   # list of Nx3 float64 arrays (real coords)
         self._all_point_colors = []  # list of (r, g, b, a) tuples – one per set
+        self._all_point_labels = []  # corner name per set, parallel to the lists above
 
         # Track mouse-press position to distinguish click from drag.
         self._press_pos = None
@@ -362,8 +363,10 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         best_dist = float('inf')
         best_norm = best_orig = None
         best_color = None
+        self._last_pick_label = None
 
         colors = self._all_point_colors
+        labels = getattr(self, '_all_point_labels', [])
         for i, (norm_pts, orig_pts) in enumerate(
                 zip(self._all_norm_points, self._all_orig_points)):
             screen = self._project_to_screen(norm_pts)
@@ -377,6 +380,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
                 best_norm = norm_pts[idx].copy()
                 best_orig = orig_pts[idx].copy()
                 best_color = colors[i] if i < len(colors) else (1.0, 0.0, 0.0, 1.0)
+                self._last_pick_label = labels[i] if i < len(labels) else f'surface {i}'
 
         return best_norm, best_orig, best_dist, best_color
 
@@ -527,6 +531,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
             'pos_norm': norm_xyz.copy(),
             'pos_orig': orig_xyz.copy(),
             'base_color': marker_color,      # for restoring after hover
+            'corner_name': getattr(self, '_last_pick_label', None) or 'corner',
         })
 
         # Push values to the spin boxes
@@ -664,7 +669,9 @@ class ROAR3DViewWidget(gl.GLViewWidget):
             dsq = dx * dx + dy * dy
             idx = int(np.argmin(dsq))
             c = colors[i] if i < len(colors) else (1.0, 0.0, 0.0, 1.0)
-            hits.append((norm_pts[idx].copy(), orig_pts[idx].copy(), c))
+            labels = getattr(self, '_all_point_labels', [])
+            name = labels[i] if i < len(labels) else f'surface {i}'
+            hits.append((norm_pts[idx].copy(), orig_pts[idx].copy(), c, name))
 
         if not hits:
             return
@@ -677,7 +684,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         highest_norm_z = -np.inf
         highest_norm_pt = None
 
-        for norm_xyz, orig_xyz, sc in hits:
+        for norm_xyz, orig_xyz, sc, corner_name in hits:
             norm_xyz = np.asarray(norm_xyz, dtype=np.float64)
             orig_xyz = np.asarray(orig_xyz, dtype=np.float64)
 
@@ -723,6 +730,7 @@ class ROAR3DViewWidget(gl.GLViewWidget):
                 'pos_norm': norm_xyz.copy(),
                 'pos_orig': orig_xyz.copy(),
                 'base_color': mc,
+                'corner_name': corner_name,
             }
             group_markers.append(marker_dict)
             # Also add to the flat list so hover/click-to-remove still works
@@ -790,6 +798,78 @@ class ROAR3DViewWidget(gl.GLViewWidget):
     # ------------------------------------------------------------------
     # Qt event overrides – click-vs-drag disambiguation + label dragging
     # ------------------------------------------------------------------
+    def _group_for_marker(self, marker):
+        """Return the vertical-marker group containing *marker*, if any."""
+        for group in self._3d_vertical_markers:
+            if marker in group.get('markers', []):
+                return group
+        return None
+
+    def _marker_readouts(self, marker):
+        """Build assign-dialog readouts for *marker* (or its whole group)."""
+        group = self._group_for_marker(marker)
+        members = group.get('markers', []) if group else [marker]
+        readouts = []
+        for idx, m in enumerate(members):
+            disp = self._display_orig(m['pos_orig'])
+            readouts.append({
+                'curve_idx': idx,
+                'corner_path': '',
+                'corner_name': m.get('corner_name') or f'surface {idx}',
+                'x': float(disp[0]),
+                'y': float(disp[1]),
+                'z': float(disp[2]),
+            })
+        return readouts
+
+    def _show_marker_context_menu(self, marker, global_pos):
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu()
+        assign_action = menu.addAction("Assign to Instance…")
+        menu.addSeparator()
+        delete_action = menu.addAction("Delete Marker")
+
+        chosen = menu.exec(global_pos)
+        if chosen == assign_action:
+            self._open_assign_dialog(marker)
+        elif chosen == delete_action:
+            group = self._group_for_marker(marker)
+            if group is not None:
+                self._remove_vertical_marker_group(group)
+            else:
+                self._remove_point_marker(marker)
+            self.update()
+
+    def _open_assign_dialog(self, marker):
+        try:
+            from .assign_value_dialog import AssignValueDialog
+        except Exception:
+            try:
+                from assign_value_dialog import AssignValueDialog
+            except Exception as exc:
+                debug_print(f"[ASSIGN 3D] Could not load assign dialog: {exc}")
+                return
+
+        lw = self.parent_lookup_window
+        app = getattr(lw, 'top_level_app', None) if lw is not None else None
+        editor_window = getattr(app, 'editor_window', None)
+        if editor_window is None:
+            return
+
+        readouts = self._marker_readouts(marker)
+        if not readouts:
+            return
+
+        ax, ay, az = self._get_axis_names()
+        dialog = AssignValueDialog(
+            parent=self,
+            instance_table=editor_window.instance_table,
+            readouts=readouts,
+            vertical=True,
+            axis_names={'x': ax, 'y': ay, 'z': az},
+        )
+        dialog.exec()
+
     def mousePressEvent(self, event):
         """Record press position.  If the press lands on a text label,
         start a label-drag instead of forwarding to the base class
@@ -797,6 +877,14 @@ class ROAR3DViewWidget(gl.GLViewWidget):
         Marker deletion takes priority: if the mouse is over a highlighted
         marker, do NOT start a label drag – let the release handler run
         ``_handle_click`` so the marker gets removed."""
+        if event.button() == Qt.MouseButton.RightButton:
+            mx, my = event.position().x(), event.position().y()
+            self._right_press_pos = (mx, my)
+            self._right_press_marker = self._find_nearest_marker(mx, my)
+            if self._right_press_marker is not None:
+                event.accept()   # keep the camera from zooming on this drag
+                return
+
         if event.button() == Qt.MouseButton.LeftButton:
             mx, my = event.position().x(), event.position().y()
             self._press_pos = (mx, my)
@@ -830,6 +918,19 @@ class ROAR3DViewWidget(gl.GLViewWidget):
     def mouseReleaseEvent(self, event):
         """On release, check if it was a *click* (not a drag) and handle markers.
         Also end any ongoing label drag."""
+        if event.button() == Qt.MouseButton.RightButton:
+            marker = getattr(self, '_right_press_marker', None)
+            press = getattr(self, '_right_press_pos', None)
+            self._right_press_marker = None
+            self._right_press_pos = None
+            if marker is not None and press is not None:
+                rx, ry = event.position().x(), event.position().y()
+                if (abs(rx - press[0]) <= self.CLICK_DRAG_THRESHOLD
+                        and abs(ry - press[1]) <= self.CLICK_DRAG_THRESHOLD):
+                    event.accept()
+                    self._show_marker_context_menu(marker, event.globalPosition().toPoint())
+                    return
+
         if event.button() == Qt.MouseButton.LeftButton:
             # End label drag if active
             if self._dragged_text is not None:
@@ -3190,8 +3291,8 @@ class ROARLookupWindow(QWidget):
         try:
             self._connect_instance_table_signals()
             tabs.set_instance_tabs_enabled(not self.is_device_params_mode)
-        except Exception:
-            pass
+        except Exception as exc:
+            debug_print(f"[INSTANCE TABS] sync failed: {exc}")
 
     def _connect_instance_table_signals(self):
         """Rebuild instance tabs when the instance table gains/loses/renames rows."""
@@ -5188,6 +5289,8 @@ class ROARLookupWindow(QWidget):
                         self.gl_widget._all_orig_points.clear()
                     if hasattr(self.gl_widget, '_all_point_colors'):
                         self.gl_widget._all_point_colors.clear()
+                    if hasattr(self.gl_widget, '_all_point_labels'):
+                        self.gl_widget._all_point_labels.clear()
 
                     def _norm_global(arr, gmin, gmax):
                         """Normalize array to [-5, 5] using global min/max.
@@ -5318,6 +5421,9 @@ class ROARLookupWindow(QWidget):
                                 self.gl_widget._all_orig_points.append(orig_pts)
                                 if hasattr(self.gl_widget, '_all_point_colors'):
                                     self.gl_widget._all_point_colors.append((r, g, b, 1.0))
+                                if hasattr(self.gl_widget, '_all_point_labels'):
+                                    self.gl_widget._all_point_labels.append(
+                                        str(model_path).split('>')[-1])
                         else:
                             # Scatter fallback
                             try:
@@ -5344,6 +5450,9 @@ class ROARLookupWindow(QWidget):
                                     self.gl_widget._all_orig_points.append(orig_pts)
                                     if hasattr(self.gl_widget, '_all_point_colors'):
                                         self.gl_widget._all_point_colors.append((r, g, b, 1.0))
+                                    if hasattr(self.gl_widget, '_all_point_labels'):
+                                        self.gl_widget._all_point_labels.append(
+                                            str(model_path).split('>')[-1])
                             except Exception as e:
                                 debug_print(f"GL scatter creation failed: {e}")
 

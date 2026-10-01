@@ -38,15 +38,23 @@ class AssignValueDialog(QDialog):
         self.readouts = readouts
         self.vertical = vertical
         self.axis_names = axis_names or {"x": "X", "y": "Y"}
+        self.has_z = bool(readouts) and "z" in readouts[0]
 
         layout = QVBoxLayout(self)
 
-        pinned_axis = "x" if vertical else "y"
+        pinned_axis = self._pinned_axis()
         pinned_value = readouts[0][pinned_axis]
-        header = QLabel(
-            f"<b>{'Vertical' if vertical else 'Horizontal'} marker</b> pinned at "
-            f"{self.axis_names[pinned_axis]} = {format_param_value(pinned_value)}"
-        )
+        if self.has_z:
+            header = QLabel(
+                f"<b>3-D marker</b> at {self.axis_names['x']} = "
+                f"{format_param_value(readouts[0]['x'])}, "
+                f"{self.axis_names['y']} = {format_param_value(readouts[0]['y'])}"
+            )
+        else:
+            header = QLabel(
+                f"<b>{'Vertical' if vertical else 'Horizontal'} marker</b> pinned at "
+                f"{self.axis_names[pinned_axis]} = {format_param_value(pinned_value)}"
+            )
         header.setWordWrap(True)
         layout.addWidget(header)
 
@@ -86,6 +94,8 @@ class AssignValueDialog(QDialog):
             f"{self.axis_names['x']}  (pinned)" if vertical else self.axis_names["x"], "x")
         self.source_combo.addItem(
             self.axis_names["y"] if vertical else f"{self.axis_names['y']}  (pinned)", "y")
+        if self.has_z:
+            self.source_combo.addItem(self.axis_names.get("z", "Z"), "z")
         self.source_combo.setCurrentIndex(1 if vertical else 0)
         self.source_combo.currentIndexChanged.connect(self._update_preview)
         form.addRow("Take value from:", self.source_combo)
@@ -135,9 +145,10 @@ class AssignValueDialog(QDialog):
             self.add_column_check.setText("Add as a column in the instance table")
 
     def _build_corner_table(self):
-        table = QTableWidget(len(self.readouts), 3)
+        axes = ["x", "y", "z"] if self.has_z else ["x", "y"]
+        table = QTableWidget(len(self.readouts), 1 + len(axes))
         table.setHorizontalHeaderLabels(
-            ["Corner", self.axis_names["x"], self.axis_names["y"]])
+            ["Corner"] + [self.axis_names.get(a, a.upper()) for a in axes])
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         table.verticalHeader().setVisible(False)
@@ -145,8 +156,9 @@ class AssignValueDialog(QDialog):
 
         for row, entry in enumerate(self.readouts):
             table.setItem(row, 0, QTableWidgetItem(entry["corner_name"]))
-            table.setItem(row, 1, QTableWidgetItem(format_param_value(entry["x"])))
-            table.setItem(row, 2, QTableWidgetItem(format_param_value(entry["y"])))
+            for col, axis in enumerate(axes, start=1):
+                table.setItem(row, col,
+                              QTableWidgetItem(format_param_value(entry.get(axis))))
 
         height = min(160, 28 * (len(self.readouts) + 1) + 4)
         table.setMaximumHeight(height)
@@ -158,6 +170,9 @@ class AssignValueDialog(QDialog):
         self._update_preview()
 
     def _pinned_axis(self):
+        # A 3-D marker shares X and Y across surfaces; Z is what varies.
+        if getattr(self, 'has_z', False):
+            return "x"
         return "x" if self.vertical else "y"
 
     def _resolve(self):
