@@ -598,6 +598,23 @@ class IterativeSolverDialog(QDialog):
 class CompactHeaderView(QHeaderView):
     """Keep unused header space visually continuous with the table body."""
 
+    fill_section = -1
+    fill_last_width = 38
+
+    def fit_fill_section(self, last_width):
+        """Allocate spare width without using a non-draggable Stretch section."""
+        if not 0 <= self.fill_section < self.count() - 1:
+            return
+        other_width = sum(self.sectionSize(i) for i in range(self.count() - 1)
+                          if i != self.fill_section)
+        self.resizeSection(self.fill_section,
+                           max(self.minimumSectionSize(),
+                               self.viewport().width() - other_width - last_width))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.fit_fill_section(self.fill_last_width)
+
     def paintEvent(self, event):
         super().paintEvent(event)
         count = self.count()
@@ -635,13 +652,14 @@ class BaseEditor(QWidget):
         #self.enabled_plot_rows = set()
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
 
         # If a title is provided, use a QGroupBox so the title appears in the widget border.
         if title:
             group = QGroupBox(title)
             group_layout = QVBoxLayout()
-            group_layout.setContentsMargins(6, 6, 6, 6)  # tighter inner margins
+            group_layout.setContentsMargins(0, 6, 0, 6)
             group.setLayout(group_layout)
             container_layout = group_layout
             # add the group box to the outer layout
@@ -742,13 +760,16 @@ class BaseEditor(QWidget):
         if "Constraint Expression" in columns:
             idx = columns.index("Constraint Expression")
             self.tree.header().resizeSection(idx, 240)
-        # Every section stays Interactive so dragging one edge resizes only that
-        # column and shifts the ones to its right, overflowing into a scrollbar.
-        # Keep unused viewport space empty rather than inflating the final column.
+        # Give instance corner names the spare width, not the numeric L column.
+        # Other editors use their final expression column to fill the viewport.
+        # Oversized columns still overflow into a horizontal scrollbar.
         try:
             header = self.tree.header()
-            header.setStretchLastSection(False)
             header.setMinimumSectionSize(30)
+            header.setStretchLastSection(True)
+            if self.corners_column_index >= 0:
+                header.fill_section = self.corners_column_index
+                header.fit_fill_section(38)
             self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self.tree.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         except Exception:
@@ -1498,7 +1519,12 @@ class BaseEditor(QWidget):
 
         # setHeaderLabels can reset the header configuration.
         try:
-            self.tree.header().setStretchLastSection(False)
+            header = self.tree.header()
+            header.setStretchLastSection(True)
+            if self.corners_column_index >= 0:
+                header.fill_section = self.corners_column_index
+                header.fill_last_width = width
+                header.fit_fill_section(width)
         except Exception:
             pass
 
