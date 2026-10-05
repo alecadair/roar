@@ -77,6 +77,13 @@ if ( $status != 0 ) then
     exit 1
 endif
 
+# Make the public Python module available outside the checkout directory too.
+"$venv_dir/bin/python3" -m pip install --no-deps -e "$roar_home"
+if ( $status != 0 ) then
+    echo "Failed to install the ROAR Python API (requires Python 3.10+)." >&2
+    exit 1
+endif
+
 make -C "$roar_home"
 if ( $status != 0 ) then
     echo "make failed while generating ROAR environment files." >&2

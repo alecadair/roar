@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "roar-cad"
+version = "1.0.2"
+description = "Robust Optimal Analog Reuse design, lookup and graphing API"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pandas", "sympy", "matplotlib"]
+
+[project.optional-dependencies]
+gui = ["PyQt6==6.8", "PyQt6-QScintilla", "jedi", "pyqtgraph>=0.13", "PyOpenGL", "colorama", "pyqtdarktheme"]
+
+[project.scripts]
+roar = "roar.__main__:main"
+
+[tool.setuptools]
+packages = ["roar", "roar._legacy"]
+package-dir = {"roar" = "roar", "roar._legacy" = "src/gui"}

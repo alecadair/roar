@@ -9,7 +9,6 @@
 import sys, os, getpass, shutil, operator, collections, copy, re
 import numpy as np
 import matplotlib
-matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 plt.rcParams['svg.fonttype'] = 'none'
 import pandas as pd

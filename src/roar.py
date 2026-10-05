@@ -6,12 +6,28 @@ import sys
 
 
 def main() -> int:
-    gui_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gui")
-    sys.path.insert(0, gui_dir)
+    # Preserve the historical script entry point, using the public package.
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, root)
+    from roar.__main__ import main as api_main
+    return api_main()
 
-    import roar_gui
 
-    return roar_gui.main()
+def __getattr__(name):
+    """Expose the API when older notebooks put only src on their import path."""
+    import importlib
+    package_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "roar")
+    exports = {"Design": "design", "Graph": "design", "Session": "session",
+               "LiveGraph": "session", "Technologies": "evaluation", "EvaluationResult": "evaluation"}
+    if name == "__path__":
+        return [package_dir]
+    if name == "__version__":
+        return "1.0.2"
+    if name in ("launch", "__all__"):
+        return getattr(importlib.import_module("roar.__init__"), name)
+    if name in exports:
+        return getattr(importlib.import_module(f"roar.{exports[name]}"), name)
+    raise AttributeError(f"module 'roar' has no attribute {name!r}")
 
 
 if __name__ == "__main__":

@@ -10,16 +10,14 @@ import token
 import tokenize
 from io import StringIO
 
-# Import debug_print function - handles case where this module is imported before roar_gui
-try:
-    from roar_gui import debug_print
-except ImportError:
-    try:
-        from gui.roar_gui import debug_print
-    except ImportError:
-        # Fallback: define a no-op debug_print if roar_gui isn't available
-        def debug_print(*args, **kwargs):
-            pass
+# Do not import the GUI just to log: this solver also serves headless callers.
+import sys
+
+def debug_print(*args, **kwargs):
+    gui = sys.modules.get('roar_gui') or sys.modules.get('gui.roar_gui')
+    logger = getattr(gui, 'debug_print', None)
+    if logger is not None:
+        logger(*args, **kwargs)
 
 # Create degree-based trig functions by wrapping radian functions
 # These convert degrees to radians before calling the trig function

@@ -6,9 +6,15 @@ The Robust and Optimal Analog Reuse (ROAR) flow/tool is developed to enable a GU
 
 ## Requirements
 
-- **Python 3.9** or newer
+- **Python 3.10** or newer
 - **tcsh** or **csh** shell
 - Linux/Unix environment (tested on Rocky Linux, CentOS, Ubuntu)
+
+## Python API
+
+See the [Python API guide](docs/PYTHON_API.md) for headless design editing,
+evaluation/exports, and live GUI sessions. Install with `pip install -e .`
+(headless) or `pip install -e '.[gui]'` (desktop).
 
 ## Install
 
