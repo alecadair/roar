@@ -1,4 +1,4 @@
-"""Run the desktop application with python -m roar."""
+"""Run the desktop application with python -m roar_api."""
 
 
 def main():

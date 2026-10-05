@@ -2,7 +2,8 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog, QMessageBox, QSplitter, QGroupBox,
     QDialog, QRadioButton, QCheckBox, QLabel, QProgressDialog, QMenu,
-    QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem, QAbstractItemView
+    QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem, QAbstractItemView,
+    QTabWidget, QToolButton, QInputDialog
 )
 from PyQt6.QtGui import QAction
 from PyQt6.QtGui import QColor, QBrush, QPalette, QPainter, QPen, QIcon, QFont
@@ -1434,9 +1435,13 @@ class BaseEditor(QWidget):
             self.tree.viewport().update()
             # A slightly deferred repaint helps on some platforms where the model
             # finishing its internal move happens just after our call.
-            QTimer.singleShot(20, lambda: (self.tree.viewport().update(), self.tree.update()))
+            QTimer.singleShot(20, self._repaint_tree)
         except Exception:
             pass
+
+    def _repaint_tree(self):
+        self.tree.viewport().update()
+        self.tree.update()
 
     def clear_error_highlights(self):
         """Remove any error-highlighting backgrounds, restoring normal row colours."""
@@ -1694,6 +1699,224 @@ class BaseEditor(QWidget):
         print("Plotting row:", [selected_items[0].text(i) for i in range(self.tree.columnCount())])
 
 
+class ExpressionTabsEditor(QWidget):
+    """Expression table split across named tabs that behave as one continuous table.
+
+    Rows from every tab are read in tab order, so symbols defined on any tab
+    can be referenced from expressions on any other tab.
+    """
+    changed = pyqtSignal()
+    DEFAULT_TAB = "Expressions"
+
+    def __init__(self, title, columns):
+        super().__init__()
+        self.columns = columns
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        group = QGroupBox(title)
+        group_layout = QVBoxLayout(group)
+        group_layout.setContentsMargins(0, 6, 0, 6)
+        layout.addWidget(group)
+
+        self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        self.tabs.setMovable(True)
+        self.tabs.tabBar().tabMoved.connect(self._emit_changed)
+        self.tabs.tabBar().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tabs.tabBar().customContextMenuRequested.connect(self._on_tab_context_menu)
+
+        add_tab_button = QToolButton()
+        add_tab_button.setText("+")
+        add_tab_button.setToolTip("Add expression tab")
+        add_tab_button.setAutoRaise(True)
+        add_tab_button.clicked.connect(self._on_add_tab_clicked)
+        self.tabs.setCornerWidget(add_tab_button, Qt.Corner.TopRightCorner)
+
+        group_layout.addWidget(self.tabs)
+        self.add_tab(self.DEFAULT_TAB)
+
+    # -- tab access ------------------------------------------------------
+
+    @property
+    def editors(self):
+        return [self.tabs.widget(i) for i in range(self.tabs.count())]
+
+    @property
+    def current_editor(self):
+        return self.tabs.currentWidget()
+
+    @property
+    def tree(self):
+        return self.current_editor.tree
+
+    def get_tab_names(self):
+        return [self.tabs.tabText(i) for i in range(self.tabs.count())]
+
+    def iter_items(self):
+        """Yield every row across all tabs in tab order."""
+        for editor in self.editors:
+            for i in range(editor.tree.topLevelItemCount()):
+                yield editor.tree.topLevelItem(i)
+
+    def _unique_name(self, base="Tab"):
+        names = set(self.get_tab_names())
+        n = self.tabs.count() + 1
+        while f"{base} {n}" in names:
+            n += 1
+        return f"{base} {n}"
+
+    def add_tab(self, name=None):
+        editor = BaseEditor(None, self.columns, plot_button_text=None)
+        editor.tree.itemChanged.connect(self._emit_changed)
+        editor.add_button.clicked.connect(self._emit_changed)
+        editor.delete_button.clicked.connect(self._emit_changed)
+        editor.enable_disable_button.clicked.connect(self._emit_changed)
+        editor.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        editor.tree.customContextMenuRequested.connect(
+            lambda pos, e=editor: self._on_row_context_menu(e, pos))
+        self.tabs.addTab(editor, name or self._unique_name())
+        return editor
+
+    def _emit_changed(self, *_):
+        self.changed.emit()
+
+    def _on_add_tab_clicked(self):
+        editor = self.add_tab()
+        self.tabs.setCurrentWidget(editor)
+        self.changed.emit()
+
+    def rename_tab(self, index, name):
+        name = (name or "").strip()
+        if not name:
+            return False
+        others = [n for i, n in enumerate(self.get_tab_names()) if i != index]
+        if name in others:
+            QMessageBox.warning(self, "Rename Tab", f"A tab named '{name}' already exists.")
+            return False
+        self.tabs.setTabText(index, name)
+        return True
+
+    def close_tab(self, index):
+        if self.tabs.count() <= 1:
+            return False
+        editor = self.tabs.widget(index)
+        rows = editor.tree.topLevelItemCount()
+        if rows:
+            answer = QMessageBox.question(
+                self, "Close Tab",
+                f"Tab '{self.tabs.tabText(index)}' contains {rows} expression(s).\n"
+                "Closing it will delete them. Continue?")
+            if answer != QMessageBox.StandardButton.Yes:
+                return False
+        self.tabs.removeTab(index)
+        editor.deleteLater()
+        self.changed.emit()
+        return True
+
+    def _on_tab_context_menu(self, pos):
+        tab_bar = self.tabs.tabBar()
+        index = tab_bar.tabAt(pos)
+        if index < 0:
+            return
+        menu = QMenu(self)
+        rename_act = menu.addAction("Rename")
+        close_act = menu.addAction("Close")
+        close_act.setEnabled(self.tabs.count() > 1)
+        action = menu.exec(tab_bar.mapToGlobal(pos))
+        if action == rename_act:
+            text, ok = QInputDialog.getText(self, "Rename Tab", "New name:",
+                                            text=self.tabs.tabText(index))
+            if ok:
+                self.rename_tab(index, text)
+        elif action == close_act:
+            self.close_tab(index)
+
+    def _on_row_context_menu(self, source, pos):
+        items = source.tree.selectedItems()
+        if not items:
+            return
+        menu = QMenu(self)
+        move_menu = menu.addMenu("Move to Tab")
+        targets = {}
+        for i, editor in enumerate(self.editors):
+            if editor is not source:
+                targets[move_menu.addAction(self.tabs.tabText(i))] = editor
+        new_act = move_menu.addAction("New Tab")
+        action = menu.exec(source.tree.viewport().mapToGlobal(pos))
+        if action is None:
+            return
+        target = self.add_tab() if action == new_act else targets.get(action)
+        if target is not None:
+            self.move_rows(source, target, items)
+
+    def move_rows(self, source, target, items):
+        """Move rows between tabs, keeping their relative order."""
+        rows = sorted(source.tree.indexOfTopLevelItem(it) for it in items)
+        taken = [source.tree.takeTopLevelItem(i) for i in reversed(rows)]
+        target.tree.clearSelection()
+        for item in reversed(taken):
+            target.tree.addTopLevelItem(item)
+            item.setSelected(True)
+        source.update_row_colors()
+        target.update_row_colors()
+        self.tabs.setCurrentWidget(target)
+        self.changed.emit()
+
+    # -- BaseEditor-compatible API ----------------------------------------
+
+    def get_table_data(self):
+        data = []
+        for name, editor in zip(self.get_tab_names(), self.editors):
+            for row in editor.get_table_data():
+                row["_tab"] = name
+                data.append(row)
+        return data
+
+    def load_table_data(self, data, tab_names=None):
+        """Rebuild tabs from rows tagged with ``_tab``; untagged rows go to the first tab."""
+        names = [n for n in (tab_names or []) if isinstance(n, str) and n.strip()]
+        for row in data:
+            name = row.get("_tab")
+            if isinstance(name, str) and name.strip():
+                names.append(name)
+        names = list(dict.fromkeys(names)) or [self.DEFAULT_TAB]
+        groups = {name: [] for name in names}
+        for row in data:
+            groups.get(row.get("_tab"), groups[names[0]]).append(row)
+
+        was_blocked = self.blockSignals(True)
+        try:
+            while self.tabs.count():
+                editor = self.tabs.widget(0)
+                self.tabs.removeTab(0)
+                editor.deleteLater()
+            for name in names:
+                self.add_tab(name).load_table_data(groups[name])
+            self.tabs.setCurrentIndex(0)
+        finally:
+            self.blockSignals(was_blocked)
+
+    def clear_error_highlights(self):
+        for i, editor in enumerate(self.editors):
+            editor.clear_error_highlights()
+            self.tabs.tabBar().setTabTextColor(i, QColor())
+
+    def highlight_error_rows(self, error_symbols):
+        if not error_symbols:
+            return
+        error_tabs = []
+        for i, editor in enumerate(self.editors):
+            editor.highlight_error_rows(error_symbols)
+            symbols = {editor.tree.topLevelItem(r).text(0)
+                       for r in range(editor.tree.topLevelItemCount())}
+            if symbols & set(error_symbols):
+                self.tabs.tabBar().setTabTextColor(i, QColor("#C05000"))
+                error_tabs.append(i)
+        if error_tabs and self.tabs.currentIndex() not in error_tabs:
+            self.tabs.setCurrentIndex(error_tabs[0])
+
+
 class ROAREditorWindow(QWidget):
     expressions_changed = pyqtSignal(list)
 
@@ -1739,7 +1962,7 @@ class ROAREditorWindow(QWidget):
         splitter = QSplitter(Qt.Orientation.Vertical)  # Create a vertical splitter
 
         # Create editors without plot buttons for Expression and Constraint
-        self.expression_editor = BaseEditor("Expression Editor", ["Symbol", "Expression"], plot_button_text=None)
+        self.expression_editor = ExpressionTabsEditor("Expression Editor", ["Symbol", "Expression"])
         self.constraint_editor = BaseEditor("Constraint Editor", ["Symbol", "Constraint Expression"], plot_button_text=None)
 
         # Create instance table WITH corners column and corner selection enabled
@@ -1793,10 +2016,7 @@ class ROAREditorWindow(QWidget):
         self._iterative_solver_dialog = None
 
         # Connect signals for expression changes
-        self.expression_editor.tree.itemChanged.connect(self.on_expressions_changed)
-        self.expression_editor.add_button.clicked.connect(self.on_expressions_changed)
-        self.expression_editor.delete_button.clicked.connect(self.on_expressions_changed)
-        self.expression_editor.enable_disable_button.clicked.connect(self.on_expressions_changed)  # Update when toggling enable/disable
+        self.expression_editor.changed.connect(self.on_expressions_changed)
 
         # Connect the open editor button to toggle dock/undock
         self.open_editor_button.clicked.connect(self.toggle_dock_undock)
@@ -1854,8 +2074,7 @@ class ROAREditorWindow(QWidget):
 
     def get_expression_symbols(self):
         symbols = []
-        for i in range(self.expression_editor.tree.topLevelItemCount()):
-            item = self.expression_editor.tree.topLevelItem(i)
+        for item in self.expression_editor.iter_items():
             # Check if the row is disabled (UserRole data is True for disabled rows)
             try:
                 disabled = bool(item.data(0, Qt.ItemDataRole.UserRole))
@@ -1873,8 +2092,7 @@ class ROAREditorWindow(QWidget):
 
     def get_expressions_and_constraints(self):
         expressions = {}
-        for i in range(self.expression_editor.tree.topLevelItemCount()):
-            item = self.expression_editor.tree.topLevelItem(i)
+        for item in self.expression_editor.iter_items():
             # Check if the row is disabled (UserRole data is True for disabled rows)
             try:
                 disabled = bool(item.data(0, Qt.ItemDataRole.UserRole))
@@ -2311,6 +2529,7 @@ class ROAREditorWindow(QWidget):
         if file_path:
             data = {
                 "expression_editor": self.expression_editor.get_table_data(),
+                "expression_tabs": self.expression_editor.get_tab_names(),
                 "constraint_editor": self.constraint_editor.get_table_data(),
                 "instance_table": self.instance_table.get_table_data(),
                 "iterative_solver": self.get_iterative_settings(),
@@ -2327,7 +2546,8 @@ class ROAREditorWindow(QWidget):
             try:
                 with open(file_path, "r") as file:
                     data = json.load(file)
-                self.expression_editor.load_table_data(data.get("expression_editor", []))
+                self.expression_editor.load_table_data(data.get("expression_editor", []),
+                                                       data.get("expression_tabs"))
                 self.constraint_editor.load_table_data(data.get("constraint_editor", []))
                 self.instance_table.load_table_data(data.get("instance_table", []))
 

@@ -14,8 +14,8 @@ dependencies = ["numpy", "pandas", "sympy", "matplotlib"]
 gui = ["PyQt6==6.8", "PyQt6-QScintilla", "jedi", "pyqtgraph>=0.13", "PyOpenGL", "colorama", "pyqtdarktheme"]
 
 [project.scripts]
-roar = "roar.__main__:main"
+roar = "roar_api.__main__:main"
 
 [tool.setuptools]
-packages = ["roar", "roar._legacy"]
-package-dir = {"roar" = "roar", "roar._legacy" = "src/gui"}
+packages = ["roar_api", "roar_api._legacy"]
+package-dir = {"roar_api" = "roar_api", "roar_api._legacy" = "src/gui"}

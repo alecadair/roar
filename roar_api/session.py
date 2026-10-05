@@ -149,13 +149,15 @@ class Session:
         previous = app._is_restoring_state
         app._is_restoring_state = True
         try:
-            with _blocked([app.graph_tabs, editor, editor.expression_editor.tree,
+            with _blocked([app.graph_tabs, editor, editor.expression_editor,
                            editor.constraint_editor.tree, editor.instance_table.tree]):
                 timer = getattr(editor, "_expressions_changed_timer", None)
                 if timer is not None:
                     timer.stop()
                 data = state.get("design_editor", {})
-                for key in ("expression_editor", "constraint_editor", "instance_table"):
+                editor.expression_editor.load_table_data(data.get("expression_editor", []),
+                                                         data.get("expression_tabs"))
+                for key in ("constraint_editor", "instance_table"):
                     getattr(editor, key).load_table_data(data.get(key, []))
                 settings = data.get("iterative_solver")
                 if settings is not None:

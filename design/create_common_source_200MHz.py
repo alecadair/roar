@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import roar
+import roar_api as roar
 
 ROOT = Path(__file__).resolve().parents[1]
 CORNER = "PDK>SKY130A>n_01v8>150>nfettt27"

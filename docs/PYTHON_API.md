@@ -1,9 +1,10 @@
 # ROAR Python API
 
-The public package is `roar` (distribution: `roar-cad`). Python **3.10 or
-newer** is required. Its implementation is in [roar/design.py](../roar/design.py),
-[roar/evaluation.py](../roar/evaluation.py), and
-[roar/session.py](../roar/session.py).
+The public package is `roar_api` (distribution: `roar-cad`), conventionally
+imported as `import roar_api as roar`. Python **3.10 or
+newer** is required. Its implementation is in [roar_api/design.py](../roar_api/design.py),
+[roar_api/evaluation.py](../roar_api/evaluation.py), and
+[roar_api/session.py](../roar_api/session.py).
 
 ## Installation, imports, and assets
 
@@ -14,13 +15,13 @@ in [INSTALLATION_AND_USAGE.md](INSTALLATION_AND_USAGE.md).
 
 ```python
 from pathlib import Path
-import roar
+import roar_api as roar
 
 HOME = Path("/path/to/roar")  # Checkout/assets root, not the Python executable.
 design = roar.Design("Common source")
 ```
 
-`import roar`, detached design editing/serialization, and constructing a hidden
+`import roar_api`, detached design editing/serialization, and constructing a hidden
 `Session` do **not** load Qt, NumPy, pandas, SymPy, or Matplotlib. Importing the
 package does not start an application, change `sys.path`, or replace SIGINT's
 handler. Numerical imports happen on evaluation; Qt imports happen on live
@@ -505,7 +506,7 @@ mesh. Do not promise a live 3-D PNG in CI without a working display/OpenGL setup
 ## Common-source 200 MHz builder
 
 [design/create_common_source_200MHz.py](../design/create_common_source_200MHz.py)
-uses `import roar` and explicit API calls. `build_design()` constructs 33
+uses `import roar_api as roar` and explicit API calls. `build_design()` constructs 33
 expressions, two constraints, the global-corner M1 instance, four tabs and
 sixteen plots with their axes, active trace colors, locks and markers.
 It does not read or copy the original saved design.

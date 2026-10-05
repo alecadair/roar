@@ -1742,6 +1742,7 @@ class ROARApp(QMainWindow):
         try:
             state = {
                 'expression_editor': self.editor_window.expression_editor.get_table_data(),
+                'expression_tabs': self.editor_window.expression_editor.get_tab_names(),
                 'constraint_editor': self.editor_window.constraint_editor.get_table_data(),
                 'instance_table': self.editor_window.instance_table.get_table_data(),
             }
@@ -1997,7 +1998,8 @@ class ROARApp(QMainWindow):
         """Restore the design editor state."""
         try:
             if 'expression_editor' in state:
-                self.editor_window.expression_editor.load_table_data(state['expression_editor'])
+                self.editor_window.expression_editor.load_table_data(
+                    state['expression_editor'], state.get('expression_tabs'))
             if 'constraint_editor' in state:
                 self.editor_window.constraint_editor.load_table_data(state['constraint_editor'])
             if 'instance_table' in state:

@@ -152,7 +152,7 @@ class Design:
         state.pop("saved_at", None)
         literal = pformat(state, width=100, sort_dicts=False)
         script = ('#!/usr/bin/env python3\n"""ROAR API design reconstruction (trusted inputs)."""\n'
-                  'import argparse\nfrom pathlib import Path\nimport roar\n\n'
+                  'import argparse\nfrom pathlib import Path\nimport roar_api as roar\n\n'
                   f'def build_design():\n    return roar.Design.from_state({literal})\n\n'
                   'def main():\n    parser = argparse.ArgumentParser(description=__doc__)\n'
                   '    parser.add_argument("--output", type=Path, default=Path(__file__).with_suffix(".roar"))\n'
